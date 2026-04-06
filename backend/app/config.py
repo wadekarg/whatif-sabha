@@ -67,7 +67,7 @@ def get_agent_llm():
     key = _key("CEREBRAS_API_KEY")
     if not key:
         raise ValueError("Cerebras API key not set. Add it via the ⚙ Settings button.")
-    return ChatCerebras(model=s.CHARACTER_AGENT_MODEL, cerebras_api_key=key, temperature=0.75, max_tokens=350)
+    return ChatCerebras(model=s.CHARACTER_AGENT_MODEL, cerebras_api_key=key, temperature=0.85, max_tokens=300)
 
 
 def get_judge_llm():
