@@ -54,11 +54,28 @@ async def upload_story(
     return {"story_id": story_id, "status": "uploaded", "message": "Analysis started in background."}
 
 
+def _push_log(story, message: str):
+    """Append a progress message to story.progress_log in the current session."""
+    entries = list(story.progress_log or [])
+    entries.append({"msg": message})
+    story.progress_log = entries
+    flag_modified(story, "progress_log")
+
+
 async def _analyze_story_background(story_id: str, pdf_path: str):
     """Extract text, analyze story, build RAG index. Runs in background."""
     from app.db.database import get_session_maker
 
     session_maker = get_session_maker()
+
+    # Callback for researcher — opens its own session so it's concurrency-safe
+    async def char_log(message: str):
+        async with session_maker() as log_db:
+            s = (await log_db.execute(select(Story).where(Story.id == story_id))).scalar_one_or_none()
+            if s:
+                _push_log(s, message)
+                await log_db.commit()
+
     async with session_maker() as db:
         result = await db.execute(select(Story).where(Story.id == story_id))
         story = result.scalar_one_or_none()
@@ -67,44 +84,71 @@ async def _analyze_story_background(story_id: str, pdf_path: str):
 
         try:
             story.status = "analyzing"
+            story.progress_log = []
+            _push_log(story, "📄 Extracting text from PDF...")
             await db.commit()
 
             # Step 1: Extract text
             extracted = extract_text(pdf_path)
             story.full_text = extracted["full_text"]
             story.word_count = extracted["word_count"]
+            pages = extracted.get("page_count", "?")
+            words = f"{int(extracted['word_count']):,}"
+            _push_log(story, f"📄 Extracted {pages} pages · {words} words")
             await db.commit()
 
-            # Step 2: Analyze story (full text for short, chunked for long)
+            _push_log(story, "🔬 Sending full text to Gemini for analysis...")
+            await db.commit()
+
+            # Step 2: Analyze story
             analysis = await analyze_story(extracted["full_text"])
             story.analysis = analysis
             story.title = analysis.get("title")
             story.author = analysis.get("author")
             story.summary = analysis.get("summary")
             story.themes = analysis.get("themes", [])
+
+            chars = analysis.get("characters", [])
+            phases = analysis.get("timeline_phases", [])
+            div_pts = analysis.get("potential_divergence_points", [])
+            char_names = [c["name"] for c in chars[:6]]
+            name_str = ", ".join(char_names) + ("…" if len(chars) > 6 else "")
+
+            title_line = story.title or "Unknown title"
+            if story.author:
+                title_line += f" by {story.author}"
+            _push_log(story, f"📖 Story identified: {title_line}")
+            _push_log(story, f"🎭 {len(chars)} characters found: {name_str}")
+            if phases:
+                _push_log(story, f"📅 {len(phases)} story phases mapped")
+            if div_pts:
+                _push_log(story, f"⚡ {len(div_pts)} divergence points identified")
             await db.commit()
 
-            # Step 3: Character research — fair witness profiles
-            # Runs in parallel: Wikipedia + web scraping + 3 LLM perspectives per character
+            # Step 3: Character research
             story.status = "researching"
+            _push_log(story, f"🔍 Starting deep research on {len(chars)} characters (2 at a time)...")
             await db.commit()
 
-            print(f"Starting character research for {len(analysis.get('characters', []))} characters...")
             enriched_characters = await research_all_characters(
-                characters=analysis.get("characters", []),
+                characters=chars,
                 story_title=analysis.get("title", "Unknown"),
+                log_fn=char_log,
             )
-            # Deep copy to ensure SQLAlchemy detects the JSON change
             updated_analysis = copy.deepcopy(analysis)
             updated_analysis["characters"] = enriched_characters
             story.analysis = updated_analysis
             flag_modified(story, "analysis")
             await db.commit()
 
-            # Step 4: Build RAG index (always — scales to Mahabharata later)
+            # Step 4: Build RAG index
+            _push_log(story, "🏗️ Building semantic search index...")
+            await db.commit()
             chunks = chunk_by_chapter(extracted["full_text"])
             embed_chunks(story_id, chunks)
+            _push_log(story, f"🏗️ Indexed {len(chunks)} text chunks")
 
+            _push_log(story, f"✅ Done! {len(enriched_characters)} characters fully researched")
             story.status = "ready"
             await db.commit()
 

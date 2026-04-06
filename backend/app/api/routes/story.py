@@ -57,6 +57,7 @@ async def get_story_status(story_id: str, db: AsyncSession = Depends(get_db)):
         "status": story.status,
         "status_message": status_messages.get(story.status, story.status),
         "error": story.error_message,
+        "progress_log": story.progress_log or [],
     }
 
 

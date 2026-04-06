@@ -24,6 +24,7 @@ class Story(Base):
     # "uploaded" | "analyzing" | "ready" | "error"
     status = Column(String, default="uploaded")
     error_message = Column(Text, nullable=True)
+    progress_log = Column(JSON, default=list)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -17,13 +17,6 @@ const ROLE_CHIP: Record<string, string> = {
   neutral:     "bg-stone-100 border-stone-200 text-stone-600",
 };
 
-const STATUS_MESSAGES: Record<string, string[]> = {
-  uploading:   ["Uploading PDF..."],
-  uploaded:    ["Reading PDF content...", "Extracting story text"],
-  analyzing:   ["Identifying characters...", "Mapping events and scenes", "Building relationship graph"],
-  researching: ["Cross-referencing Wikipedia...", "Running 3 independent AI perspectives", "Constructing Fair Witness profiles"],
-  ready:       ["Analysis complete ✓"],
-};
 
 const SAMPLE_DEBATE = [
   { char: "Boxer",    col: "#c07820", line: "Napoleon — tell me plainly — did you send me to the knacker's?" },
@@ -43,11 +36,16 @@ export default function Home() {
   const [storyData,   setStoryData]   = useState<any>(null);
   const [characters,  setCharacters]  = useState<any[]>([]);
   const [activityLog, setActivityLog] = useState<string[]>([]);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   // Live graph
   const liveCanvasRef = useRef<HTMLCanvasElement>(null);
   const liveNodesRef  = useRef<LiveNode[]>([]);
   const liveAnimRef   = useRef<number>(0);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activityLog]);
 
   const isProcessing = status !== "idle" && status !== "ready" && status !== "error";
   const isDone       = status === "ready";
@@ -63,11 +61,9 @@ export default function Home() {
         const res  = await fetch(`${API}/stories/${storyId}/status`);
         const data = await res.json();
         setStatus(data.status);
-        const msgs = STATUS_MESSAGES[data.status] || [];
-        setActivityLog(prev => {
-          const newMsgs = msgs.filter(m => !prev.includes(m));
-          return newMsgs.length ? [...prev, ...newMsgs] : prev;
-        });
+        if (Array.isArray(data.progress_log) && data.progress_log.length > 0) {
+          setActivityLog(data.progress_log.map((e: { msg: string }) => e.msg));
+        }
         if (data.status === "ready") {
           const [sr, cr] = await Promise.all([
             fetch(`${API}/stories/${storyId}`),
@@ -261,19 +257,36 @@ export default function Home() {
                         <p className="text-sm text-[#a09282] mt-0.5">Watch characters appear on the right →</p>
                       </div>
                     </div>
-                    <div className="h-1.5 bg-[#f0ebe4] rounded-full overflow-hidden">
-                      <div className="h-full w-3/5 bg-[#c07820] rounded-full animate-breathe" />
+                    <div className="h-1 bg-[#f0ebe4] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#c07820] rounded-full animate-breathe" style={{ width: `${Math.min(10 + activityLog.length * 5, 90)}%`, transition: "width 0.5s ease" }} />
                     </div>
-                    <div className="mt-4 space-y-1.5">
-                      {activityLog.map((msg, i) => {
-                        const isLast = i === activityLog.length - 1;
-                        return (
-                          <div key={i} className="flex items-center gap-2 text-sm">
-                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLast ? "bg-[#c07820] animate-breathe" : "bg-emerald-500"}`} />
-                            <span className={isLast ? "text-[#1c1410]" : "text-[#a09282]"}>{msg}</span>
+                    {/* Terminal feed */}
+                    <div className="mt-3 bg-[#0f0d0a] rounded-xl overflow-hidden border border-[#2a2018]">
+                      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[#2a2018]">
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+                        <span className="ml-2 text-[10px] text-white/20 font-mono">analysis.log</span>
+                      </div>
+                      <div className="px-3 py-3 space-y-1.5 max-h-52 overflow-y-auto">
+                        {activityLog.length === 0 ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[#c07820] font-mono text-xs animate-breathe">▶</span>
+                            <span className="text-white/40 font-mono text-xs">Starting pipeline...</span>
                           </div>
-                        );
-                      })}
+                        ) : activityLog.map((msg, i) => {
+                          const isLast = i === activityLog.length - 1;
+                          return (
+                            <div key={i} className="flex items-start gap-2 font-mono text-xs">
+                              <span className={`shrink-0 mt-px ${isLast ? "text-[#c07820] animate-breathe" : "text-emerald-400/70"}`}>
+                                {isLast ? "▶" : "✓"}
+                              </span>
+                              <span className={isLast ? "text-white/90" : "text-white/45"}>{msg}</span>
+                            </div>
+                          );
+                        })}
+                        <div ref={logEndRef} />
+                      </div>
                     </div>
                   </div>
                 ) : isDone ? (
