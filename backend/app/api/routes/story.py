@@ -132,11 +132,16 @@ async def get_story_overview(story_id: str, db: AsyncSession = Depends(get_db)):
     # Sort arcs by importance desc
     character_arcs.sort(key=lambda c: c["importance"], reverse=True)
 
+    timeline_phases = analysis.get("timeline_phases", [])
+    key_events = analysis.get("key_events", [])
+
     return {
         "knowledge_events": knowledge_events,
         "character_arcs": character_arcs,
         "relationships": relationships,
         "divergence_points": divergence_points,
+        "timeline_phases": timeline_phases,
+        "key_events": key_events,
     }
 
 

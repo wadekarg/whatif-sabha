@@ -405,36 +405,158 @@ export default function StoryPage() {
                 </div>
               )}
 
-              {/* Story timeline */}
-              {overview.knowledge_events?.length > 0 && (
-                <div className="space-y-3">
-                  <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">
-                    Story Timeline
-                    <span className="ml-2 text-[#c8b89a] normal-case tracking-normal font-normal">— {overview.knowledge_events.length} key moments</span>
-                  </div>
-                  <div className="relative">
-                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-gradient-to-b from-[#c07820] via-[#e8e0d5] to-[#e8e0d5]" />
-                    <div className="space-y-2">
-                      {overview.knowledge_events.map((e: any, i: number) => (
-                        <div key={i} className="flex gap-4 pl-1">
-                          <div className={`w-3.5 h-3.5 rounded-full shrink-0 mt-1 z-10 border-2 ${
-                            i === 0 ? "border-[#c07820] bg-[#fef3e2]" : "border-[#c8b89a] bg-white"
-                          }`} />
-                          <div className="bg-white border border-[#e8e0d5] rounded-xl p-4 flex-1">
-                            <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
-                              <span className="text-[10px] font-semibold text-[#c07820] uppercase tracking-wider">{e.character}</span>
-                              {i === 0 && <span className="text-[10px] text-[#c07820] bg-[#fef3e2] border border-[#f0c060]/50 px-2 py-0.5 rounded-full">Opening</span>}
-                              {i === overview.knowledge_events.length - 1 && <span className="text-[10px] text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">Climax</span>}
+              {/* Story Timeline — merged phases + key events + knowledge events */}
+              {(() => {
+                const phases: any[] = overview.timeline_phases || [];
+                const keyEvents: any[] = (overview.key_events || []).map((e: any) => ({ ...e, _type: "event" }));
+                const revelations: any[] = (overview.knowledge_events || []).map((e: any) => ({ ...e, _type: "revelation", timeline_position: e.timeline_position ?? 0.5 }));
+                const allItems = [...keyEvents, ...revelations].sort((a, b) => (a.timeline_position ?? 0) - (b.timeline_position ?? 0));
+                if (!allItems.length && !phases.length) return null;
+
+                // Assign each item to a phase
+                const getPhase = (pos: number) => phases.find((p: any) => pos >= (p.timeline_position_start ?? 0) && pos <= (p.timeline_position_end ?? 1)) || null;
+
+                // Build phase-grouped structure
+                const groups: { phase: any; items: any[] }[] = [];
+                if (phases.length) {
+                  phases.forEach((ph: any) => groups.push({ phase: ph, items: [] }));
+                  allItems.forEach(item => {
+                    const ph = getPhase(item.timeline_position ?? 0);
+                    const grp = ph ? groups.find(g => g.phase.phase_id === ph.phase_id) : groups[0];
+                    if (grp) grp.items.push(item);
+                    else groups[groups.length - 1]?.items.push(item);
+                  });
+                } else {
+                  groups.push({ phase: null, items: allItems });
+                }
+
+                const totalEvents = allItems.length;
+                let globalIdx = 0;
+
+                return (
+                  <div className="space-y-3">
+                    <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">
+                      Story Timeline
+                      <span className="ml-2 text-[#c8b89a] normal-case tracking-normal font-normal">— {phases.length} phases · {totalEvents} moments</span>
+                    </div>
+
+                    <div className="relative">
+                      {/* Vertical line */}
+                      <div className="absolute left-[11px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-[#c07820] via-[#c8b89a]/40 to-[#e8e0d5]" />
+
+                      <div className="space-y-1">
+                        {groups.map((grp, gi) => (
+                          <div key={gi}>
+                            {/* Phase header */}
+                            {grp.phase && (
+                              <div className="flex gap-4 items-center mb-3 mt-4 first:mt-0">
+                                <div className="w-6 h-6 rounded-lg bg-[#c07820] flex items-center justify-center text-white text-[10px] font-bold shrink-0 z-10">{gi + 1}</div>
+                                <div className="flex-1 bg-[#1c1410] rounded-xl px-4 py-2.5">
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <span className="text-[#c07820] text-xs font-semibold uppercase tracking-wide">
+                                      {grp.phase.name || grp.phase.phase_id?.replace(/_/g, " ")}
+                                    </span>
+                                    {grp.phase.chapter_range && (
+                                      <span className="text-white/30 text-[10px]">
+                                        Ch. {grp.phase.chapter_range[0]}{grp.phase.chapter_range[1] !== grp.phase.chapter_range[0] ? `–${grp.phase.chapter_range[1]}` : ""}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {grp.phase.description && (
+                                    <p className="text-white/55 text-[11px] mt-0.5 leading-relaxed">{grp.phase.description}</p>
+                                  )}
+                                  {grp.phase.trigger_event && (
+                                    <p className="text-[#c07820]/60 text-[10px] mt-1 italic">Triggered by: {grp.phase.trigger_event}</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Events in this phase */}
+                            <div className="space-y-2 pl-0">
+                              {grp.items.map((item: any, ii: number) => {
+                                const idx = globalIdx++;
+                                const isFirst = idx === 0;
+                                const isLast = idx === totalEvents - 1;
+                                const isTurning = item._type === "event" && item.is_turning_point;
+                                const isRevelation = item._type === "revelation";
+
+                                return (
+                                  <div key={ii} className="flex gap-4 pl-0">
+                                    {/* Node */}
+                                    <div className={`w-6 h-6 rounded-full shrink-0 mt-0.5 z-10 flex items-center justify-center text-[9px] font-bold border-2 ${
+                                      isFirst        ? "bg-[#fef3e2] border-[#c07820] text-[#c07820]" :
+                                      isLast         ? "bg-red-50 border-red-400 text-red-500" :
+                                      isTurning      ? "bg-purple-50 border-purple-400 text-purple-600" :
+                                      isRevelation   ? "bg-blue-50 border-blue-300 text-blue-500" :
+                                      "bg-white border-[#c8b89a] text-[#a09282]"
+                                    }`}>
+                                      {isFirst ? "▶" : isLast ? "✕" : isTurning ? "↻" : isRevelation ? "💡" : "·"}
+                                    </div>
+
+                                    {/* Card */}
+                                    <div className={`flex-1 rounded-xl p-4 border mb-0 ${
+                                      isTurning    ? "bg-purple-50/60 border-purple-200" :
+                                      isRevelation ? "bg-blue-50/50 border-blue-200/70" :
+                                      isFirst      ? "bg-[#fef9f0] border-[#f0c060]/50" :
+                                      isLast       ? "bg-red-50/50 border-red-200" :
+                                      "bg-white border-[#e8e0d5]"
+                                    }`}>
+                                      {/* Top row */}
+                                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                        {/* Type badge */}
+                                        {isTurning && <span className="text-[9px] font-bold text-purple-700 bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Turning Point</span>}
+                                        {isRevelation && <span className="text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Revelation</span>}
+                                        {isFirst && <span className="text-[9px] font-bold text-[#c07820] bg-[#fef3e2] border border-[#f0c060]/50 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Opening</span>}
+                                        {isLast && <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Climax</span>}
+
+                                        {/* Characters */}
+                                        {item._type === "event" && item.characters_involved?.length > 0 && (
+                                          <div className="flex gap-1 flex-wrap">
+                                            {item.characters_involved.slice(0, 4).map((c: string) => (
+                                              <span key={c} className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {item._type === "revelation" && (
+                                          <span className="text-[9px] text-[#c07820] font-semibold">
+                                            {item.character}{item.from_character ? ` ← ${item.from_character}` : ""}
+                                          </span>
+                                        )}
+
+                                        {/* Chapter */}
+                                        {item.chapter && <span className="ml-auto text-[9px] text-[#c8b89a]">Ch. {item.chapter}</span>}
+                                      </div>
+
+                                      {/* Title / what happened */}
+                                      <div className="font-semibold text-sm text-[#1c1410] leading-snug">
+                                        {item._type === "event" ? (item.name || item.description) : item.learns}
+                                      </div>
+
+                                      {/* Description (for events with separate name+description) */}
+                                      {item._type === "event" && item.name && item.description && item.name !== item.description && (
+                                        <p className="text-xs text-[#6b5c4e] mt-1 leading-relaxed">{item.description}</p>
+                                      )}
+
+                                      {/* Consequence / impact */}
+                                      {(item.consequence || item.impact_on_character) && (
+                                        <div className="mt-2 flex gap-1.5 items-start">
+                                          <span className="text-[10px] text-[#a09282] shrink-0 mt-px">→</span>
+                                          <p className="text-[11px] text-[#a09282] leading-relaxed italic">{item.consequence || item.impact_on_character}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                            <div className="font-medium text-sm text-[#1c1410]">{e.event}</div>
-                            {e.impact && <div className="text-[#a09282] text-xs mt-1.5 leading-relaxed">{e.impact}</div>}
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Divergence points */}
               {overview.divergence_points?.length > 0 && (
