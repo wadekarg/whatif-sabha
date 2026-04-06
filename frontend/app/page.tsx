@@ -1,0 +1,399 @@
+"use client";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+
+const API = "http://localhost:8001";
+
+const ROLE_COLORS: Record<string, string> = {
+  protagonist: "#c07820",
+  antagonist:  "#dc2626",
+  supporting:  "#3b82f6",
+  neutral:     "#78716c",
+};
+const ROLE_CHIP: Record<string, string> = {
+  protagonist: "bg-amber-50 border-amber-200 text-amber-900",
+  antagonist:  "bg-red-50 border-red-200 text-red-900",
+  supporting:  "bg-blue-50 border-blue-200 text-blue-900",
+  neutral:     "bg-stone-100 border-stone-200 text-stone-600",
+};
+
+const STATUS_MESSAGES: Record<string, string[]> = {
+  uploading:   ["Uploading PDF..."],
+  uploaded:    ["Reading PDF content...", "Extracting story text"],
+  analyzing:   ["Identifying characters...", "Mapping events and scenes", "Building relationship graph"],
+  researching: ["Cross-referencing Wikipedia...", "Running 3 independent AI perspectives", "Constructing Fair Witness profiles"],
+  ready:       ["Analysis complete ✓"],
+};
+
+const SAMPLE_DEBATE = [
+  { char: "Boxer",    col: "#c07820", line: "Napoleon — tell me plainly — did you send me to the knacker's?" },
+  { char: "Napoleon", col: "#dc2626", line: "Slander spread by enemies of the farm. You were sent to the finest surgeon in the county." },
+  { char: "Benjamin", col: "#78716c", line: "I saw the van. 'Horse Slaughterer and Glue Boiler.' The lettering was quite clear." },
+];
+
+type LiveNode = { id: string; name: string; role: string; x: number; y: number; vx: number; vy: number; r: number; color: string; opacity: number; };
+
+export default function Home() {
+  const router  = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging,    setDragging]    = useState(false);
+  const [error,       setError]       = useState("");
+  const [storyId,     setStoryId]     = useState<string | null>(null);
+  const [status,      setStatus]      = useState("idle");
+  const [storyData,   setStoryData]   = useState<any>(null);
+  const [characters,  setCharacters]  = useState<any[]>([]);
+  const [activityLog, setActivityLog] = useState<string[]>([]);
+
+  // Live graph
+  const liveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const liveNodesRef  = useRef<LiveNode[]>([]);
+  const liveAnimRef   = useRef<number>(0);
+
+  const isProcessing = status !== "idle" && status !== "ready" && status !== "error";
+  const isDone       = status === "ready";
+  const hasStarted   = isProcessing || isDone;
+
+  // Polling
+  useEffect(() => {
+    if (!storyId) return;
+    let stopped = false;
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const res  = await fetch(`${API}/stories/${storyId}/status`);
+        const data = await res.json();
+        setStatus(data.status);
+        const msgs = STATUS_MESSAGES[data.status] || [];
+        setActivityLog(prev => {
+          const newMsgs = msgs.filter(m => !prev.includes(m));
+          return newMsgs.length ? [...prev, ...newMsgs] : prev;
+        });
+        if (data.status === "ready") {
+          const [sr, cr] = await Promise.all([
+            fetch(`${API}/stories/${storyId}`),
+            fetch(`${API}/stories/${storyId}/characters`),
+          ]);
+          setStoryData(await sr.json());
+          const ch = await cr.json();
+          setCharacters(Array.isArray(ch) ? ch : []);
+        } else if (data.status !== "error") {
+          setTimeout(poll, 2500);
+        }
+      } catch { if (!stopped) setTimeout(poll, 3000); }
+    };
+    poll();
+    return () => { stopped = true; };
+  }, [storyId]);
+
+  // Sync characters → live graph nodes
+  useEffect(() => {
+    if (!hasStarted) return;
+    const canvas = liveCanvasRef.current;
+    if (!canvas) return;
+    const W = canvas.width || canvas.offsetWidth;
+    const H = canvas.height || canvas.offsetHeight;
+    const cx = W / 2, cy = H / 2;
+
+    characters.forEach((c: any) => {
+      const exists = liveNodesRef.current.find(n => n.id === c.name);
+      if (!exists) {
+        liveNodesRef.current.push({
+          id: c.name, name: c.name, role: c.role || "neutral",
+          x: cx + (Math.random() - 0.5) * 100,
+          y: cy + (Math.random() - 0.5) * 100,
+          vx: 0, vy: 0,
+          r: Math.round((c.importance || 0.5) * 12) + 5,
+          color: ROLE_COLORS[c.role] || ROLE_COLORS.neutral,
+          opacity: 0,
+        });
+      }
+    });
+  }, [characters, hasStarted]);
+
+  // Live graph physics loop
+  useEffect(() => {
+    if (!hasStarted) return;
+    const canvas = liveCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+
+    const resize = () => {
+      canvas.width  = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const tick = () => {
+      const nodes = liveNodesRef.current;
+      const W = canvas.width, H = canvas.height;
+      const cx = W / 2, cy = H / 2;
+
+      // Fade in new nodes
+      for (const n of nodes) n.opacity = Math.min(1, n.opacity + 0.02);
+
+      // Repulsion
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
+          const d2 = dx*dx + dy*dy + 1;
+          const f = 900 / d2;
+          nodes[i].vx -= dx*f; nodes[i].vy -= dy*f;
+          nodes[j].vx += dx*f; nodes[j].vy += dy*f;
+        }
+      }
+      // Gravity
+      for (const n of nodes) {
+        n.vx += (cx - n.x) * 0.006;
+        n.vy += (cy - n.y) * 0.006;
+        n.vx *= 0.82; n.vy *= 0.82;
+        n.x += n.vx; n.y += n.vy;
+        n.x = Math.max(n.r + 8, Math.min(W - n.r - 8, n.x));
+        n.y = Math.max(n.r + 8, Math.min(H - n.r - 8, n.y));
+      }
+
+      // Draw
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "#09090b";
+      ctx.fillRect(0, 0, W, H);
+
+      // Subtle grid
+      ctx.strokeStyle = "rgba(255,255,255,0.03)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+      for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+      for (const n of nodes) {
+        ctx.globalAlpha = n.opacity;
+        // Glow
+        const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 2.5);
+        grd.addColorStop(0, n.color + "44");
+        grd.addColorStop(1, "transparent");
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 2.5, 0, 2*Math.PI);
+        ctx.fillStyle = grd; ctx.fill();
+
+        // Circle
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 2*Math.PI);
+        ctx.fillStyle = n.color + "cc"; ctx.fill();
+
+        // Label
+        ctx.font = `600 11px Inter, sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "top";
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.fillText(n.name, n.x, n.y + n.r + 4);
+      }
+      ctx.globalAlpha = 1;
+
+      // Status overlay if still processing
+      if (isProcessing && nodes.length === 0) {
+        ctx.font = "14px Inter, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(255,255,255,0.25)";
+        ctx.fillText("Discovering characters...", W/2, H/2);
+      }
+
+      liveAnimRef.current = requestAnimationFrame(tick);
+    };
+    liveAnimRef.current = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(liveAnimRef.current); window.removeEventListener("resize", resize); };
+  }, [hasStarted, isProcessing]);
+
+  const handleUpload = async (file: File) => {
+    if (!file.name.endsWith(".pdf")) { setError("Only PDF files are supported."); return; }
+    setError("");
+    setStatus("uploading");
+    setActivityLog(["Uploading PDF..."]);
+    liveNodesRef.current = [];
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch(`${API}/upload`, { method: "POST", body: fd });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || "Upload failed."); }
+      const data = await res.json();
+      setStoryId(data.story_id);
+    } catch (e: any) { setError(e.message); setStatus("idle"); }
+  };
+
+  return (
+    <main className="flex-1 flex flex-col">
+      <section className="grid md:grid-cols-2" style={{ minHeight: "calc(100vh - 56px)" }}>
+
+        {/* ── LEFT: Upload hero ── */}
+        <div className="relative flex flex-col justify-start px-12 lg:px-16 pt-14 pb-12 border-r border-[#e8e0d5] overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-amber-50/40 via-transparent to-transparent" />
+          <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-amber-100/15 blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col gap-8 w-full">
+            {/* Headline */}
+            <div className="space-y-5">
+              <h1 className="text-[72px] lg:text-[80px] font-black tracking-[-3px] leading-[0.92] text-[#1c1410]">
+                What if<br />
+                things had<br />
+                gone{" "}
+                <span className="ink-shimmer">differently?</span>
+              </h1>
+              <p className="text-[17px] text-[#6b5c4e] leading-relaxed">
+                Upload any story as a PDF. The engine analyses its characters, maps every relationship, then lets them debate your alternate scenario live.
+              </p>
+            </div>
+
+            {/* Upload zone */}
+            <div className="space-y-3">
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleUpload(f); }}
+                onClick={() => !hasStarted && fileRef.current?.click()}
+                className={`rounded-2xl border-2 transition-all duration-200 bg-white overflow-hidden
+                  ${hasStarted        ? "border-[#e8e0d5] cursor-default" :
+                    dragging          ? "border-[#c07820] bg-amber-50/60 scale-[1.01] cursor-copy shadow-lg shadow-amber-100/50" :
+                                        "border-dashed border-[#e8e0d5] hover:border-[#c07820]/50 hover:shadow-md cursor-pointer"}`}
+              >
+                <input ref={fileRef} type="file" accept=".pdf" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+
+                {isProcessing ? (
+                  <div className="p-8">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="text-4xl animate-breathe shrink-0">📜</div>
+                      <div>
+                        <p className="font-semibold text-[#1c1410]">Analyzing your story...</p>
+                        <p className="text-sm text-[#a09282] mt-0.5">Watch characters appear on the right →</p>
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-[#f0ebe4] rounded-full overflow-hidden">
+                      <div className="h-full w-3/5 bg-[#c07820] rounded-full animate-breathe" />
+                    </div>
+                    <div className="mt-4 space-y-1.5">
+                      {activityLog.map((msg, i) => {
+                        const isLast = i === activityLog.length - 1;
+                        return (
+                          <div key={i} className="flex items-center gap-2 text-sm">
+                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLast ? "bg-[#c07820] animate-breathe" : "bg-emerald-500"}`} />
+                            <span className={isLast ? "text-[#1c1410]" : "text-[#a09282]"}>{msg}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : isDone ? (
+                  <div className="p-8 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-lg shrink-0">✓</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-[#1c1410] truncate">{storyData?.title || "Story ready"}</p>
+                        {storyData?.author && <p className="text-sm text-[#a09282]">by {storyData.author}</p>}
+                      </div>
+                    </div>
+                    {characters.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {characters.slice(0, 8).map((c: any) => (
+                          <span key={c.name} className={`text-xs px-2.5 py-1 rounded-full border font-medium ${ROLE_CHIP[c.role] || ROLE_CHIP.neutral}`}>
+                            {c.name}
+                          </span>
+                        ))}
+                        {characters.length > 8 && <span className="text-xs text-[#a09282] py-1">+{characters.length - 8} more</span>}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => router.push(`/story/${storyId}`)}
+                      className="w-full bg-[#c07820] hover:bg-[#a86a18] text-white font-bold py-3 rounded-xl text-sm transition-colors shadow-sm"
+                    >
+                      Enter the story ⚡
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-8 flex flex-col items-center text-center gap-5">
+                    <div className={`w-16 h-16 rounded-2xl border-2 flex items-center justify-center text-3xl transition-all duration-200 ${dragging ? "bg-amber-100 border-[#c07820] scale-110" : "bg-[#faf7f2] border-dashed border-[#d4c4a8]"}`}>
+                      {dragging ? "↓" : "📄"}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-[#1c1410] text-base">
+                        {dragging ? "Release to upload" : "Drop your story PDF here"}
+                      </p>
+                      <p className="text-[#a09282] text-sm mt-1">or <span className="text-[#c07820] underline underline-offset-2">click to browse</span> your files</p>
+                    </div>
+                    <div className="w-full border-t border-[#f0ebe4] pt-4 grid grid-cols-3 gap-3 text-center">
+                      {[["⚡", "~60s"], ["🎭", "Characters"], ["✍️", "New ending"]].map(([icon, label]) => (
+                        <div key={label} className="space-y-1">
+                          <div className="text-lg">{icon}</div>
+                          <p className="text-xs text-[#a09282]">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {!hasStarted && (
+                <p className="text-center text-xs text-[#c8b89a]">
+                  Try with: Animal Farm · Mahabharata · Hamlet · Any story
+                </p>
+              )}
+              {error && (
+                <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-xl p-4 flex gap-2">
+                  <span className="shrink-0 mt-0.5">✕</span>{error}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT: How it works ── */}
+        <div className="overflow-hidden flex flex-col" id="how-it-works">
+          <div className="flex-1 bg-white px-10 lg:px-14 py-14 space-y-12 overflow-y-auto">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.2em] text-[#a09282] uppercase mb-2">How it works</p>
+                <h2 className="text-2xl font-bold text-[#1c1410]">From PDF to alternate history</h2>
+              </div>
+              <div className="space-y-8">
+                {[
+                  { icon: "📖", n: "01", title: "Upload any story PDF", body: "Drop in Animal Farm, the Mahabharata, Hamlet — any fiction. The engine reads it, identifies every character, maps the arc of events, and researches them against real-world sources." },
+                  { icon: "🔬", n: "02", title: "Characters come alive", body: "Each character gets a Fair Witness profile — cross-referenced with Wikipedia and web sources, then analysed from 3 independent AI perspectives. You see who they really are." },
+                  { icon: "⚡", n: "03", title: "Pose your 'What if?'", body: "Once ready, describe your divergence point. What if Boxer refused the slaughterhouse? What if Karna joined the Pandavas? The characters take it from there." },
+                  { icon: "🎭", n: "04", title: "Watch the Sabha unfold", body: "Characters debate in real-time, drawing on their own motivations and relationships. They ask each other questions, push back, reveal hidden feelings." },
+                  { icon: "✍️", n: "05", title: "A new ending is written", body: "After the debate concludes, an alternate ending is generated — grounded in the characters' own choices, not a generic rewrite." },
+                ].map(s => (
+                  <div key={s.n} className="flex gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-[#fef3e2] border border-[#f0c060]/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
+                      {s.icon}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-mono font-bold text-[#c07820]">{s.n}</span>
+                        <span className="font-semibold text-[#1c1410] text-sm">{s.title}</span>
+                      </div>
+                      <p className="text-[#6b5c4e] text-sm leading-relaxed">{s.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-[#f7f3ed] rounded-2xl border border-[#e8e0d5] p-6 space-y-5">
+                <div>
+                  <p className="text-xs font-semibold tracking-[0.2em] text-[#a09282] uppercase mb-0.5">Live example</p>
+                  <p className="text-xs text-[#a09282] italic">Animal Farm · What if Boxer refused the slaughterhouse?</p>
+                </div>
+                {SAMPLE_DEBATE.map((e, i) => (
+                  <div key={i} className="flex gap-3">
+                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold mt-0.5" style={{ backgroundColor: e.col }}>
+                      {e.char[0]}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold mb-0.5" style={{ color: e.col }}>{e.char}</p>
+                      <p className="text-[#6b5c4e] text-sm leading-relaxed">{e.line}</p>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs text-[#c8b89a] italic text-center pt-1">...debate continues until a new ending emerges</p>
+              </div>
+            </div>
+        </div>
+
+      </section>
+
+      <footer className="bg-white border-t border-[#e8e0d5] py-5 text-center text-xs text-[#c8b89a]">
+        WhatIfSabha — multi-agent story engine
+      </footer>
+    </main>
+  );
+}

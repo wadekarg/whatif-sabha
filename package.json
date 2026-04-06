@@ -1,0 +1,5 @@
+{
+  "name": "whatif-sabha",
+  "private": true,
+  "workspaces": ["frontend"]
+}
