@@ -61,13 +61,13 @@ def get_analysis_llm():
     return ChatGoogleGenerativeAI(model=s.ANALYSIS_MODEL, google_api_key=key, temperature=0.2)
 
 
-def get_agent_llm():
+def get_agent_llm(max_tokens: int = 300):
     """Cerebras qwen-3-235b — ultra-fast character agent streaming."""
     s = get_settings()
     key = _key("CEREBRAS_API_KEY")
     if not key:
         raise ValueError("Cerebras API key not set. Add it via the ⚙ Settings button.")
-    return ChatCerebras(model=s.CHARACTER_AGENT_MODEL, cerebras_api_key=key, temperature=0.85, max_tokens=300)
+    return ChatCerebras(model=s.CHARACTER_AGENT_MODEL, cerebras_api_key=key, temperature=0.85, max_tokens=max_tokens)
 
 
 def get_judge_llm():

@@ -338,6 +338,8 @@ export default function DebatePage() {
         setDramaScore(ev.drama_score || 0.5);
       } else if (ev.type === "token") {
         setStreaming(prev => prev ? { ...prev, text: prev.text + ev.text } : null);
+      } else if (ev.type === "continuation_granted") {
+        setStreaming(prev => prev ? { ...prev, text: prev.text + "\n\n" } : null);
       } else if (ev.type === "character_end") {
         setTranscript(prev => [...prev, {
           character: ev.character,

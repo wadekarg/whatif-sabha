@@ -100,3 +100,45 @@ async def character_respond_stream(
     async for chunk in llm.astream(messages):
         if chunk.content:
             yield chunk.content
+
+
+async def character_continue_stream(
+    character: dict,
+    phase: dict,
+    divergence: str,
+    debate_history: list,
+    story_title: str = "",
+    previous_response: str = "",
+    continuation_reason: str = "",
+):
+    """
+    A second pass for a character when the judge grants them more space.
+    They pick up where they left off — deeper, rawer, unburdened.
+    """
+    from langchain_core.messages import SystemMessage, HumanMessage
+    character["story_title"] = story_title
+    system_prompt = build_character_system_prompt(character, phase, divergence)
+
+    messages = [SystemMessage(content=system_prompt)]
+
+    for entry in debate_history[-12:]:
+        speaker = entry["character"]
+        text = entry["message"]
+        if speaker == character["name"]:
+            messages.append(HumanMessage(content=f"[You previously said]: {text}"))
+        else:
+            messages.append(HumanMessage(content=f"{speaker}: {text}"))
+
+    prompt = (
+        f"You just said:\n\"{previous_response}\"\n\n"
+        f"The debate has granted you more time. The reason: {continuation_reason}\n\n"
+        f"Continue from where you left off. Do NOT repeat what you already said — "
+        f"go deeper. Say the thing you were holding back. "
+        f"The burden is yours. Speak."
+    )
+    messages.append(HumanMessage(content=prompt))
+
+    llm = get_agent_llm(max_tokens=550)
+    async for chunk in llm.astream(messages):
+        if chunk.content:
+            yield chunk.content

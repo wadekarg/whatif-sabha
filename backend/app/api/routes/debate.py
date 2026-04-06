@@ -11,7 +11,7 @@ from typing import Optional
 from app.db.database import get_db
 from app.models.story import Story
 from app.models.debate import Debate
-from app.core.agents.character_agent import character_respond_stream
+from app.core.agents.character_agent import character_respond_stream, character_continue_stream
 from app.core.agents.orchestrator import (
     pick_next_speaker,
     should_synthesize,
@@ -163,11 +163,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     yield sse("token", {"character": next_speaker_name, "text": token})
 
                 traits = phase_state.get("personality_traits", [])
+                last_entry = transcript[-1] if transcript else {}
                 judge_result = await judge_response(
                     character_name=next_speaker_name,
                     character_description=character.get("description", ""),
                     personality_traits=traits,
                     response_text=full_response,
+                    previous_message=last_entry.get("message", ""),
+                    previous_speaker=last_entry.get("character", ""),
+                    was_directly_addressed=last_entry.get("target_character") == next_speaker_name,
                 )
 
                 if not await should_regenerate(judge_result):
@@ -179,6 +183,27 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     "character": next_speaker_name,
                     "reason": correction_hint or "out of character",
                 })
+
+            # Continuation — judge grants more space when burden is unmet
+            drama_score = compute_drama_score(transcript)
+            continuation_threshold = 0.4 if phase == "climax" else 0.55
+            if judge_result.get("needs_continuation") and drama_score >= continuation_threshold:
+                continuation_reason = judge_result.get("continuation_reason") or "unfinished thought"
+                yield sse("continuation_granted", {
+                    "character": next_speaker_name,
+                    "reason": continuation_reason,
+                })
+                async for token in character_continue_stream(
+                    character=character,
+                    phase=phase_state,
+                    divergence=debate.divergence_description,
+                    debate_history=transcript,
+                    story_title=story.title or "",
+                    previous_response=full_response,
+                    continuation_reason=continuation_reason,
+                ):
+                    full_response += token
+                    yield sse("token", {"character": next_speaker_name, "text": token})
 
             char_names = [c["name"] for c in characters]
             target_char = _detect_question_target(full_response, char_names, next_speaker_name)
