@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.db.database import init_db
-from app.api.routes import upload, story, characters, debate
+from app.api.routes import upload, story, characters, debate, settings
 
 
 @asynccontextmanager
@@ -31,6 +31,7 @@ app.include_router(upload.router)
 app.include_router(story.router)
 app.include_router(characters.router)
 app.include_router(debate.router)
+app.include_router(settings.router)
 
 
 @app.get("/health")
