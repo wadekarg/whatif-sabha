@@ -368,10 +368,21 @@ export default function DebatePage() {
         ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 2*Math.PI);
         ctx.fillStyle = n.color; ctx.fill();
 
-        // Ring for active speaker
+        // Expanding rings for active speaker
         if (isActive) {
+          // Inner ring
           ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 3 + pulse * 3, 0, 2*Math.PI);
-          ctx.strokeStyle = n.color + "99"; ctx.lineWidth = 2; ctx.stroke();
+          ctx.strokeStyle = n.color + "cc"; ctx.lineWidth = 2; ctx.stroke();
+          // Outer expanding ring
+          const outerR = n.r + 8 + pulse * 10;
+          ctx.beginPath(); ctx.arc(n.x, n.y, outerR, 0, 2*Math.PI);
+          ctx.strokeStyle = n.color + Math.round((1 - pulse) * 100).toString(16).padStart(2,"0");
+          ctx.lineWidth = 1.5; ctx.stroke();
+          // "speaking" label above node
+          ctx.font = "bold 8px Inter, sans-serif";
+          ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+          ctx.fillStyle = n.color + "cc";
+          ctx.fillText("speaking", n.x, n.y - n.r - 8);
         }
 
         // Initials
@@ -815,13 +826,30 @@ export default function DebatePage() {
     <main className="relative flex flex-col bg-[#f7f3ed] overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
       {/* Sticky sub-header */}
       <div className="sticky top-14 z-40 border-b border-[#e8e0d5] bg-white/95 backdrop-blur-sm shrink-0">
-        <div className="px-6 py-3 flex items-center justify-between">
+        <div className="px-6 py-2.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-[#c07820] font-bold text-sm shrink-0">Sabha</span>
             <span className="text-[#c8b89a]">·</span>
             <p className="text-[#6b5c4e] text-xs truncate italic">"{divergence}"</p>
           </div>
-          <div className="flex items-center gap-2 shrink-0 ml-4">
+          {/* Character avatar strip */}
+          {activeCharacters.length > 0 && (
+            <div className="flex items-center shrink-0">
+              {activeCharacters.map((name, i) => {
+                const col = CHAR_COLORS[i % CHAR_COLORS.length].hex;
+                const isActive = streaming?.character === name;
+                return (
+                  <div key={name} title={name}
+                    className="relative -ml-1 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-white font-bold text-[10px] transition-all"
+                    style={{ backgroundColor: col, zIndex: isActive ? 10 : activeCharacters.length - i, boxShadow: isActive ? `0 0 0 2px ${col}, 0 0 8px ${col}88` : undefined }}>
+                    {initials(name)}
+                    {isActive && <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-white animate-pulse" />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs text-[#a09282]">Drama</span>
             <div className="w-16 h-1.5 bg-[#e8e0d5] rounded-full overflow-hidden">
               <div className="h-full bg-[#c07820] rounded-full transition-all duration-700" style={{ width: `${dramaScore * 100}%` }} />
@@ -956,25 +984,40 @@ export default function DebatePage() {
 
             {streaming && (() => {
               const c = colorOf(streaming.character);
+              const em = streaming.text ? (EMOTION_STYLE["neutral"] || EMOTION_STYLE.neutral) : null;
               return (
-                <div className="flex gap-3 py-2.5">
-                  <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 animate-breathe ring-2 ring-offset-2 ring-offset-[#f7f3ed]"
-                    style={{ backgroundColor: c.hex }}>
-                    {initials(streaming.character)}
+                <div className="flex gap-3 py-1.5">
+                  <div className="relative w-8 h-8 shrink-0 mt-0.5">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
+                      style={{ backgroundColor: c.hex, boxShadow: `0 0 0 3px ${c.hex}40, 0 0 14px ${c.hex}50` }}>
+                      {initials(streaming.character)}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-white animate-pulse" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold mb-1" style={{ color: c.hex }}>
-                      {streaming.character} <span className="animate-breathe opacity-60">▌</span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold" style={{ color: c.hex }}>{streaming.character}</span>
+                      {!streaming.text && (
+                        <span className="flex gap-0.5 items-center ml-1">
+                          <span className="w-1 h-1 rounded-full bg-current opacity-60 animate-bounce" style={{ color: c.hex, animationDelay: "0ms" }} />
+                          <span className="w-1 h-1 rounded-full bg-current opacity-60 animate-bounce" style={{ color: c.hex, animationDelay: "150ms" }} />
+                          <span className="w-1 h-1 rounded-full bg-current opacity-60 animate-bounce" style={{ color: c.hex, animationDelay: "300ms" }} />
+                        </span>
+                      )}
                     </div>
-                    <div className="text-[#6b5c4e] text-sm leading-relaxed">
-                      <ReactMarkdown components={{
-                        p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
-                        strong: ({children}) => <strong style={{fontWeight:600}}>{children}</strong>,
-                        em: ({children}) => <em style={{fontStyle:"italic"}}>{children}</em>,
-                        ul: ({children}) => <ul style={{listStyleType:"disc",paddingLeft:"1rem",marginTop:"0.25rem"}}>{children}</ul>,
-                        li: ({children}) => <li style={{marginBottom:"0.1rem"}}>{children}</li>,
-                      }}>{streaming.text}</ReactMarkdown>
-                    </div>
+                    {streaming.text && (
+                      <div className="text-sm leading-relaxed rounded-r-xl rounded-bl-xl px-3 py-2.5 text-[#1c1410]"
+                        style={{ borderLeft: `3px solid ${c.hex}60`, backgroundColor: "rgba(255,255,255,0.7)" }}>
+                        <ReactMarkdown components={{
+                          p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
+                          strong: ({children}) => <strong style={{fontWeight:600}}>{children}</strong>,
+                          em: ({children}) => <em style={{fontStyle:"italic"}}>{children}</em>,
+                          ul: ({children}) => <ul style={{listStyleType:"disc",paddingLeft:"1rem",marginTop:"0.25rem"}}>{children}</ul>,
+                          li: ({children}) => <li style={{marginBottom:"0.1rem"}}>{children}</li>,
+                        }}>{streaming.text}</ReactMarkdown>
+                        <span className="animate-pulse text-[#c07820]">▌</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -982,10 +1025,12 @@ export default function DebatePage() {
 
             {streamingEnding && !alternateEnding && (
               <div className="mt-8 pt-8 border-t border-[#e8e0d5]">
-                <div className="flex items-center gap-2 text-xs text-[#a09282] mb-3">
-                  <span className="animate-breathe text-[#c07820]">✍</span> Writing the alternate ending...
+                <div className="flex items-center gap-2 text-[10px] text-[#a09282] mb-5 uppercase tracking-widest font-medium">
+                  <span className="animate-breathe text-[#c07820]">✦</span> Writing the alternate ending…
                 </div>
-                <div className="text-sm text-[#6b5c4e] italic leading-relaxed opacity-60 line-clamp-3">{streamingEnding}<span className="animate-breathe not-italic text-[#c07820]">▌</span></div>
+                <div className="text-[#2d1f14] leading-[2] text-[16px]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                  {streamingEnding}<span className="animate-pulse text-[#c07820]">▌</span>
+                </div>
               </div>
             )}
 
@@ -1165,17 +1210,24 @@ export default function DebatePage() {
           </div>
 
           {/* Stats bar (graph tab only) */}
-          {graphStats.length > 0 && activeTab === "graph" && (
-            <div className="shrink-0 border-t border-white/10 px-3 py-2.5 flex gap-3 overflow-x-auto bg-black/40">
-              {[...graphStats].sort((a, b) => b.speeches - a.speeches).map(n => (
-                <div key={n.id} className="flex items-center gap-1.5 shrink-0">
-                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: n.color }} />
-                  <span className="text-[11px] text-white/55">{n.id.split(" ")[0]}</span>
-                  <span className="text-[11px] font-bold" style={{ color: n.color }}>{n.speeches}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {graphStats.length > 0 && activeTab === "graph" && (() => {
+            const sorted = [...graphStats].sort((a, b) => b.speeches - a.speeches);
+            const maxSpeeches = sorted[0]?.speeches || 1;
+            const total = sorted.reduce((s, n) => s + n.speeches, 0) || 1;
+            return (
+              <div className="shrink-0 border-t border-white/10 px-3 py-2.5 space-y-1.5 bg-black/40">
+                {sorted.map(n => (
+                  <div key={n.id} className="flex items-center gap-2">
+                    <span className="text-[10px] text-white/45 w-16 shrink-0 truncate">{n.id.split(" ")[0]}</span>
+                    <div className="flex-1 h-1.5 bg-white/8 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(n.speeches / maxSpeeches) * 100}%`, backgroundColor: n.color }} />
+                    </div>
+                    <span className="text-[10px] font-bold w-10 text-right shrink-0" style={{ color: n.color }}>{Math.round((n.speeches / total) * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>}
 
       </div>

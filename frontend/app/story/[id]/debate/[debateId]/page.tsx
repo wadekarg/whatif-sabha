@@ -495,13 +495,28 @@ export default function DebateViewPage() {
     <main className="relative flex flex-col bg-[#f7f3ed] overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
       {/* Sub-header */}
       <div className="sticky top-14 z-40 border-b border-[#e8e0d5] bg-white/95 backdrop-blur-sm shrink-0">
-        <div className="px-6 py-3 flex items-center justify-between">
+        <div className="px-6 py-2.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Link href={`/story/${id}`} className="text-[#a09282] hover:text-[#1c1410] text-xs transition-colors shrink-0">← Back</Link>
             <span className="text-[#c8b89a]">·</span>
             <p className="text-[#6b5c4e] text-xs truncate italic">"{debate.divergence_description}"</p>
           </div>
-          <div className="flex items-center gap-2 shrink-0 ml-4">
+          {/* Character avatar strip */}
+          {chars.length > 0 && (
+            <div className="flex items-center shrink-0">
+              {chars.map((name, i) => {
+                const col = CHAR_COLORS[i % CHAR_COLORS.length].hex;
+                return (
+                  <div key={name} title={name}
+                    className="-ml-1 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-white font-bold text-[10px]"
+                    style={{ backgroundColor: col, zIndex: chars.length - i }}>
+                    {initials(name)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex items-center gap-2 shrink-0">
             <span className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
               debate.status === "completed"
                 ? "border-emerald-200 text-emerald-700 bg-emerald-50"
@@ -786,17 +801,24 @@ export default function DebateViewPage() {
             </div>
           </div>
 
-          {graphStats.length > 0 && activeTab === "graph" && (
-            <div className="shrink-0 border-t border-white/10 px-3 py-2.5 flex gap-3 overflow-x-auto bg-black/40">
-              {[...graphStats].sort((a,b)=>b.speeches-a.speeches).map(n=>(
-                <div key={n.id} className="flex items-center gap-1.5 shrink-0">
-                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor:n.color}} />
-                  <span className="text-[11px] text-white/55">{n.id.split(" ")[0]}</span>
-                  <span className="text-[11px] font-bold" style={{color:n.color}}>{n.speeches}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {graphStats.length > 0 && activeTab === "graph" && (() => {
+            const sorted = [...graphStats].sort((a, b) => b.speeches - a.speeches);
+            const maxS = sorted[0]?.speeches || 1;
+            const total = sorted.reduce((s, n) => s + n.speeches, 0) || 1;
+            return (
+              <div className="shrink-0 border-t border-white/10 px-3 py-2.5 space-y-1.5 bg-black/40">
+                {sorted.map(n => (
+                  <div key={n.id} className="flex items-center gap-2">
+                    <span className="text-[10px] text-white/45 w-16 shrink-0 truncate">{n.id.split(" ")[0]}</span>
+                    <div className="flex-1 h-1.5 bg-white/8 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(n.speeches/maxS)*100}%`, backgroundColor: n.color }} />
+                    </div>
+                    <span className="text-[10px] font-bold w-10 text-right shrink-0" style={{ color: n.color }}>{Math.round((n.speeches/total)*100)}%</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
