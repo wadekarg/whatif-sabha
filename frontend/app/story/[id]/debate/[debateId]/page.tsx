@@ -39,7 +39,7 @@ const EMOTION_STYLE: Record<string, { bg: string; label: string; dot: string }> 
   neutral:              { bg: "rgba(255,255,255,0.9)",  label: "",             dot: "#c8b89a" },
 };
 
-type DebateEntry = { character: string; message: string; round: number; target?: string; emotion?: string; };
+type DebateEntry = { character: string; message: string; round: number; target?: string; emotion?: string; isObserver?: boolean; observerEra?: string; };
 type GraphNode   = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; };
 type GraphEdge   = { source: string; target: string; count: number; questions: number; };
 
@@ -400,9 +400,9 @@ export default function DebateViewPage() {
       ctx.font="600 10px Inter,sans-serif";ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillStyle=color;ctx.fillText(charName.split(" ")[0],padL-6,y);
       const turns=transcript.map((e:any,idx:number)=>({...e,idx})).filter((e:any)=>e.character===charName);
       if(!turns.length)continue;
-      ctx.strokeStyle=color+"30";ctx.lineWidth=1.5;ctx.setLineDash([3,4]);ctx.beginPath();
+      ctx.strokeStyle=color+"25";ctx.lineWidth=1.2;ctx.setLineDash([]);ctx.beginPath();
       turns.forEach((t:any,ti:number)=>{const x=xOf(t.idx);ti===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
-      ctx.stroke();ctx.setLineDash([]);
+      ctx.stroke();
       for(const turn of turns){
         const x=xOf(turn.idx),em=EMOTION_STYLE[turn.emotion||"neutral"]||EMOTION_STYLE.neutral;
         const grd=ctx.createRadialGradient(x,y,2,x,y,11);grd.addColorStop(0,em.dot+"70");grd.addColorStop(1,"transparent");
@@ -547,33 +547,76 @@ export default function DebateViewPage() {
             </div>
 
             {transcript.map((entry, i) => {
+              // Round separator
+              const prevRound = i > 0 ? transcript[i - 1].round : null;
+              const showRoundSep = entry.round !== prevRound && !entry.isObserver;
+
+              // World observer entry
+              if (entry.isObserver) {
+                return (
+                  <div key={i}>
+                    <div className="my-3 mx-1 bg-slate-900 rounded-xl px-4 py-3 border border-slate-700/60">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[9px] uppercase tracking-widest font-bold text-slate-400">🌍 World Observer</span>
+                        {entry.observerEra && <span className="text-[9px] text-slate-500 italic">· {entry.observerEra}</span>}
+                        <span className="text-[9px] text-slate-500 font-medium ml-1">{entry.character}</span>
+                      </div>
+                      <div className="text-sm leading-relaxed text-slate-200">
+                        <ReactMarkdown components={{
+                          p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
+                          strong: ({children}) => <strong style={{fontWeight:600,color:"#e2e8f0"}}>{children}</strong>,
+                          em: ({children}) => <em style={{fontStyle:"italic",color:"#94a3b8"}}>{children}</em>,
+                        }}>{entry.message}</ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               const c = colorOf(entry.character, chars);
               const em = EMOTION_STYLE[entry.emotion || "neutral"] || EMOTION_STYLE.neutral;
+              const targetChar = entry.target && entry.target !== entry.character ? entry.target : null;
+              const targetColor = targetChar ? colorOf(targetChar, chars) : null;
               return (
-                <div key={i} className="flex gap-3 py-2">
-                  <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 ring-2 ring-offset-2 ring-offset-[#f7f3ed]"
-                    style={{ backgroundColor: c.hex }}>
-                    {initials(entry.character)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-semibold" style={{ color: c.hex }}>{entry.character}</span>
-                      {em.label && (
-                        <span className="flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
-                          <span className="text-[10px] text-[#a09282] font-medium">{em.label}</span>
-                        </span>
-                      )}
+                <div key={i}>
+                  {showRoundSep && (
+                    <div className="flex items-center gap-3 my-4 px-1">
+                      <div className="flex-1 h-px bg-[#e8e0d5]" />
+                      <span className="text-[9px] uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entry.round}</span>
+                      <div className="flex-1 h-px bg-[#e8e0d5]" />
                     </div>
-                    <div className="text-sm leading-relaxed rounded-r-xl rounded-bl-xl px-3 py-2.5 text-[#1c1410]"
-                      style={{ borderLeft: `4px solid ${em.dot}`, backgroundColor: em.bg }}>
-                      <ReactMarkdown components={{
-                        p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
-                        strong: ({children}) => <strong style={{fontWeight:600}}>{children}</strong>,
-                        em: ({children}) => <em style={{fontStyle:"italic"}}>{children}</em>,
-                        ul: ({children}) => <ul style={{listStyleType:"disc",paddingLeft:"1rem",marginTop:"0.25rem"}}>{children}</ul>,
-                        li: ({children}) => <li style={{marginBottom:"0.1rem"}}>{children}</li>,
-                      }}>{entry.message}</ReactMarkdown>
+                  )}
+                  <div className="flex gap-3 py-1.5">
+                    <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 shadow-sm"
+                      style={{ backgroundColor: c.hex }}>
+                      {initials(entry.character)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-xs font-semibold" style={{ color: c.hex }}>{entry.character}</span>
+                        {targetChar && (
+                          <span className="flex items-center gap-1 text-[10px] text-[#a09282]">
+                            <span>↩</span>
+                            <span style={{ color: targetColor?.hex }}>{targetChar}</span>
+                          </span>
+                        )}
+                        {em.label && (
+                          <span className="flex items-center gap-1 ml-auto">
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
+                            <span className="text-[10px] text-[#a09282]">{em.label}</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm leading-relaxed rounded-r-xl rounded-bl-xl px-3 py-2.5 text-[#1c1410]"
+                        style={{ borderLeft: `3px solid ${em.dot}`, backgroundColor: em.bg }}>
+                        <ReactMarkdown components={{
+                          p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
+                          strong: ({children}) => <strong style={{fontWeight:600}}>{children}</strong>,
+                          em: ({children}) => <em style={{fontStyle:"italic"}}>{children}</em>,
+                          ul: ({children}) => <ul style={{listStyleType:"disc",paddingLeft:"1rem",marginTop:"0.25rem"}}>{children}</ul>,
+                          li: ({children}) => <li style={{marginBottom:"0.1rem"}}>{children}</li>,
+                        }}>{entry.message}</ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -729,7 +772,7 @@ export default function DebateViewPage() {
               <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm border border-white/10 rounded-xl px-3 py-2.5 space-y-1.5">
                 <div className="text-white/30 text-[9px] uppercase tracking-widest font-medium mb-1">Legend</div>
                 <div className="flex items-center gap-2"><div className="w-8 h-px bg-white/50" /><span className="text-white/50 text-[10px]">Replied</span></div>
-                <div className="flex items-center gap-2"><div className="w-8 h-px border-t border-dashed border-[#f0c060]/70" /><span className="text-[#f0c060]/70 text-[10px]">Asked</span></div>
+                <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#f0c060]/70" /><span className="text-[#f0c060]/70 text-[10px]">Asked</span></div>
                 <span className="text-white/30 text-[9px]">Node size = speech count</span>
               </div>
             </div>
@@ -765,59 +808,85 @@ export default function DebateViewPage() {
         const typeColor: Record<string, string> = {
           divergence:    "#c07820",
           turning_point: "#3b82f6",
-          consequence:   "#6b5c4e",
+          consequence:   "#78716c",
           resolution:    "#10b981",
         };
+        const typeIcon: Record<string, string> = {
+          divergence: "⟁", turning_point: "◈", consequence: "→", resolution: "✦",
+        };
         return (
-          <div className="absolute inset-0 z-50 bg-[#f7f3ed] overflow-y-auto">
-            <div className="sticky top-0 z-10 bg-[#f7f3ed]/90 backdrop-blur border-b border-[#e8e0d5] flex items-center justify-between px-8 py-3">
-              <div className="flex items-center gap-3">
-                <span className="text-[#c07820] font-bold text-sm">✦ WhatIfSabha</span>
-                <span className="text-[#e8e0d5]">·</span>
-                <span className="text-xs text-[#a09282] italic truncate max-w-md">"{debate.divergence_description}"</span>
-              </div>
+          <div className="absolute inset-0 z-50 overflow-y-auto" style={{ background: "#0d0b08" }}>
+
+            {/* Sticky nav */}
+            <div className="sticky top-0 z-20 border-b border-white/8 flex items-center justify-between px-8 py-3" style={{ background: "rgba(13,11,8,0.92)", backdropFilter: "blur(12px)" }}>
+              <span className="text-[#f0c060] font-bold text-sm tracking-wider">✦ WhatIfSabha</span>
               <div className="flex items-center gap-2">
-                <Link href={`/story/${id}/debate`} className="text-xs text-[#a09282] hover:text-[#6b5c4e] border border-[#e8e0d5] hover:border-[#c8b89a] px-3 py-1.5 rounded-lg bg-white transition-colors">
-                  New debate →
-                </Link>
-                <button onClick={() => setShowConclusion(false)} className="text-xs text-[#a09282] hover:text-[#1c1410] border border-[#e8e0d5] hover:border-[#c8b89a] px-3 py-1.5 rounded-lg bg-white transition-colors">
-                  ← Back to debate
-                </button>
+                <Link href={`/story/${id}/debate`} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">New debate →</Link>
+                <button onClick={() => setShowConclusion(false)} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">← Back</button>
               </div>
             </div>
 
-            <div className="max-w-2xl mx-auto px-8 py-16 space-y-16">
-              <div className="text-center space-y-4">
-                <div className="text-xs uppercase tracking-[0.25em] text-[#a09282] font-medium">What if...</div>
-                <h1 className="text-3xl font-bold text-[#1c1410] leading-tight">{debate.divergence_description}</h1>
-                <div className="flex items-center justify-center gap-3 text-xs text-[#a09282]">
-                  <span>{chars.length} characters debated</span>
-                  <span>·</span>
+            {/* HERO — dark, dramatic */}
+            <div className="relative flex flex-col items-center justify-center text-center px-8 py-28 overflow-hidden" style={{ minHeight: "55vh" }}>
+              <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(192,120,32,0.14) 0%, transparent 70%)" }} />
+              <div className="relative z-10 space-y-7 max-w-3xl">
+                <div className="text-[#f0c060]/50 text-[10px] uppercase tracking-[0.45em] font-semibold">Alternate History</div>
+                <h1 className="text-4xl sm:text-5xl font-bold leading-tight" style={{ color: "#f5f0e8" }}>
+                  {debate.divergence_description}
+                </h1>
+                <div className="flex items-center justify-center gap-5 text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <span>{chars.length} characters</span>
+                  <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
                   <span>{turns.length} exchanges</span>
+                  {tl.length > 0 && <><span style={{ color: "rgba(255,255,255,0.15)" }}>·</span><span>{tl.length} events</span></>}
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  {chars.map((name: string, i: number) => (
+                    <div key={name} className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CHAR_COLORS[i % CHAR_COLORS.length].hex }} />
+                      <span className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>{name}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
+            </div>
 
-              {tl.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#a09282] font-medium mb-6">How it unfolds</div>
+            {/* TIMELINE */}
+            {tl.length > 0 && (
+              <div style={{ background: "#f7f3ed" }} className="py-20 px-8">
+                <div className="max-w-3xl mx-auto">
+                  <div className="text-center mb-14">
+                    <div className="text-[10px] uppercase tracking-[0.35em] text-[#a09282] font-semibold mb-2">Timeline</div>
+                    <div className="text-xl font-bold text-[#1c1410]">How this world unfolds</div>
+                  </div>
                   <div className="relative">
-                    <div className="absolute left-4 top-0 bottom-0 w-px bg-[#e8e0d5]" />
+                    <div className="absolute top-6 bottom-6 w-0.5 rounded-full" style={{ left: "23px", background: "linear-gradient(to bottom, #c07820, #e8e0d5 40%, #10b981)" }} />
                     <div className="space-y-6">
                       {tl.map((ev: any, i: number) => {
                         const col = typeColor[ev.type] || "#a09282";
+                        const icon = typeIcon[ev.type] || "·";
                         return (
-                          <div key={i} className="flex gap-5 items-start pl-1">
-                            <div className="w-7 h-7 rounded-full border-2 bg-white shrink-0 flex items-center justify-center z-10" style={{ borderColor: col }}>
-                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col }} />
+                          <div key={i} className="flex gap-6 items-start">
+                            <div className="w-12 h-12 rounded-full border-2 bg-white shrink-0 flex items-center justify-center z-10 shadow-sm" style={{ borderColor: col }}>
+                              <span style={{ color: col, fontSize: "15px", fontWeight: 700 }}>{icon}</span>
                             </div>
-                            <div className="flex-1 pb-2">
-                              <div className="flex items-baseline gap-2 flex-wrap">
-                                <span className="font-semibold text-sm text-[#1c1410]">{ev.label}</span>
+                            <div className="flex-1 bg-white border border-[#e8e0d5] rounded-2xl px-6 py-4 shadow-sm">
+                              <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+                                <div>
+                                  <span className="text-[9px] uppercase tracking-widest font-bold" style={{ color: col }}>{(ev.type || "").replace(/_/g, " ")}</span>
+                                  <h3 className="font-bold text-[#1c1410] text-[15px] mt-0.5">{ev.label}</h3>
+                                </div>
                                 {ev.characters?.length > 0 && (
-                                  <span className="text-[10px] text-[#a09282]">{(ev.characters as string[]).join(", ")}</span>
+                                  <div className="flex flex-wrap gap-1 shrink-0">
+                                    {(ev.characters as string[]).map((c: string) => {
+                                      const ci = chars.indexOf(c);
+                                      const ccol = CHAR_COLORS[ci >= 0 ? ci % CHAR_COLORS.length : 0].hex;
+                                      return <span key={c} className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: ccol + "18", color: ccol }}>{c}</span>;
+                                    })}
+                                  </div>
                                 )}
                               </div>
-                              <p className="text-sm text-[#6b5c4e] leading-relaxed mt-0.5">{ev.description}</p>
+                              <p className="text-sm text-[#6b5c4e] leading-relaxed">{ev.description}</p>
                             </div>
                           </div>
                         );
@@ -825,88 +894,107 @@ export default function DebateViewPage() {
                     </div>
                   </div>
                 </div>
-              )}
-
-              <div className="flex items-center gap-4">
-                <div className="flex-1 h-px bg-[#e8e0d5]" />
-                <span className="text-[#c07820] text-lg">✦</span>
-                <div className="flex-1 h-px bg-[#e8e0d5]" />
               </div>
+            )}
 
-              <div className="space-y-6">
-                <div className="text-center text-xs uppercase tracking-[0.2em] text-[#a09282] font-medium">The Alternate Ending</div>
-                <div className="text-[#2d1f14] leading-[2] text-[17px]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+            {/* THE ALTERNATE ENDING */}
+            <div style={{ background: "#fefcf8" }} className="py-24">
+              <div className="max-w-[660px] mx-auto px-8">
+                <div className="text-center mb-14">
+                  <div className="flex items-center justify-center gap-5 mb-8">
+                    <div className="flex-1 h-px bg-[#e8e0d5]" />
+                    <span className="text-[#c07820] text-xl">✦</span>
+                    <div className="flex-1 h-px bg-[#e8e0d5]" />
+                  </div>
+                  <div className="text-[10px] uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Alternate Ending</div>
+                </div>
+                <div className="text-[#2d1f14] leading-[2.15] text-[18px]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
                   <ReactMarkdown
                     components={{
                       p: ({ children, ...props }) => {
                         const node = (props as any).node as any;
                         const isFirst = node?.position?.start?.line === 1;
                         return isFirst
-                          ? <p className="mb-6 first-letter:text-5xl first-letter:font-bold first-letter:float-left first-letter:mr-2 first-letter:mt-1 first-letter:text-[#c07820]" style={{ lineHeight: "2" }}>{children}</p>
-                          : <p className="mb-6">{children}</p>;
+                          ? <p className="mb-8 first-letter:text-6xl first-letter:font-bold first-letter:float-left first-letter:mr-3 first-letter:leading-none first-letter:text-[#c07820]">{children}</p>
+                          : <p className="mb-6 indent-8">{children}</p>;
                       },
-                      em: ({ children }) => <em className="text-[#6b5c4e]">{children}</em>,
-                      strong: ({ children }) => <strong className="text-[#1c1410] font-semibold">{children}</strong>,
+                      em: ({ children }) => <em style={{ color: "#6b5c4e" }}>{children}</em>,
+                      strong: ({ children }) => <strong style={{ color: "#1c1410", fontWeight: 600 }}>{children}</strong>,
                     }}
                   >{debate.alternate_ending}</ReactMarkdown>
                 </div>
+                <div className="mt-20 text-center space-y-2">
+                  <div className="text-[#c07820] text-lg tracking-[0.5em]">✦ ✦ ✦</div>
+                  <p className="text-xs text-[#a09282] mt-3">Shaped by {chars.join(", ")} · {turns.length} exchanges</p>
+                </div>
               </div>
+            </div>
 
-              <div className="border-t border-[#e8e0d5] pt-10 flex flex-col items-center gap-4 text-center">
-                <div className="text-[#c07820] text-2xl">✦</div>
-                <p className="text-xs text-[#a09282] max-w-xs">This ending was shaped by {chars.join(", ")} through {turns.length} exchanges in the WhatIfSabha.</p>
-                <Link href={`/story/${id}/debate`} className="mt-2 px-6 py-2.5 bg-[#1c1410] text-white text-sm font-semibold rounded-xl hover:bg-[#2d1f14] transition-colors">
-                  Explore another what-if →
-                </Link>
-              </div>
-
-              {/* Oracle Mode — only shown if alternate_world_state exists */}
-              {debate.alternate_world_state && (
-                <div className="border-t border-[#e8e0d5] pt-10 space-y-6">
-                  <div className="text-center space-y-2">
-                    <div className="text-[#c07820] text-2xl">◉</div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-[#a09282] font-medium">Oracle Mode</div>
-                    <p className="text-sm text-[#6b5c4e] max-w-sm mx-auto">Enter the alternate world. Ask any character a question — they answer from inside this reality.</p>
+            {/* ORACLE MODE */}
+            {debate.alternate_world_state && (
+              <div style={{ background: "#0d0b08" }} className="py-24 px-8">
+                <div className="max-w-2xl mx-auto space-y-8">
+                  <div className="text-center space-y-3">
+                    <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center text-[#f0c060] text-xl border border-[#f0c060]/25" style={{ background: "rgba(240,192,96,0.08)" }}>◉</div>
+                    <div className="text-[10px] uppercase tracking-[0.35em] text-white/35 font-semibold">Oracle Mode</div>
+                    <p className="text-white/50 text-sm max-w-sm mx-auto leading-relaxed">Enter the alternate world. Ask any character a question — they answer from inside this reality.</p>
                   </div>
                   <div className="flex flex-wrap gap-2 justify-center">
-                    {chars.map((name: string) => (
-                      <button key={name}
-                        onClick={() => { setOracleCharacter(name); setShowOracle(true); setOracleHistory([]); }}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${oracleCharacter === name && showOracle ? "bg-[#1c1410] text-white border-[#1c1410]" : "bg-white text-[#6b5c4e] border-[#e8e0d5] hover:border-[#c07820]"}`}>
-                        {name}
-                      </button>
-                    ))}
+                    {chars.map((name: string, ci: number) => {
+                      const ccol = CHAR_COLORS[ci % CHAR_COLORS.length].hex;
+                      const active = oracleCharacter === name && showOracle;
+                      return (
+                        <button key={name}
+                          onClick={() => { setOracleCharacter(name); setShowOracle(true); setOracleHistory([]); }}
+                          className="px-4 py-2 rounded-full text-sm font-medium transition-all border"
+                          style={active ? { background: ccol, color: "#fff", borderColor: ccol } : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)", borderColor: "rgba(255,255,255,0.1)" }}>
+                          {name}
+                        </button>
+                      );
+                    })}
                   </div>
                   {showOracle && oracleCharacter && (
-                    <div className="bg-white border border-[#e8e0d5] rounded-2xl overflow-hidden">
-                      <div className="px-5 py-3 border-b border-[#e8e0d5] flex items-center gap-2 bg-[#fef9f4]">
-                        <div className="w-2 h-2 rounded-full bg-[#c07820]" />
-                        <span className="text-sm font-semibold text-[#1c1410]">{oracleCharacter}</span>
-                        <span className="text-xs text-[#a09282] italic">speaking from the alternate world</span>
+                    <div className="rounded-2xl overflow-hidden border border-white/10" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      <div className="px-5 py-3 border-b border-white/8 flex items-center gap-2.5">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex }} />
+                        <span className="text-sm font-semibold text-white">{oracleCharacter}</span>
+                        <span className="text-xs text-white/30 italic">· speaking from the alternate world</span>
                       </div>
-                      <div className="px-5 py-4 space-y-4 max-h-80 overflow-y-auto">
-                        {oracleHistory.length === 0 && <p className="text-sm text-[#a09282] italic text-center py-4">Ask {oracleCharacter} anything about their world...</p>}
+                      <div className="px-5 py-4 space-y-4 max-h-96 overflow-y-auto">
+                        {oracleHistory.length === 0 && <p className="text-sm text-white/25 italic text-center py-6">Ask {oracleCharacter} anything about their world…</p>}
                         {oracleHistory.map((msg, i) => (
                           <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}>
-                            {msg.role === "assistant" && <div className="w-7 h-7 rounded-full bg-[#f0c060] flex items-center justify-center text-[#1c1410] font-bold text-xs shrink-0">{msg.character?.[0]}</div>}
-                            <div className={`rounded-xl px-4 py-2.5 text-sm max-w-[85%] leading-relaxed ${msg.role === "user" ? "bg-[#1c1410] text-white rounded-br-sm" : "bg-[#fef3e2] text-[#1c1410] rounded-bl-sm"}`}>{msg.content}</div>
+                            {msg.role === "assistant" && (
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border border-white/20" style={{ background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex + "30", color: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex }}>{oracleCharacter[0]}</div>
+                            )}
+                            <div className={`rounded-xl px-4 py-2.5 text-sm max-w-[85%] leading-relaxed ${msg.role === "user" ? "rounded-br-sm font-medium" : "border border-white/10 rounded-bl-sm"}`}
+                              style={msg.role === "user" ? { background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex, color: "#fff" } : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)" }}>
+                              {msg.content}
+                            </div>
                           </div>
                         ))}
                         {oracleStreaming && (
                           <div className="flex gap-3">
-                            <div className="w-7 h-7 rounded-full bg-[#f0c060] flex items-center justify-center text-[#1c1410] font-bold text-xs shrink-0">{oracleCharacter[0]}</div>
-                            <div className="rounded-xl rounded-bl-sm px-4 py-2.5 text-sm bg-[#fef3e2] text-[#1c1410] leading-relaxed">{oracleStreaming}<span className="animate-pulse">▌</span></div>
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border border-white/20" style={{ background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex + "30", color: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex }}>{oracleCharacter[0]}</div>
+                            <div className="rounded-xl rounded-bl-sm px-4 py-2.5 text-sm border border-white/10 leading-relaxed" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)" }}>{oracleStreaming}<span className="animate-pulse">▌</span></div>
                           </div>
                         )}
                       </div>
-                      <div className="px-5 py-3 border-t border-[#e8e0d5] flex gap-2">
-                        <input value={oracleInput} onChange={e => setOracleInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendOracleQuestion()} placeholder={`Ask ${oracleCharacter}...`} className="flex-1 text-sm px-3 py-2 rounded-lg border border-[#e8e0d5] bg-white focus:outline-none focus:ring-1 focus:ring-[#c07820] text-[#1c1410] placeholder:text-[#c9b9a8]" />
-                        <button onClick={sendOracleQuestion} disabled={oracleLoading || !oracleInput.trim()} className="px-4 py-2 bg-[#c07820] text-white text-sm rounded-lg hover:bg-[#a06010] disabled:opacity-40 transition-colors">{oracleLoading ? "..." : "Ask"}</button>
+                      <div className="px-5 py-3 border-t border-white/8 flex gap-2">
+                        <input value={oracleInput} onChange={e => setOracleInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendOracleQuestion()} placeholder={`Ask ${oracleCharacter}…`} className="flex-1 text-sm px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-white/20 placeholder:text-white/20" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.8)" }} />
+                        <button onClick={sendOracleQuestion} disabled={oracleLoading || !oracleInput.trim()} className="px-4 py-2 text-sm font-semibold rounded-lg transition-colors disabled:opacity-30" style={{ background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex, color: "#fff" }}>{oracleLoading ? "…" : "Ask"}</button>
                       </div>
                     </div>
                   )}
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="border-t border-white/8 py-14 text-center" style={{ background: "#0d0b08" }}>
+              <Link href={`/story/${id}/debate`} className="inline-flex items-center gap-2 px-8 py-3 text-sm font-bold rounded-xl transition-colors" style={{ background: "#f0c060", color: "#0d0b08" }}>
+                Explore another what-if →
+              </Link>
             </div>
           </div>
         );
