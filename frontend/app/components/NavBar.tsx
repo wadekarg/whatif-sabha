@@ -9,14 +9,18 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [gemini, setGemini] = useState("");
   const [groq, setGroq] = useState("");
   const [cerebras, setCerebras] = useState("");
+  const [nvidia, setNvidia] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [envStatus, setEnvStatus] = useState<{gemini:boolean;groq:boolean;cerebras:boolean;nvidia:boolean} | null>(null);
 
   useEffect(() => {
     setGemini(localStorage.getItem("wis_gemini_key") || "");
     setGroq(localStorage.getItem("wis_groq_key") || "");
     setCerebras(localStorage.getItem("wis_cerebras_key") || "");
+    setNvidia(localStorage.getItem("wis_nvidia_key") || "");
+    fetch(`${API}/settings/keys/status`).then(r => r.json()).then(setEnvStatus).catch(() => {});
   }, []);
 
   async function save() {
@@ -26,15 +30,13 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
       const res = await fetch(`${API}/settings/keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gemini_key: gemini, groq_key: groq, cerebras_key: cerebras }),
+        body: JSON.stringify({ gemini_key: gemini, groq_key: groq, cerebras_key: cerebras, nvidia_key: nvidia }),
       });
       if (!res.ok) throw new Error(await res.text());
-      if (gemini) localStorage.setItem("wis_gemini_key", gemini);
-      else localStorage.removeItem("wis_gemini_key");
-      if (groq) localStorage.setItem("wis_groq_key", groq);
-      else localStorage.removeItem("wis_groq_key");
-      if (cerebras) localStorage.setItem("wis_cerebras_key", cerebras);
-      else localStorage.removeItem("wis_cerebras_key");
+      if (gemini) localStorage.setItem("wis_gemini_key", gemini); else localStorage.removeItem("wis_gemini_key");
+      if (groq) localStorage.setItem("wis_groq_key", groq); else localStorage.removeItem("wis_groq_key");
+      if (cerebras) localStorage.setItem("wis_cerebras_key", cerebras); else localStorage.removeItem("wis_cerebras_key");
+      if (nvidia) localStorage.setItem("wis_nvidia_key", nvidia); else localStorage.removeItem("wis_nvidia_key");
       setSaved(true);
       setTimeout(() => { setSaved(false); onClose(); }, 1200);
     } catch (e) {
@@ -45,11 +47,18 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   const KeyInput = ({
-    label, value, onChange, placeholder, href
-  }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; href: string }) => (
+    label, value, onChange, placeholder, href, configured
+  }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; href: string; configured?: boolean }) => (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold text-[#1c1410]">{label}</label>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-[#1c1410]">{label}</label>
+          {configured !== undefined && (
+            configured
+              ? <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full font-medium">✓ configured</span>
+              : <span className="text-[10px] text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full font-medium">missing</span>
+          )}
+        </div>
         <a href={href} target="_blank" rel="noopener noreferrer"
           className="text-[10px] text-[#c07820] hover:underline">Get free key →</a>
       </div>
@@ -57,8 +66,10 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         type="password"
         value={value}
         onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 text-xs rounded-lg border border-[#e8e0d5] bg-white focus:outline-none focus:border-[#c07820] font-mono placeholder:text-[#b8a898] placeholder:font-sans"
+        placeholder={configured && !value ? "already set — paste new key to override" : placeholder}
+        className={`w-full px-3 py-2 text-xs rounded-lg border bg-white focus:outline-none focus:border-[#c07820] font-mono placeholder:font-sans transition-colors ${
+          configured && !value ? "border-emerald-200 placeholder:text-emerald-400/70" : "border-[#e8e0d5] placeholder:text-[#b8a898]"
+        }`}
       />
     </div>
   );
@@ -86,6 +97,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             onChange={setGemini}
             placeholder="AIza..."
             href="https://aistudio.google.com/apikey"
+            configured={envStatus?.gemini}
           />
           <KeyInput
             label="Groq API Key"
@@ -93,6 +105,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             onChange={setGroq}
             placeholder="gsk_..."
             href="https://console.groq.com/keys"
+            configured={envStatus?.groq}
           />
           <KeyInput
             label="Cerebras API Key"
@@ -100,13 +113,22 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             onChange={setCerebras}
             placeholder="csk-..."
             href="https://cloud.cerebras.ai"
+            configured={envStatus?.cerebras}
+          />
+          <KeyInput
+            label="NVIDIA API Key (optional)"
+            value={nvidia}
+            onChange={setNvidia}
+            placeholder="nvapi-..."
+            href="https://build.nvidia.com"
+            configured={envStatus?.nvidia}
           />
 
           <div className="pt-1 rounded-xl bg-[#fef9f0] border border-[#f0c060]/40 px-4 py-3">
             <p className="text-[11px] text-[#6b5c4e] leading-relaxed">
               <span className="font-semibold text-[#c07820]">How keys are used:</span>{" "}
-              Gemini for story analysis · Cerebras for character agents · Groq for judge &amp; narrator.
-              Keys are stored in your browser and sent to the local backend only.
+              Gemini · story analysis — Cerebras · character agents — Groq · judge &amp; narrator (with auto-fallback through gemma2, llama-3.1-8b) — NVIDIA · final fallback when Groq limits are hit.
+              Keys stored in your browser only.
             </p>
           </div>
         </div>
@@ -143,13 +165,14 @@ export default function NavBar() {
     const gemini = localStorage.getItem("wis_gemini_key");
     const groq = localStorage.getItem("wis_groq_key");
     const cerebras = localStorage.getItem("wis_cerebras_key");
+    const nvidia = localStorage.getItem("wis_nvidia_key");
 
     const pushAndCheck = async () => {
-      if (gemini || groq || cerebras) {
+      if (gemini || groq || cerebras || nvidia) {
         await fetch(`${API}/settings/keys`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ gemini_key: gemini, groq_key: groq, cerebras_key: cerebras }),
+          body: JSON.stringify({ gemini_key: gemini, groq_key: groq, cerebras_key: cerebras, nvidia_key: nvidia }),
         }).catch(() => {});
       }
       const status = await fetch(`${API}/settings/keys/status`).then(r => r.json()).catch(() => null);

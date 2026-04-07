@@ -68,7 +68,7 @@ async def _research_character_inner(character: dict, story_title: str, log_fn: O
     external_context = _build_external_context(wiki_data, web_data)
 
     if log_fn:
-        await log_fn(f"  🤖 {name}: Getting perspectives from Gemini · Groq · Cerebras...")
+        await log_fn(f"  🤖 {name}: Getting perspectives from Gemini · Groq · Cerebras · NVIDIA...")
 
     # Phase 2: Three LLM perspectives — 45s total timeout
     perspectives = await asyncio.wait_for(

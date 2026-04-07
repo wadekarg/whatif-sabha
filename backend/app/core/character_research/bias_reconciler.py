@@ -24,6 +24,9 @@ Your job: cut through narrative bias and find the truth of who this character is
 --- QWEN/CEREBRAS'S INDEPENDENT ANALYSIS ---
 {cerebras_perspective}
 
+--- KIMI/NVIDIA'S INDEPENDENT ANALYSIS ---
+{nvidia_perspective}
+
 Now synthesize all of this into a fair witness profile. Return ONLY valid JSON:
 
 {{
@@ -37,7 +40,7 @@ Now synthesize all of this into a fair witness profile. Return ONLY valid JSON:
   "cultural_historical_context": "relevant background that explains their world and choices",
   "speaks_as": "describe their authentic voice for debate — tone, manner, what they care about, how they argue",
   "what_they_would_say": "one powerful statement this character would make if they could speak their full truth",
-  "sources_used": ["wikipedia", "web_analysis", "gemini", "groq", "cerebras"]
+  "sources_used": ["wikipedia", "web_analysis", "gemini", "groq", "cerebras", "nvidia"]
 }}"""
 
 
@@ -66,6 +69,7 @@ async def reconcile_perspectives(
         gemini_perspective=llm_perspectives.get("gemini", "Not available."),
         groq_perspective=llm_perspectives.get("groq", "Not available."),
         cerebras_perspective=llm_perspectives.get("cerebras", "Not available."),
+        nvidia_perspective=llm_perspectives.get("nvidia", "Not available."),
     )
 
     response = await llm.ainvoke(prompt)

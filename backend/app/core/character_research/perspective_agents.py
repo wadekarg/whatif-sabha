@@ -1,5 +1,5 @@
 import asyncio
-from app.config import get_analysis_llm, get_agent_llm, get_judge_llm
+from app.config import get_analysis_llm, get_agent_llm, get_judge_llm, _make_nvidia_llm, get_settings
 
 PERSPECTIVE_PROMPT = """You are a literary scholar analyzing the character "{character_name}" from "{story_title}".
 
@@ -46,15 +46,24 @@ async def get_all_perspectives(
         external_context=external_context or "No external context available.",
     )
 
-    # Run all three LLMs in parallel
-    gemini_task = _get_perspective(get_analysis_llm(), prompt, "gemini")
-    groq_task = _get_perspective(get_judge_llm(), prompt, "groq")
+    # Run all four LLMs in parallel — different model families = different analytical biases
+    gemini_task   = _get_perspective(get_analysis_llm(), prompt, "gemini")
+    groq_task     = _get_perspective(get_judge_llm(), prompt, "groq")
     cerebras_task = _get_perspective(get_agent_llm(), prompt, "cerebras")
 
-    results = await asyncio.gather(gemini_task, groq_task, cerebras_task, return_exceptions=True)
+    # kimi-k2: Moonshot (Chinese AI lab) — distinct cultural/philosophical framing
+    s = get_settings()
+    nvidia_llm = _make_nvidia_llm(s.NVIDIA_JUDGE_MODEL, temperature=0.3)
+    nvidia_task = _get_perspective(nvidia_llm, prompt, "nvidia") if nvidia_llm else None
 
+    tasks = [gemini_task, groq_task, cerebras_task]
+    if nvidia_task:
+        tasks.append(nvidia_task)
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    labels = ["gemini", "groq", "cerebras"] + (["nvidia"] if nvidia_task else [])
     perspectives = {}
-    labels = ["gemini", "groq", "cerebras"]
     for label, result in zip(labels, results):
         if isinstance(result, Exception):
             perspectives[label] = f"[Analysis unavailable: {str(result)[:100]}]"

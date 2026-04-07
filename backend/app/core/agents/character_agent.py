@@ -24,20 +24,19 @@ def _build_turn_prompt(character_name: str, debate_history: list, correction_hin
             prompt = (
                 f'{last_speaker} just spoke directly to you:\n"{snippet}"\n\n'
                 f'Respond to {last_speaker} — directly, personally. '
-                f'It can be one sentence or ten. Match the emotional weight of what was just said.'
+                f'Keep it tight: 1–3 sentences unless this is a breaking-point moment.'
             )
         elif "?" in last_msg and character_name.lower() in last_msg.lower():
             # Named in a question
             prompt = (
                 f'{last_speaker} just called your name:\n"{snippet}"\n\n'
-                f'They want a response from you. Give it to them — honest, emotional, in character.'
+                f'Answer them. Be direct. 1–3 sentences.'
             )
         else:
             # General — react or push the debate
             prompt = (
                 f'{last_speaker} just said:\n"{snippet}"\n\n'
-                f'Speak now — react, challenge, reveal something, or drive the debate forward. '
-                f'Be as brief or as full as the moment demands.'
+                f'React or push back — sharply. 1–2 sentences unless you have something major to reveal.'
             )
 
     if correction_hint:
@@ -52,6 +51,7 @@ async def character_respond(
     divergence: str,
     debate_history: list,
     story_title: str = "",
+    exploration_hint: str = None,
 ) -> str:
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
@@ -68,6 +68,13 @@ async def character_respond(
 
     messages.append(HumanMessage(content=_build_turn_prompt(character["name"], debate_history)))
 
+    if exploration_hint:
+        messages.append(HumanMessage(content=(
+            f"[HIDDEN TRUTH — this is something deep and true about you that you have never said aloud. "
+            f"Let it surface in what you say now, naturally — do not announce it, just let it shape your words]: "
+            f"{exploration_hint}"
+        )))
+
     llm = get_agent_llm()
     response = await llm.ainvoke(messages)
     return response.content.strip()
@@ -80,6 +87,7 @@ async def character_respond_stream(
     debate_history: list,
     story_title: str = "",
     correction_hint: str = None,
+    exploration_hint: str = None,
 ):
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
@@ -96,6 +104,13 @@ async def character_respond_stream(
 
     messages.append(HumanMessage(content=_build_turn_prompt(character["name"], debate_history, correction_hint)))
 
+    if exploration_hint:
+        messages.append(HumanMessage(content=(
+            f"[HIDDEN TRUTH — this is something deep and true about you that you have never said aloud. "
+            f"Let it surface in what you say now, naturally — do not announce it, just let it shape your words]: "
+            f"{exploration_hint}"
+        )))
+
     llm = get_agent_llm()
     async for chunk in llm.astream(messages):
         if chunk.content:
@@ -110,6 +125,7 @@ async def character_continue_stream(
     story_title: str = "",
     previous_response: str = "",
     continuation_reason: str = "",
+    exploration_hint: str = None,
 ):
     """
     A second pass for a character when the judge grants them more space.
@@ -137,6 +153,13 @@ async def character_continue_stream(
         f"The burden is yours. Speak."
     )
     messages.append(HumanMessage(content=prompt))
+
+    if exploration_hint:
+        messages.append(HumanMessage(content=(
+            f"[HIDDEN TRUTH — this is something deep and true about you that you have never said aloud. "
+            f"Let it surface in what you say now, naturally — do not announce it, just let it shape your words]: "
+            f"{exploration_hint}"
+        )))
 
     llm = get_agent_llm(max_tokens=550)
     async for chunk in llm.astream(messages):

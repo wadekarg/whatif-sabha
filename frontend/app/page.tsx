@@ -260,34 +260,6 @@ export default function Home() {
                     <div className="h-1 bg-[#f0ebe4] rounded-full overflow-hidden">
                       <div className="h-full bg-[#c07820] rounded-full animate-breathe" style={{ width: `${Math.min(10 + activityLog.length * 5, 90)}%`, transition: "width 0.5s ease" }} />
                     </div>
-                    {/* Terminal feed */}
-                    <div className="mt-3 bg-[#0f0d0a] rounded-xl overflow-hidden border border-[#2a2018]">
-                      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[#2a2018]">
-                        <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
-                        <span className="ml-2 text-[10px] text-white/20 font-mono">analysis.log</span>
-                      </div>
-                      <div className="px-3 py-3 space-y-1.5 max-h-52 overflow-y-auto">
-                        {activityLog.length === 0 ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-[#c07820] font-mono text-xs animate-breathe">▶</span>
-                            <span className="text-white/40 font-mono text-xs">Starting pipeline...</span>
-                          </div>
-                        ) : activityLog.map((msg, i) => {
-                          const isLast = i === activityLog.length - 1;
-                          return (
-                            <div key={i} className="flex items-start gap-2 font-mono text-xs">
-                              <span className={`shrink-0 mt-px ${isLast ? "text-[#c07820] animate-breathe" : "text-emerald-400/70"}`}>
-                                {isLast ? "▶" : "✓"}
-                              </span>
-                              <span className={isLast ? "text-white/90" : "text-white/45"}>{msg}</span>
-                            </div>
-                          );
-                        })}
-                        <div ref={logEndRef} />
-                      </div>
-                    </div>
                   </div>
                 ) : isDone ? (
                   <div className="p-8 space-y-4">
@@ -343,6 +315,38 @@ export default function Home() {
                   Try with: Animal Farm · Mahabharata · Hamlet · Any story
                 </p>
               )}
+
+              {/* Terminal feed — shown below the upload box while processing */}
+              {isProcessing && (
+                <div className="bg-[#0f0d0a] rounded-xl overflow-hidden border border-[#2a2018]">
+                  <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[#2a2018]">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+                    <span className="ml-2 text-[10px] text-white/20 font-mono">analysis.log</span>
+                  </div>
+                  <div className="px-3 py-3 space-y-1.5 max-h-52 overflow-y-auto">
+                    {activityLog.length === 0 ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#c07820] font-mono text-xs animate-breathe">▶</span>
+                        <span className="text-white/40 font-mono text-xs">Starting pipeline...</span>
+                      </div>
+                    ) : activityLog.map((msg, i) => {
+                      const isLast = i === activityLog.length - 1;
+                      return (
+                        <div key={i} className="flex items-start gap-2 font-mono text-xs">
+                          <span className={`shrink-0 mt-px ${isLast ? "text-[#c07820] animate-breathe" : "text-emerald-400/70"}`}>
+                            {isLast ? "▶" : "✓"}
+                          </span>
+                          <span className={isLast ? "text-white/90" : "text-white/45"}>{msg}</span>
+                        </div>
+                      );
+                    })}
+                    <div ref={logEndRef} />
+                  </div>
+                </div>
+              )}
+
               {error && (
                 <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-xl p-4 flex gap-2">
                   <span className="shrink-0 mt-0.5">✕</span>{error}

@@ -54,7 +54,10 @@ async def get_character(
         if e["character"].lower() == character_name.lower()
     ]
 
-    return {**character, "knowledge_events": knowledge_events}
+    timeline_phases = story.analysis.get("timeline_phases", [])
+    timeline_metadata = story.analysis.get("timeline_metadata", None)
+
+    return {**character, "knowledge_events": knowledge_events, "timeline_phases": timeline_phases, "timeline_metadata": timeline_metadata}
 
 
 @router.get("/{story_id}/graph")

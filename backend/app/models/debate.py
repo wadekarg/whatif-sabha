@@ -23,6 +23,9 @@ class Debate(Base):
     # Final synthesized alternate ending
     alternate_ending = Column(Text, nullable=True)
 
+    # Structured timeline of key events in the alternate world
+    alternate_timeline = Column(JSON, nullable=True)
+
     # "pending" | "running" | "completed" | "error"
     status = Column(String, default="pending")
 

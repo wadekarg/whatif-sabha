@@ -1,6 +1,27 @@
 import json
 import re
-from app.config import get_judge_llm
+from app.config import get_judge_fallbacks, _is_rate_limit
+
+
+async def _invoke_judge(prompt: str) -> str:
+    """Try each judge model in priority order; fall back on rate-limit errors."""
+    fallbacks = get_judge_fallbacks()
+    if not fallbacks:
+        raise ValueError("No judge LLM available — check your Groq API key.")
+    last_exc = None
+    for llm, label in fallbacks:
+        try:
+            result = await llm.ainvoke(prompt)
+            raw = result.content
+            if isinstance(raw, list):
+                raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+            return raw.strip()
+        except Exception as e:
+            if _is_rate_limit(e):
+                last_exc = e
+                continue  # try next model
+            raise  # unexpected error — don't swallow
+    raise last_exc
 
 
 async def judge_response(
@@ -17,8 +38,6 @@ async def judge_response(
     1. Character fidelity — did they speak as themselves?
     2. Completeness — were they under burden to explain and did they?
     """
-    llm = get_judge_llm()
-
     context_block = ""
     if previous_speaker and previous_message:
         addressed_note = " They were spoken to directly." if was_directly_addressed else ""
@@ -59,24 +78,18 @@ Return JSON only:
   "feedback": "<one sentence>",
   "issue": "<specific out-of-character element if score < 6, else null>",
   "needs_continuation": <true/false>,
-  "continuation_reason": "<one sentence on what burden is unmet, or null>"
+  "continuation_reason": "<one sentence on what burden is unmet, or null>",
+  "dominant_emotion": "<one of: anger, cold_fury, contempt, grief, desperation, pride, guilt, shame, defiance, bitterness, jealousy, longing, righteous_indignation, humiliation, weariness, hope, betrayal, neutral>"
 }}"""
 
-    result = await llm.ainvoke(prompt)
-    raw = result.content
-    if isinstance(raw, list):
-        raw = "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part)
-            for part in raw
-        )
-    raw = raw.strip()
+    raw = await _invoke_judge(prompt)
     raw = re.sub(r"^```(?:json)?\n?", "", raw)
     raw = re.sub(r"\n?```$", "", raw)
 
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        return {"score": 7, "in_character": True, "feedback": "Parse error, accepted.", "issue": None, "needs_continuation": False, "continuation_reason": None}
+        return {"score": 7, "in_character": True, "feedback": "Parse error, accepted.", "issue": None, "needs_continuation": False, "continuation_reason": None, "dominant_emotion": "neutral"}
 
 
 async def should_regenerate(judge_result: dict, threshold: int = 5) -> bool:

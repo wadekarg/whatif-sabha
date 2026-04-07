@@ -1,6 +1,7 @@
 import json
 import uuid
 import asyncio
+import random
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +21,7 @@ from app.core.agents.orchestrator import (
     _detect_question_target,
 )
 from app.core.agents.judge_agent import judge_response, should_regenerate
-from app.core.agents.narrator_agent import synthesize_ending_stream
+from app.core.agents.narrator_agent import synthesize_ending_stream, generate_alternate_timeline
 
 router = APIRouter(prefix="/debates", tags=["debates"])
 
@@ -124,6 +125,8 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         await db.commit()
 
     alternate_ending = ""
+    consecutive_errors = 0
+
     try:
         while not should_synthesize(transcript, characters, max_rounds):
             phase = determine_debate_phase(round_number, len(characters))
@@ -149,61 +152,96 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             judge_result = {"score": 7, "issue": None}
             correction_hint = None
 
-            while attempt < max_attempts:
-                full_response = ""
-                async for token in character_respond_stream(
-                    character=character,
-                    phase=phase_state,
-                    divergence=debate.divergence_description,
-                    debate_history=transcript,
-                    story_title=story.title or "",
-                    correction_hint=correction_hint,
-                ):
-                    full_response += token
-                    yield sse("token", {"character": next_speaker_name, "text": token})
+            # 10% exploration: inject a hidden dimension so character reveals something unexpected
+            exploration_hint = None
+            if character.get("hidden_dimensions") and random.random() < 0.10:
+                exploration_hint = random.choice(character["hidden_dimensions"])
+                yield sse("exploration", {
+                    "character": next_speaker_name,
+                    "hint": exploration_hint,
+                })
 
-                traits = phase_state.get("personality_traits", [])
-                last_entry = transcript[-1] if transcript else {}
-                judge_result = await judge_response(
-                    character_name=next_speaker_name,
-                    character_description=character.get("description", ""),
-                    personality_traits=traits,
-                    response_text=full_response,
-                    previous_message=last_entry.get("message", ""),
-                    previous_speaker=last_entry.get("character", ""),
-                    was_directly_addressed=last_entry.get("target_character") == next_speaker_name,
-                )
+            try:
+                while attempt < max_attempts:
+                    full_response = ""
+                    async for token in character_respond_stream(
+                        character=character,
+                        phase=phase_state,
+                        divergence=debate.divergence_description,
+                        debate_history=transcript,
+                        story_title=story.title or "",
+                        correction_hint=correction_hint,
+                        exploration_hint=exploration_hint,
+                    ):
+                        full_response += token
+                        yield sse("token", {"character": next_speaker_name, "text": token})
 
-                if not await should_regenerate(judge_result):
+                    traits = phase_state.get("personality_traits", [])
+                    last_entry = transcript[-1] if transcript else {}
+                    try:
+                        judge_result = await judge_response(
+                            character_name=next_speaker_name,
+                            character_description=character.get("description", ""),
+                            personality_traits=traits,
+                            response_text=full_response,
+                            previous_message=last_entry.get("message", ""),
+                            previous_speaker=last_entry.get("character", ""),
+                            was_directly_addressed=last_entry.get("target_character") == next_speaker_name,
+                        )
+                    except Exception:
+                        # Judge unavailable — accept the response as-is
+                        judge_result = {"score": 7, "in_character": True, "feedback": "", "issue": None, "needs_continuation": False, "continuation_reason": None, "dominant_emotion": "neutral"}
+
+                    if not await should_regenerate(judge_result):
+                        break
+
+                    attempt += 1
+                    correction_hint = judge_result.get("issue") or judge_result.get("feedback")
+                    yield sse("regenerating", {
+                        "character": next_speaker_name,
+                        "reason": correction_hint or "out of character",
+                    })
+
+                # Continuation — judge grants more space when burden is unmet
+                drama_score = compute_drama_score(transcript)
+                continuation_threshold = 0.4 if phase == "climax" else 0.55
+                if judge_result.get("needs_continuation") and drama_score >= continuation_threshold:
+                    continuation_reason = judge_result.get("continuation_reason") or "unfinished thought"
+                    yield sse("continuation_granted", {
+                        "character": next_speaker_name,
+                        "reason": continuation_reason,
+                    })
+                    async for token in character_continue_stream(
+                        character=character,
+                        phase=phase_state,
+                        divergence=debate.divergence_description,
+                        debate_history=transcript,
+                        story_title=story.title or "",
+                        previous_response=full_response,
+                        continuation_reason=continuation_reason,
+                        exploration_hint=exploration_hint,
+                    ):
+                        full_response += token
+                        yield sse("token", {"character": next_speaker_name, "text": token})
+
+            except Exception as e:
+                # LLM call failed — skip this turn and keep going
+                consecutive_errors += 1
+                yield sse("turn_error", {
+                    "character": next_speaker_name,
+                    "reason": str(e)[:120],
+                })
+                if consecutive_errors >= 3:
                     break
+                await asyncio.sleep(1)
+                round_number += 1
+                continue
 
-                attempt += 1
-                correction_hint = judge_result.get("issue") or judge_result.get("feedback")
-                yield sse("regenerating", {
-                    "character": next_speaker_name,
-                    "reason": correction_hint or "out of character",
-                })
+            consecutive_errors = 0  # reset on success
 
-            # Continuation — judge grants more space when burden is unmet
-            drama_score = compute_drama_score(transcript)
-            continuation_threshold = 0.4 if phase == "climax" else 0.55
-            if judge_result.get("needs_continuation") and drama_score >= continuation_threshold:
-                continuation_reason = judge_result.get("continuation_reason") or "unfinished thought"
-                yield sse("continuation_granted", {
-                    "character": next_speaker_name,
-                    "reason": continuation_reason,
-                })
-                async for token in character_continue_stream(
-                    character=character,
-                    phase=phase_state,
-                    divergence=debate.divergence_description,
-                    debate_history=transcript,
-                    story_title=story.title or "",
-                    previous_response=full_response,
-                    continuation_reason=continuation_reason,
-                ):
-                    full_response += token
-                    yield sse("token", {"character": next_speaker_name, "text": token})
+            if not full_response:
+                round_number += 1
+                continue
 
             char_names = [c["name"] for c in characters]
             target_char = _detect_question_target(full_response, char_names, next_speaker_name)
@@ -216,6 +254,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "message": full_response,
                 "judge_score": judge_result.get("score", 7),
                 "target_character": target_char,
+                "emotion": judge_result.get("dominant_emotion", "neutral"),
             })
 
             transcript.append({
@@ -240,18 +279,35 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         # Synthesize alternate ending
         yield sse("synthesis_start", {"message": "Characters have spoken. Writing the alternate ending..."})
 
-        async for token in synthesize_ending_stream(
-            story_title=story.title or "the story",
-            original_summary=story.summary or "",
-            divergence_description=debate.divergence_description,
-            debate_transcript=transcript,
-        ):
-            alternate_ending += token
-            yield sse("ending_token", {"text": token})
+        alternate_timeline = []
+        try:
+            async for token in synthesize_ending_stream(
+                story_title=story.title or "the story",
+                original_summary=story.summary or "",
+                divergence_description=debate.divergence_description,
+                debate_transcript=transcript,
+            ):
+                alternate_ending += token
+                yield sse("ending_token", {"text": token})
+        except Exception as e:
+            alternate_ending = f"[The narrator could not write the ending: {str(e)[:120]}]"
+            yield sse("ending_token", {"text": alternate_ending})
+
+        # Generate structured timeline from the completed prose
+        if alternate_ending and not alternate_ending.startswith("["):
+            try:
+                alternate_timeline = await generate_alternate_timeline(
+                    story_title=story.title or "the story",
+                    divergence_description=debate.divergence_description,
+                    alternate_ending=alternate_ending,
+                )
+            except Exception:
+                alternate_timeline = []
 
         yield sse("debate_end", {
             "debate_id": debate_id,
             "alternate_ending": alternate_ending,
+            "alternate_timeline": alternate_timeline,
             "total_rounds": round_number,
         })
 
@@ -262,6 +318,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 select(Debate).where(Debate.id == debate_id)
             )).scalar_one()
             db_debate.alternate_ending = alternate_ending or db_debate.alternate_ending
+            db_debate.alternate_timeline = alternate_timeline or db_debate.alternate_timeline
             db_debate.status = "completed" if alternate_ending else "interrupted"
             db_debate.round_count = round_number
             await db.commit()
@@ -342,6 +399,7 @@ async def get_debate(debate_id: str, db: AsyncSession = Depends(get_db)):
         "participating_characters": debate.participating_characters,
         "transcript": debate.transcript,
         "alternate_ending": debate.alternate_ending,
+        "alternate_timeline": debate.alternate_timeline or [],
         "status": debate.status,
         "round_count": debate.round_count,
     }
