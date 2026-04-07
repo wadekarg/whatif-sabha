@@ -33,3 +33,8 @@ Thumbs.db
 
 # Logs
 *.log
+character_souls.kuzu
+character_souls.kuzu.wal
+test_souls.kuzu
+*.kuzu
+*.kuzu.wal

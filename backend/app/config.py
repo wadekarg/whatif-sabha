@@ -40,11 +40,6 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE_MB: int = 50
 
-    # Neo4j — character soul memory (Graphiti)
-    NEO4J_URI: Optional[str] = None
-    NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: Optional[str] = None
-
     # Feature flags
     ENABLE_LIGHTRAG: bool = False
 
