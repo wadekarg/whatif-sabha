@@ -26,6 +26,10 @@ class Debate(Base):
     # Structured timeline of key events in the alternate world
     alternate_timeline = Column(JSON, nullable=True)
 
+    # Structured alternate world state — queryable by Oracle mode
+    # { characters: {name: {survived, new_role, new_beliefs, ...}}, world_state: {...}, new_events: [...] }
+    alternate_world_state = Column(JSON, nullable=True)
+
     # "pending" | "running" | "completed" | "error"
     status = Column(String, default="pending")
 

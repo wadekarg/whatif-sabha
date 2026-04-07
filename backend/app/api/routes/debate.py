@@ -376,11 +376,27 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             except Exception:
                 alternate_timeline = []
 
+        # Build the alternate world state — needed for Oracle mode
+        alternate_world_state = {}
+        if alternate_ending and not alternate_ending.startswith("["):
+            try:
+                from app.core.agents.oracle_agent import build_alternate_world_state
+                alternate_world_state = await build_alternate_world_state(
+                    story_title=story.title or "the story",
+                    original_summary=story.summary or "",
+                    divergence=debate.divergence_description,
+                    transcript=transcript,
+                    alternate_ending=alternate_ending,
+                )
+            except Exception:
+                alternate_world_state = {}
+
         yield sse("debate_end", {
             "debate_id": debate_id,
             "alternate_ending": alternate_ending,
             "alternate_timeline": alternate_timeline,
             "total_rounds": round_number,
+            "oracle_ready": bool(alternate_world_state),
         })
 
     finally:
@@ -391,9 +407,81 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             )).scalar_one()
             db_debate.alternate_ending = alternate_ending or db_debate.alternate_ending
             db_debate.alternate_timeline = alternate_timeline or db_debate.alternate_timeline
+            if alternate_world_state:
+                db_debate.alternate_world_state = alternate_world_state
             db_debate.status = "completed" if alternate_ending else "interrupted"
             db_debate.round_count = round_number
             await db.commit()
+
+
+class OracleRequest(BaseModel):
+    character_name: str
+    question: str
+    history: list[dict] = []
+
+
+@router.get("/{debate_id}/oracle")
+async def get_oracle_state(debate_id: str, db: AsyncSession = Depends(get_db)):
+    """Return the alternate world state — which characters are queryable and what changed."""
+    result = await db.execute(select(Debate).where(Debate.id == debate_id))
+    debate = result.scalar_one_or_none()
+    if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+    if not debate.alternate_world_state:
+        raise HTTPException(status_code=404, detail="Oracle not ready — debate may still be running or world state not generated.")
+    return {
+        "debate_id": debate_id,
+        "divergence": debate.divergence_description,
+        "world_state": debate.alternate_world_state,
+        "queryable_characters": list(debate.alternate_world_state.get("characters", {}).keys()),
+    }
+
+
+@router.post("/{debate_id}/oracle/stream")
+async def oracle_stream(
+    debate_id: str, body: OracleRequest, db: AsyncSession = Depends(get_db)
+):
+    """
+    Stream a character's response from within the alternate world (Oracle mode).
+    Characters answer questions as if they LIVE in the alternate timeline.
+    """
+    result = await db.execute(select(Debate).where(Debate.id == debate_id))
+    debate = result.scalar_one_or_none()
+    if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+    if not debate.alternate_world_state:
+        raise HTTPException(status_code=400, detail="Oracle not available — alternate world state not built.")
+
+    story_result = await db.execute(select(Story).where(Story.id == debate.story_id))
+    story = story_result.scalar_one_or_none()
+
+    all_characters = story.analysis.get("characters", []) if story else []
+    character_data = next(
+        (c for c in all_characters if c["name"].lower() == body.character_name.lower()),
+        {"name": body.character_name, "description": ""},
+    )
+
+    from app.core.agents.oracle_agent import oracle_respond_stream
+
+    async def generate():
+        async for token in oracle_respond_stream(
+            character_name=body.character_name,
+            character_data=character_data,
+            alternate_world_state=debate.alternate_world_state,
+            divergence=debate.divergence_description,
+            story_title=story.title if story else "",
+            question=body.question,
+            chat_history=body.history,
+        ):
+            yield f"data: {json.dumps({'type': 'token', 'text': token})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    from fastapi.responses import StreamingResponse as SR
+    return SR(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 class DebateChatRequest(BaseModel):

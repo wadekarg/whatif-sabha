@@ -57,6 +57,13 @@ export default function DebatePage() {
   const [streamingEnding, setStreamingEnding] = useState("");
   const [alternateTimeline, setAlternateTimeline] = useState<any[]>([]);
   const [showConclusion, setShowConclusion] = useState(false);
+  const [oracleReady, setOracleReady] = useState(false);
+  const [showOracle, setShowOracle] = useState(false);
+  const [oracleCharacter, setOracleCharacter] = useState("");
+  const [oracleInput, setOracleInput] = useState("");
+  const [oracleHistory, setOracleHistory] = useState<{role:string;content:string;character?:string}[]>([]);
+  const [oracleStreaming, setOracleStreaming] = useState("");
+  const [oracleLoading, setOracleLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "starting" | "running" | "done">("idle");
   const [dramaScore, setDramaScore] = useState(0.5);
   const [activeCharacters, setActiveCharacters] = useState<string[]>([]);
@@ -626,6 +633,7 @@ export default function DebatePage() {
         setAlternateTimeline(ev.alternate_timeline || []);
         setStreamingEnding("");
         setStatus("done");
+        if (ev.oracle_ready) setOracleReady(true);
         setTimeout(() => setShowConclusion(true), 800);
         es.close();
       } else if (ev.type === "observer_start") {
@@ -651,6 +659,44 @@ export default function DebatePage() {
       setStreaming(null);
       setStatus(prev => prev === "running" ? "done" : prev);
     };
+  };
+
+  const sendOracleQuestion = async () => {
+    const q = oracleInput.trim();
+    if (!q || oracleLoading || !debateId || !oracleCharacter) return;
+    setOracleInput("");
+    setOracleHistory(prev => [...prev, { role: "user", content: q }]);
+    setOracleLoading(true);
+    setOracleStreaming("");
+    try {
+      const res = await fetch(`${API}/debates/${debateId}/oracle/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ character_name: oracleCharacter, question: q, history: oracleHistory }),
+      });
+      if (!res.body) throw new Error("no body");
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let full = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = dec.decode(value);
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6));
+            if (ev.type === "token") { full += ev.text; setOracleStreaming(full); }
+            if (ev.type === "done") { setOracleHistory(prev => [...prev, { role: "assistant", content: full, character: oracleCharacter }]); setOracleStreaming(""); }
+          } catch {}
+        }
+      }
+    } catch {
+      setOracleHistory(prev => [...prev, { role: "assistant", content: "The oracle could not reach this character right now.", character: oracleCharacter }]);
+      setOracleStreaming("");
+    } finally {
+      setOracleLoading(false);
+    }
   };
 
   const sendDebateChat = async () => {
@@ -1217,6 +1263,80 @@ export default function DebatePage() {
                 >{alternateEnding}</ReactMarkdown>
               </div>
             </div>
+
+            {/* ── Oracle Mode ── */}
+            {oracleReady && (
+              <div className="border-t border-[#e8e0d5] pt-10 space-y-6">
+                <div className="text-center space-y-2">
+                  <div className="text-[#c07820] text-2xl">◉</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#a09282] font-medium">Oracle Mode</div>
+                  <p className="text-sm text-[#6b5c4e] max-w-sm mx-auto">Enter the alternate world. Ask any character a question — they will answer from inside the reality that now exists.</p>
+                </div>
+
+                {/* Character selector */}
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {activeCharacters.map(name => (
+                    <button key={name}
+                      onClick={() => { setOracleCharacter(name); setShowOracle(true); setOracleHistory([]); }}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${oracleCharacter === name && showOracle ? "bg-[#1c1410] text-white border-[#1c1410]" : "bg-white text-[#6b5c4e] border-[#e8e0d5] hover:border-[#c07820]"}`}>
+                      {name}
+                    </button>
+                  ))}
+                </div>
+
+                {showOracle && oracleCharacter && (
+                  <div className="bg-white border border-[#e8e0d5] rounded-2xl overflow-hidden">
+                    <div className="px-5 py-3 border-b border-[#e8e0d5] flex items-center gap-2 bg-[#fef9f4]">
+                      <div className="w-2 h-2 rounded-full bg-[#c07820]" />
+                      <span className="text-sm font-semibold text-[#1c1410]">{oracleCharacter}</span>
+                      <span className="text-xs text-[#a09282] italic">speaking from the alternate world</span>
+                    </div>
+
+                    {/* History */}
+                    <div className="px-5 py-4 space-y-4 max-h-80 overflow-y-auto">
+                      {oracleHistory.length === 0 && (
+                        <p className="text-sm text-[#a09282] italic text-center py-4">Ask {oracleCharacter} anything about their world...</p>
+                      )}
+                      {oracleHistory.map((msg, i) => (
+                        <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}>
+                          {msg.role === "assistant" && (
+                            <div className="w-7 h-7 rounded-full bg-[#f0c060] flex items-center justify-center text-[#1c1410] font-bold text-xs shrink-0">{msg.character?.[0]}</div>
+                          )}
+                          <div className={`rounded-xl px-4 py-2.5 text-sm max-w-[85%] leading-relaxed ${msg.role === "user" ? "bg-[#1c1410] text-white rounded-br-sm" : "bg-[#fef3e2] text-[#1c1410] rounded-bl-sm"}`}>
+                            {msg.content}
+                          </div>
+                        </div>
+                      ))}
+                      {oracleStreaming && (
+                        <div className="flex gap-3">
+                          <div className="w-7 h-7 rounded-full bg-[#f0c060] flex items-center justify-center text-[#1c1410] font-bold text-xs shrink-0">{oracleCharacter[0]}</div>
+                          <div className="rounded-xl rounded-bl-sm px-4 py-2.5 text-sm bg-[#fef3e2] text-[#1c1410] leading-relaxed">
+                            {oracleStreaming}<span className="animate-pulse">▌</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Input */}
+                    <div className="px-5 py-3 border-t border-[#e8e0d5] flex gap-2">
+                      <input
+                        value={oracleInput}
+                        onChange={e => setOracleInput(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendOracleQuestion()}
+                        placeholder={`Ask ${oracleCharacter}...`}
+                        className="flex-1 text-sm px-3 py-2 rounded-lg border border-[#e8e0d5] bg-white focus:outline-none focus:ring-1 focus:ring-[#c07820] text-[#1c1410] placeholder:text-[#c9b9a8]"
+                      />
+                      <button
+                        onClick={sendOracleQuestion}
+                        disabled={oracleLoading || !oracleInput.trim()}
+                        className="px-4 py-2 bg-[#c07820] text-white text-sm rounded-lg hover:bg-[#a06010] disabled:opacity-40 transition-colors">
+                        {oracleLoading ? "..." : "Ask"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Footer ── */}
             <div className="border-t border-[#e8e0d5] pt-10 flex flex-col items-center gap-4 text-center">
