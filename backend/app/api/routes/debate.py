@@ -291,6 +291,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "round": round_number,
                 "phase": phase,
                 "target_character": target_char,
+                "emotion": judge_result.get("dominant_emotion", "neutral"),
             })
 
             # Save this turn to character's persistent soul memory (async, non-blocking)
@@ -340,11 +341,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         yield sse("observer_end", {
                             "observer_id": observer["id"],
                             "observer_name": observer["name"],
+                            "era": observer.get("era", ""),
                             "message": obs_response,
                         })
                         last_observer_at = len(transcript)
-                except Exception:
-                    pass  # observer failure never breaks the debate
+                except Exception as obs_exc:
+                    import logging as _log
+                    _log.getLogger(__name__).warning(f"Observer failed (non-fatal): {obs_exc}")
 
             await asyncio.sleep(0.3)
 

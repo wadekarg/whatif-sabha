@@ -39,7 +39,7 @@ const EMOTION_STYLE: Record<string, { bg: string; label: string; dot: string }> 
   neutral:              { bg: "rgba(255,255,255,0.9)",  label: "",             dot: "#c8b89a" },
 };
 
-type DebateEntry = { character: string; message: string; round: number; target?: string; emotion?: string; isObserver?: boolean; observerEra?: string; };
+type DebateEntry = { character: string; message: string; round: number; target?: string; target_character?: string; emotion?: string; isObserver?: boolean; observerEra?: string; };
 type GraphNode   = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; };
 type GraphEdge   = { source: string; target: string; count: number; questions: number; };
 
@@ -593,7 +593,8 @@ export default function DebateViewPage() {
 
               const c = colorOf(entry.character, chars);
               const em = EMOTION_STYLE[entry.emotion || "neutral"] || EMOTION_STYLE.neutral;
-              const targetChar = entry.target && entry.target !== entry.character ? entry.target : null;
+              const rawTarget = entry.target || entry.target_character || null;
+              const targetChar = rawTarget && rawTarget !== entry.character ? rawTarget : null;
               const targetColor = targetChar ? colorOf(targetChar, chars) : null;
               const quotedMsg = targetChar
                 ? [...transcript.slice(0, i)].reverse().find(e => e.character === targetChar)
