@@ -565,6 +565,9 @@ export default function DebateViewPage() {
               // Round separator
               const prevRound = i > 0 ? transcript[i - 1].round : null;
               const showRoundSep = entry.round !== prevRound && !entry.isObserver;
+              const isTwoChar = chars.length === 2;
+              const charIdx = chars.indexOf(entry.character);
+              const isRight = isTwoChar && charIdx === 1;
 
               // World observer entry
               if (entry.isObserver) {
@@ -592,6 +595,13 @@ export default function DebateViewPage() {
               const em = EMOTION_STYLE[entry.emotion || "neutral"] || EMOTION_STYLE.neutral;
               const targetChar = entry.target && entry.target !== entry.character ? entry.target : null;
               const targetColor = targetChar ? colorOf(targetChar, chars) : null;
+              const quotedMsg = targetChar
+                ? [...transcript.slice(0, i)].reverse().find(e => e.character === targetChar)
+                : null;
+              const quoteSnippet = quotedMsg
+                ? quotedMsg.message.replace(/[*_#]/g, "").slice(0, 80) + (quotedMsg.message.length > 80 ? "…" : "")
+                : null;
+
               return (
                 <div key={i}>
                   {showRoundSep && (
@@ -601,29 +611,32 @@ export default function DebateViewPage() {
                       <div className="flex-1 h-px bg-[#e8e0d5]" />
                     </div>
                   )}
-                  <div className="flex gap-3 py-1.5">
+                  <div className={`flex gap-3 py-1.5 ${isRight ? "flex-row-reverse" : ""}`}>
                     <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 shadow-sm"
                       style={{ backgroundColor: c.hex }}>
                       {initials(entry.character)}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <div className={`flex-1 min-w-0 flex flex-col ${isRight ? "items-end" : ""}`}>
+                      <div className={`flex items-center gap-2 mb-1 flex-wrap ${isRight ? "flex-row-reverse" : ""}`}>
                         <span className="text-xs font-semibold" style={{ color: c.hex }}>{entry.character}</span>
-                        {targetChar && (
-                          <span className="flex items-center gap-1 text-[10px] text-[#a09282]">
-                            <span>↩</span>
-                            <span style={{ color: targetColor?.hex }}>{targetChar}</span>
-                          </span>
-                        )}
                         {em.label && (
-                          <span className="flex items-center gap-1 ml-auto">
+                          <span className="flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
                             <span className="text-[10px] text-[#a09282]">{em.label}</span>
                           </span>
                         )}
                       </div>
-                      <div className="text-sm leading-relaxed rounded-r-xl rounded-bl-xl px-3 py-2.5 text-[#1c1410]"
-                        style={{ borderLeft: `3px solid ${em.dot}`, backgroundColor: em.bg }}>
+                      {/* Reply quote preview */}
+                      {quoteSnippet && (
+                        <div className={`mb-1 px-3 py-1.5 rounded-lg text-[11px] text-[#6b5c4e] italic max-w-[90%] ${isRight ? "self-end" : "self-start"}`}
+                          style={{ borderLeft: isRight ? undefined : `2px solid ${targetColor?.hex}`, borderRight: isRight ? `2px solid ${targetColor?.hex}` : undefined, backgroundColor: targetColor?.hex + "12" }}>
+                          <span className="font-semibold not-italic text-[10px]" style={{ color: targetColor?.hex }}>{targetChar}</span>
+                          <span className="mx-1 text-[#c8b89a]">·</span>
+                          {quoteSnippet}
+                        </div>
+                      )}
+                      <div className={`text-sm leading-relaxed px-3 py-2.5 text-[#1c1410] max-w-[90%] ${isRight ? "self-end rounded-l-xl rounded-br-xl" : "rounded-r-xl rounded-bl-xl self-start"}`}
+                        style={{ borderLeft: isRight ? undefined : `3px solid ${em.dot}`, borderRight: isRight ? `3px solid ${em.dot}` : undefined, backgroundColor: em.bg }}>
                         <ReactMarkdown components={{
                           p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
                           strong: ({children}) => <strong style={{fontWeight:600}}>{children}</strong>,
