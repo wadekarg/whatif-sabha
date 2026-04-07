@@ -12,7 +12,8 @@ from app.db.database import get_db
 from app.models.story import Story
 from app.config import get_settings
 from app.core.pdf_extractor import extract_text, needs_chunking
-from app.core.story_analyzer import analyze_story
+from app.core.story_analyzer import analyze_story, generate_world_observers
+from app.core.lightrag_analyzer import build_causal_graph
 from app.core.rag.chunker import chunk_by_chapter
 from app.core.rag.embedder import embed_chunks
 from app.core.character_research.researcher import research_all_characters
@@ -124,6 +125,34 @@ async def _analyze_story_background(story_id: str, pdf_path: str):
             if div_pts:
                 _push_log(story, f"⚡ {len(div_pts)} divergence points identified")
             await db.commit()
+
+            # Generate world observer personas (historically-situated external voices)
+            _push_log(story, "🌍 Generating world observer perspectives...")
+            await db.commit()
+            observers = await generate_world_observers(
+                title=analysis.get("title", "Unknown"),
+                summary=analysis.get("summary", ""),
+                themes=analysis.get("themes", []),
+            )
+            if observers:
+                analysis["world_observers"] = observers
+                story.analysis = analysis
+                flag_modified(story, "analysis")
+                _push_log(story, f"🌍 {len(observers)} world observer perspectives generated")
+            await db.commit()
+
+            # Build narrative causal graph (LightRAG) — optional, feature-flagged
+            settings_obj = get_settings()
+            if getattr(settings_obj, 'ENABLE_LIGHTRAG', False):
+                _push_log(story, "🕸️ Building narrative causal graph (LightRAG)...")
+                await db.commit()
+                causal_graph = await build_causal_graph(extracted["full_text"], story_id)
+                if causal_graph:
+                    analysis["causal_graph"] = causal_graph
+                    story.analysis = analysis
+                    flag_modified(story, "analysis")
+                    _push_log(story, "🕸️ Narrative causal graph complete")
+                    await db.commit()
 
             # Step 3: Character research
             story.status = "researching"

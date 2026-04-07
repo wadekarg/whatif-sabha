@@ -22,6 +22,12 @@ from app.core.agents.orchestrator import (
 )
 from app.core.agents.judge_agent import judge_response, should_regenerate
 from app.core.agents.narrator_agent import synthesize_ending_stream, generate_alternate_timeline
+from app.core.memory import recall_memories, save_debate_turn
+from app.core.agents.world_observer_agent import (
+    _select_observers,
+    observer_respond_stream,
+    should_invite_observer,
+)
 
 router = APIRouter(prefix="/debates", tags=["debates"])
 
@@ -104,6 +110,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     participating = set(debate.participating_characters)
     characters = [c for c in all_characters if c["name"] in participating]
 
+    # World observers — select 4 most relevant to this divergence question
+    all_observers = story.analysis.get("world_observers", [])
+    active_observers = _select_observers(all_observers, debate.divergence_description, num_active=4)
+    last_observer_at: int = 0  # transcript index when an observer last spoke
+
     transcript = list(debate.transcript or [])
     round_number = len(transcript)
     max_rounds = max(len(characters) * 3, 20)
@@ -161,6 +172,22 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     "hint": exploration_hint,
                 })
 
+            # Recall relevant memories from previous debates (character soul)
+            memory_context = []
+            if transcript:
+                last_msg = transcript[-1].get("message", "")
+                memory_query = f"{debate.divergence_description[:120]} {last_msg[:120]}"
+                memory_context = await recall_memories(
+                    story_id=debate.story_id,
+                    character_name=next_speaker_name,
+                    query=memory_query,
+                )
+                if memory_context:
+                    yield sse("memory_recalled", {
+                        "character": next_speaker_name,
+                        "count": len(memory_context),
+                    })
+
             try:
                 while attempt < max_attempts:
                     full_response = ""
@@ -172,6 +199,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         story_title=story.title or "",
                         correction_hint=correction_hint,
                         exploration_hint=exploration_hint,
+                        memory_context=memory_context,
                     ):
                         full_response += token
                         yield sse("token", {"character": next_speaker_name, "text": token})
@@ -265,6 +293,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "target_character": target_char,
             })
 
+            # Save this turn to character's persistent soul memory (async, non-blocking)
+            asyncio.create_task(save_debate_turn(
+                story_id=debate.story_id,
+                character_name=next_speaker_name,
+                message=full_response,
+                debate_id=debate_id,
+                round_number=round_number,
+                divergence=debate.divergence_description,
+            ))
+
             async with session_maker() as db:
                 db_debate = (await db.execute(
                     select(Debate).where(Debate.id == debate_id)
@@ -274,6 +312,40 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 await db.commit()
 
             round_number += 1
+
+            # World observer reaction — every 4 character turns, invite 1 observer
+            if active_observers and should_invite_observer(transcript, last_observer_at, observer_interval=4):
+                import random as _rnd
+                observer = _rnd.choice(active_observers)
+                obs_response = ""
+                try:
+                    yield sse("observer_start", {
+                        "observer_id": observer["id"],
+                        "observer_name": observer["name"],
+                        "era": observer.get("era", ""),
+                    })
+                    async for token in observer_respond_stream(
+                        observer=observer,
+                        story_title=story.title or "",
+                        divergence=debate.divergence_description,
+                        debate_history=transcript,
+                    ):
+                        obs_response += token
+                        yield sse("observer_token", {
+                            "observer_id": observer["id"],
+                            "observer_name": observer["name"],
+                            "text": token,
+                        })
+                    if obs_response:
+                        yield sse("observer_end", {
+                            "observer_id": observer["id"],
+                            "observer_name": observer["name"],
+                            "message": obs_response,
+                        })
+                        last_observer_at = len(transcript)
+                except Exception:
+                    pass  # observer failure never breaks the debate
+
             await asyncio.sleep(0.3)
 
         # Synthesize alternate ending

@@ -9,6 +9,9 @@ from app.api.routes import upload, story, characters, debate, settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # Initialize character soul memory (Graphiti + Neo4j) — graceful if not configured
+    from app.core.memory import init_memory
+    await init_memory()
     yield
 
 

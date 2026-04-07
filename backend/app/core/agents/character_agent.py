@@ -45,6 +45,18 @@ def _build_turn_prompt(character_name: str, debate_history: list, correction_hin
     return prompt
 
 
+def _inject_memories(messages: list, memories: list[str]) -> None:
+    """Inject past memories as a framing message right after the system prompt."""
+    if not memories:
+        return
+    memory_lines = "\n".join(f"• {m}" for m in memories)
+    messages.insert(1, HumanMessage(content=(
+        f"[YOUR MEMORY — positions and truths you have revealed in previous debates]\n"
+        f"{memory_lines}\n"
+        f"This is your accumulated experience. Let it inform — but not constrain — how you speak today."
+    )))
+
+
 async def character_respond(
     character: dict,
     phase: dict,
@@ -52,11 +64,14 @@ async def character_respond(
     debate_history: list,
     story_title: str = "",
     exploration_hint: str = None,
+    memory_context: list[str] = None,
 ) -> str:
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
 
     messages = [SystemMessage(content=system_prompt)]
+
+    _inject_memories(messages, memory_context or [])
 
     for entry in debate_history[-12:]:
         speaker = entry["character"]
@@ -88,11 +103,14 @@ async def character_respond_stream(
     story_title: str = "",
     correction_hint: str = None,
     exploration_hint: str = None,
+    memory_context: list[str] = None,
 ):
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
 
     messages = [SystemMessage(content=system_prompt)]
+
+    _inject_memories(messages, memory_context or [])
 
     for entry in debate_history[-12:]:
         speaker = entry["character"]

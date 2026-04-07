@@ -2,6 +2,35 @@ import json
 import re
 from app.config import get_analysis_llm
 
+WORLD_OBSERVERS_PROMPT = """You are a literary historian. Given the story below, generate a set of historically-situated world observer personas who would have strong, conflicting opinions about this story's events.
+
+STORY TITLE: {title}
+STORY SUMMARY: {summary}
+THEMES: {themes}
+STORY ERA/SETTING: derived from the story context
+
+Generate 10-14 world observer personas representing diverse global perspectives — people from DIFFERENT eras, cultures, political positions, and worldviews who would interpret this story very differently.
+
+Return a JSON array:
+[
+  {{
+    "id": "snake_case_unique_id",
+    "name": "Specific descriptive name (e.g. 'Soviet Propagandist, Moscow 1945', 'Trotskyist Exile, Paris 1946')",
+    "era": "Time period and location (e.g. 'Soviet Union, 1945')",
+    "perspective": "One sentence: who this person is and their core worldview",
+    "historical_knowledge": "What unique historical knowledge they bring that characters cannot have",
+    "would_challenge": "What claims or positions they would most forcefully challenge",
+    "would_defend": "What they would argue for or protect",
+    "blindspot": "What they genuinely cannot see or refuse to acknowledge",
+    "relevance_tags": ["tag1", "tag2", "tag3"],
+    "voice_style": "Brief description of how they speak (e.g. 'authoritative, ideological, uses statistics')"
+  }}
+]
+
+Make them SPECIFIC to this story's historical and cultural context — not generic archetypes.
+Include voices from multiple continents, multiple ideological positions, and multiple time periods (including people looking back from decades later).
+Return ONLY valid JSON array. No markdown."""
+
 ANALYSIS_PROMPT = """You are a literary analyst. Analyze the following story and return a detailed JSON object.
 
 STORY TEXT:
@@ -114,6 +143,35 @@ Return a JSON object with this exact structure:
 }}
 
 Return ONLY valid JSON. No markdown, no explanation. Be thorough — extract ALL named characters, even minor ones.\n\nFor timeline_metadata: invent a story-native time unit. Examples: Animal Farm → {{"unit_name":"Farm Year","unit_plural":"Farm Years","total_duration":3.0,"start_label":"Year 1","description":"The story spans approximately 3 farm years"}}. Mahabharata → {{"unit_name":"Parva","unit_plural":"Parvas","total_duration":18.0,"start_label":"Parva 1","description":"The epic spans 18 parvas"}}. A war story → {{"unit_name":"War Year","unit_plural":"War Years","total_duration":4.0,"start_label":"Year 1","description":"The war spans 4 years"}}. Pick a unit that feels NATIVE to this specific story's world. total_duration should be a reasonable real-world-scale number (e.g. 3.0 farm years, not 1.0 meaning 100%). The 0.0–1.0 timeline positions will be multiplied by total_duration to get the actual label.\n\nFor hidden_dimensions: generate 5-8 plausible-but-unverified inner truths per character — things the text implies but never states. These are the character's hidden self. Be specific to this story and character, not generic."""
+
+
+async def generate_world_observers(title: str, summary: str, themes: list) -> list:
+    """
+    Generate historically-situated world observer personas for this story.
+    These are external voices — not story characters — who bring historical
+    knowledge and global perspectives that the characters themselves cannot have.
+    Falls back gracefully to empty list if generation fails.
+    """
+    try:
+        llm = get_analysis_llm()
+        prompt = WORLD_OBSERVERS_PROMPT.format(
+            title=title,
+            summary=summary,
+            themes=", ".join(themes) if themes else "unspecified",
+        )
+        response = await llm.ainvoke(prompt)
+        raw = response.content
+        if isinstance(raw, list):
+            raw = "".join(
+                part.get("text", "") if isinstance(part, dict) else str(part)
+                for part in raw
+            )
+        raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
+        raw = re.sub(r"\n?```$", "", raw.strip())
+        observers = json.loads(raw)
+        return observers if isinstance(observers, list) else []
+    except Exception:
+        return []
 
 
 async def analyze_story(full_text: str) -> dict:

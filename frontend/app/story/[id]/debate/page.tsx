@@ -39,7 +39,7 @@ const EMOTION_STYLE: Record<string, { bg: string; label: string; dot: string }> 
   neutral:              { bg: "rgba(255,255,255,0.9)",  label: "",             dot: "#c8b89a" },
 };
 
-type DebateEntry = { character: string; message: string; round: number; target?: string; emotion?: string; isExploration?: boolean; };
+type DebateEntry = { character: string; message: string; round: number; target?: string; emotion?: string; isExploration?: boolean; isObserver?: boolean; observerEra?: string; };
 type StreamEntry = { character: string; text: string; };
 type DivPoint    = { event_id: string; description: string; affected_characters: string[]; };
 
@@ -628,6 +628,19 @@ export default function DebatePage() {
         setStatus("done");
         setTimeout(() => setShowConclusion(true), 800);
         es.close();
+      } else if (ev.type === "observer_start") {
+        setStreaming({ character: ev.observer_name, text: "" });
+      } else if (ev.type === "observer_token") {
+        setStreaming(prev => prev ? { ...prev, text: prev.text + ev.text } : null);
+      } else if (ev.type === "observer_end") {
+        setTranscript(prev => [...prev, {
+          character: ev.observer_name,
+          message: ev.message,
+          round: 0,
+          isObserver: true,
+          observerEra: ev.era || "",
+        }]);
+        setStreaming(null);
       } else if (ev.type === "turn_error") {
         // One turn failed — debate continues, just log it silently
         setStreaming(null);
@@ -819,6 +832,29 @@ export default function DebatePage() {
             </div>
 
             {transcript.map((entry, i) => {
+              // World observer entries get a distinct look — slate/teal palette
+              if (entry.isObserver) return (
+                <div key={i} className="flex gap-3 py-2 animate-fade-up pl-2">
+                  <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 bg-slate-600">
+                    🌍
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-xs font-semibold text-slate-700">{entry.character}</span>
+                      {entry.observerEra && <span className="text-[10px] text-slate-400 italic">{entry.observerEra}</span>}
+                      <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-medium">WORLD OBSERVER</span>
+                    </div>
+                    <div className="text-sm leading-relaxed rounded-r-xl rounded-bl-xl px-3 py-2.5 text-slate-800 bg-slate-50 border-l-4 border-slate-400">
+                      <ReactMarkdown components={{
+                        p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
+                        strong: ({children}) => <strong style={{fontWeight:600}}>{children}</strong>,
+                        em: ({children}) => <em style={{fontStyle:"italic"}}>{children}</em>,
+                      }}>{entry.message}</ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              );
+
               const c = colorOf(entry.character);
               const em = EMOTION_STYLE[entry.emotion || "neutral"] || EMOTION_STYLE.neutral;
               return (

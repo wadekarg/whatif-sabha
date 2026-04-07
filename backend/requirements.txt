@@ -9,6 +9,7 @@ langchain-google-genai==4.2.1
 langchain-groq==1.1.2
 langchain-cerebras==0.6.0
 langgraph==1.1.6
+langchain-openai>=0.3.0
 
 # Vector DB
 chromadb==0.5.23
@@ -32,3 +33,16 @@ pydantic-settings==2.6.1
 aiofiles==24.1.0
 redis==5.2.1
 httpx==0.28.1
+
+# --- Character Soul Memory ---
+# Graphiti: temporal knowledge graph for persistent character memory across debates
+# Neo4j driver required (Neo4j server via docker-compose or standalone)
+graphiti-core>=0.3.0
+neo4j>=5.0.0
+
+# --- Narrative Causal Graph ---
+# LightRAG: extracts causal knowledge graphs from story text
+# Proven on literary texts (Dickens, etc.) — outperforms Microsoft GraphRAG on fiction
+# Install separately if you want LightRAG (large dependency):
+# pip install lightrag-hku
+# lightrag-hku  # optional — uncomment to enable
