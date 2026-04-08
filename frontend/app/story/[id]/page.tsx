@@ -208,50 +208,90 @@ export default function StoryPage() {
 
       {/* ── Left: story content ── */}
       <div className="flex-1 overflow-y-auto">
-        {/* Hero */}
+
+        {/* ── HERO ── */}
         <div className="bg-white border-b border-[#e8e0d5]">
-          <div className="max-w-3xl mx-auto px-10 py-10">
-            <div className="flex items-start justify-between gap-6">
-              <div className="space-y-3 flex-1">
-                <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-tight text-[#1c1410]">
+          <div className="px-8 lg:px-14 pt-7 pb-8">
+            {/* Back */}
+            <Link href="/" className="inline-flex items-center gap-1.5 text-xs text-[#a09282] hover:text-[#1c1410] transition-colors mb-5 font-medium">
+              ← Library
+            </Link>
+            <div className="flex items-start justify-between gap-8">
+              <div className="flex-1 min-w-0 space-y-3">
+                <h1 className="text-4xl lg:text-5xl font-bold tracking-tight leading-tight text-[#1c1410]">
                   {story.title}
                 </h1>
                 {story.author && (
-                  <p className="text-[#a09282] text-lg">
+                  <p className="text-[#a09282] text-base">
                     by <span className="text-[#6b5c4e] italic">{story.author}</span>
                   </p>
                 )}
-                <div className="flex gap-2 flex-wrap pt-1">
-                  {(story.themes || []).map((t: string) => (
-                    <span key={t} className="text-xs bg-[#fef3e2] border border-[#f0c060]/50 text-[#c07820] px-3 py-1 rounded-full font-medium">
-                      {t}
-                    </span>
-                  ))}
+                {(story.themes || []).length > 0 && (
+                  <div className="flex gap-2 flex-wrap pt-1">
+                    {(story.themes || []).map((t: string) => (
+                      <span key={t} className="text-xs bg-[#fef3e2] border border-[#f0c060]/50 text-[#c07820] px-3 py-1 rounded-full font-medium">{t}</span>
+                    ))}
+                  </div>
+                )}
+                {story.summary && (
+                  <p className="text-[#6b5c4e] leading-relaxed text-sm pt-1 max-w-2xl">{story.summary}</p>
+                )}
+              </div>
+              {/* Stats + nav */}
+              <div className="shrink-0 flex flex-col items-end gap-4">
+                {story.word_count && (
+                  <div className="text-right">
+                    <div className="text-3xl font-bold text-[#1c1410]">{Math.round(story.word_count / 1000)}k</div>
+                    <div className="text-xs text-[#a09282] uppercase tracking-widest mt-0.5">words</div>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Link href={`/story/${id}/characters`}
+                    className="text-xs px-3 py-1.5 rounded-full border border-[#e8e0d5] bg-white text-[#6b5c4e] hover:border-[#c8b89a] hover:bg-[#faf7f2] transition-colors font-medium">
+                    {storyCharacters.length > 0 ? `${storyCharacters.length} Characters` : "Characters"}
+                  </Link>
+                  <Link href={`/story/${id}/graph`}
+                    className="text-xs px-3 py-1.5 rounded-full border border-[#e8e0d5] bg-white text-[#6b5c4e] hover:border-[#c8b89a] hover:bg-[#faf7f2] transition-colors font-medium">
+                    Graph
+                  </Link>
                 </div>
               </div>
-              {story.word_count && (
-                <div className="text-right shrink-0 hidden sm:block">
-                  <div className="text-3xl font-bold text-[#1c1410]">{Math.round(story.word_count / 1000)}k</div>
-                  <div className="text-xs text-[#a09282] uppercase tracking-widest mt-0.5">words</div>
-                </div>
-              )}
             </div>
           </div>
-        </div>
 
-        <div className="max-w-3xl mx-auto px-10 py-8 space-y-8">
-          {/* Summary */}
-          {story.summary && (
-            <div className="bg-white rounded-2xl p-6 border border-[#e8e0d5] flex gap-4">
-              <div className="w-1 self-stretch bg-[#c07820] rounded-full shrink-0" />
-              <div>
-                <div className="text-xs text-[#a09282] uppercase tracking-widest mb-2 font-medium">Summary</div>
-                <p className="text-[#6b5c4e] leading-relaxed">{story.summary}</p>
+          {/* Character cast strip */}
+          {storyCharacters.length > 0 && (
+            <div className="px-8 lg:px-14 pb-5 border-t border-[#f0ece5]">
+              <div className="flex items-center gap-2 py-3 mb-1">
+                <span className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Cast</span>
+                <div className="flex-1 h-px bg-[#f0ece5]" />
+                <Link href={`/story/${id}/characters`} className="text-xs text-[#c07820] hover:underline font-medium">See all →</Link>
+              </div>
+              <div className="flex gap-5 overflow-x-auto pb-1">
+                {storyCharacters.slice(0, 14).map((char: any, i: number) => {
+                  const col = CHAR_COLORS[i % CHAR_COLORS.length];
+                  const roleColor: Record<string, string> = { protagonist: "#c07820", antagonist: "#ef4444", supporting: "#3b82f6" };
+                  return (
+                    <Link key={char.name} href={`/story/${id}/characters/${encodeURIComponent(char.name)}`}
+                      className="flex flex-col items-center gap-1.5 shrink-0 group">
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200 ring-2 ring-white"
+                        style={{ backgroundColor: col }}>
+                        {char.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="text-xs font-semibold text-[#6b5c4e] group-hover:text-[#1c1410] transition-colors text-center leading-none">{char.name.split(" ")[0]}</span>
+                      {char.role && (
+                        <span className="text-[10px] font-medium capitalize" style={{ color: roleColor[char.role] || "#a09282" }}>{char.role}</span>
+                      )}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           )}
+        </div>
 
-          {/* What If section */}
+        {/* ── WHAT IF — primary CTA ── */}
+        <div className="px-8 lg:px-14 py-6">
           <div className="bg-white rounded-2xl border-2 border-[#e8e0d5] focus-within:border-[#c07820] transition-colors overflow-hidden">
             <div className="px-6 pt-5 pb-2">
               <div className="flex items-center gap-2 mb-3">
@@ -267,25 +307,20 @@ export default function StoryPage() {
                 className="w-full bg-transparent resize-none text-[#1c1410] placeholder-[#c8b89a] focus:outline-none text-sm leading-relaxed"
               />
             </div>
-
             {suggestions.length > 0 && (
               <div className="px-6 pb-3 flex flex-wrap gap-2">
                 {suggestions.map((s: any) => (
-                  <button
-                    key={s.event_id}
-                    onClick={() => setWhatIf(s.description)}
+                  <button key={s.event_id} onClick={() => setWhatIf(s.description)}
                     className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                       whatIf === s.description
                         ? "bg-[#fef3e2] border-[#f0c060] text-[#c07820] font-medium"
                         : "bg-[#f7f3ed] border-[#e8e0d5] text-[#6b5c4e] hover:border-[#c07820]/40 hover:bg-[#fef3e2]/60"
-                    }`}
-                  >
+                    }`}>
                     → {s.description}
                   </button>
                 ))}
               </div>
             )}
-
             <div className="px-6 py-3 bg-[#faf7f2] border-t border-[#e8e0d5] flex items-center justify-between">
               <span className="text-xs text-[#a09282]">
                 {whatIf.trim() ? `${whatIf.length} chars` : "Pick a suggestion or write your own"}
@@ -293,9 +328,7 @@ export default function StoryPage() {
               <a
                 href={whatIf.trim() ? `/story/${id}/debate?q=${encodeURIComponent(whatIf.trim())}` : `/story/${id}/debate`}
                 className={`flex items-center gap-1.5 text-sm font-bold px-5 py-2 rounded-xl transition-all ${
-                  whatIf.trim()
-                    ? "bg-[#c07820] hover:bg-[#a86a18] text-white shadow-sm"
-                    : "bg-[#e8e0d5] text-[#a09282] cursor-default"
+                  whatIf.trim() ? "bg-[#c07820] hover:bg-[#a86a18] text-white shadow-sm" : "bg-[#e8e0d5] text-[#a09282] cursor-default"
                 }`}
                 onClick={(e) => { if (!whatIf.trim()) e.preventDefault(); }}
               >
@@ -303,156 +336,113 @@ export default function StoryPage() {
               </a>
             </div>
           </div>
+        </div>
 
-          {/* Action cards */}
-          <div className="grid grid-cols-3 gap-5">
-            <Link
-              href={`/story/${id}/characters`}
-              className="group bg-white hover:bg-[#faf7f2] border border-[#e8e0d5] hover:border-[#c8b89a] rounded-2xl p-7 text-center transition-all duration-200 space-y-3"
-            >
-              <div className="text-4xl group-hover:scale-110 transition-transform duration-200">👥</div>
-              <div className="font-semibold text-[#1c1410]">Characters</div>
-              <div className="text-[#a09282] text-sm">Profiles · Fair Witness</div>
-            </Link>
-
-            <Link
-              href={`/story/${id}/graph`}
-              className="group bg-white hover:bg-[#faf7f2] border border-[#e8e0d5] hover:border-[#c8b89a] rounded-2xl p-7 text-center transition-all duration-200 space-y-3"
-            >
-              <div className="text-4xl group-hover:scale-110 transition-transform duration-200">🕸️</div>
-              <div className="font-semibold text-[#1c1410]">Relationship Graph</div>
-              <div className="text-[#a09282] text-sm">Interactive force map</div>
-            </Link>
-
-            <Link
-              href={`/story/${id}/debate`}
-              className="group bg-white hover:bg-[#faf7f2] border border-[#e8e0d5] hover:border-[#c8b89a] rounded-2xl p-7 text-center transition-all duration-200 space-y-3"
-            >
-              <div className="text-4xl group-hover:scale-110 transition-transform duration-200">🕰️</div>
-              <div className="font-semibold text-[#1c1410]">Past Debates</div>
-              <div className="text-[#a09282] text-sm">View all alternate endings</div>
-            </Link>
-          </div>
-
-          {/* Past debates */}
-          {pastDebates.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Past Debates</div>
-                <div className="flex-1 h-px bg-[#e8e0d5]" />
-                <div className="text-xs text-[#a09282] bg-[#f0ebe4] px-2 py-0.5 rounded-full">{pastDebates.length}</div>
-              </div>
+        {/* ── PAST DEBATES ── */}
+        {pastDebates.length > 0 && (
+          <div className="px-8 lg:px-14 pb-6 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Past Debates</div>
+              <div className="flex-1 h-px bg-[#e8e0d5]" />
+              <span className="text-xs text-[#a09282] bg-[#f0ebe4] border border-[#e8e0d5] px-2 py-0.5 rounded-full">{pastDebates.length}</span>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {pastDebates.map((d: any, i: number) => (
-                <Link
-                  key={d.id}
-                  href={`/story/${id}/debate/${d.id}`}
-                  className="group block bg-white hover:bg-[#faf7f2] border border-[#e8e0d5] hover:border-[#c8b89a] rounded-xl p-4 transition-all duration-200"
-                >
+                <Link key={d.id} href={`/story/${id}/debate/${d.id}`}
+                  className="group bg-white border border-[#e8e0d5] hover:border-[#c8b89a] hover:shadow-sm rounded-xl p-4 transition-all duration-200">
                   <div className="flex items-start gap-3">
-                    <div className="text-[#c8b89a] text-sm font-mono mt-0.5 w-5 shrink-0">
-                      {String(i + 1).padStart(2, "0")}
-                    </div>
+                    <div className="text-[#c8b89a] text-sm font-mono mt-0.5 w-5 shrink-0">{String(i + 1).padStart(2, "0")}</div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[#6b5c4e] text-sm leading-relaxed group-hover:text-[#1c1410] transition-colors line-clamp-2">
-                        {d.divergence_description}
-                      </p>
+                      <p className="text-[#6b5c4e] text-sm leading-relaxed group-hover:text-[#1c1410] transition-colors line-clamp-2">{d.divergence_description}</p>
                       <div className="flex items-center gap-3 mt-2 text-xs text-[#a09282]">
                         <span>{d.round_count} rounds</span>
                         <span>·</span>
-                        <span className="truncate">
-                          {(d.participating_characters || []).slice(0, 4).join(", ")}
-                          {(d.participating_characters || []).length > 4 ? "…" : ""}
-                        </span>
+                        <span className="truncate">{(d.participating_characters || []).slice(0, 3).join(", ")}{(d.participating_characters || []).length > 3 ? "…" : ""}</span>
                       </div>
                     </div>
                     <span className={`text-xs px-2.5 py-0.5 rounded-full border shrink-0 font-medium ${
-                      d.status === "completed"
-                        ? "border-emerald-200 text-emerald-700 bg-emerald-50"
-                        : "border-[#e8e0d5] text-[#a09282] bg-[#f7f3ed]"
-                    }`}>
-                      {d.status === "completed" ? "✓ done" : d.status}
-                    </span>
+                      d.status === "completed" ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-[#e8e0d5] text-[#a09282] bg-[#f7f3ed]"
+                    }`}>{d.status === "completed" ? "✓ done" : d.status}</span>
                   </div>
                 </Link>
               ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ── Orchestrator view ── */}
-          {overview && (
-            <div className="space-y-8 pb-8">
+        {/* ── STORY INTELLIGENCE ── */}
+        {overview && (
+          <div className="px-8 lg:px-14 pb-10 space-y-8">
 
-              {/* Section divider */}
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 rounded-lg bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs text-[#c07820]">✦</div>
-                <div className="text-sm font-semibold text-[#1c1410]">Orchestrator's View</div>
-                <div className="flex-1 h-px bg-[#e8e0d5]" />
-              </div>
+            <div className="flex items-center gap-3">
+              <div className="w-6 h-6 rounded-lg bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs text-[#c07820]">✦</div>
+              <div className="text-sm font-semibold text-[#1c1410]">Story Intelligence</div>
+              <div className="flex-1 h-px bg-[#e8e0d5]" />
+            </div>
 
-              {/* Narrative arc — phases derived from the protagonist's arc */}
-              {(() => {
-                const protagonist = overview.character_arcs?.find((a: any) => a.role === "protagonist") || overview.character_arcs?.[0];
-                if (!protagonist?.phases?.length) return null;
-                return (
-                  <div className="bg-[#1c1410] rounded-2xl p-6 space-y-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[#c07820] text-xs font-semibold uppercase tracking-widest">Narrative Arc</span>
-                      <span className="text-white/20 text-xs">· {protagonist.phases.length} phases</span>
-                    </div>
-                    {/* Horizontal phase bar */}
-                    <div className="flex items-start gap-0 overflow-x-auto pb-1">
-                      {protagonist.phases.map((p: any, pi: number) => (
-                        <div key={pi} className="flex items-start shrink-0 flex-1 min-w-[80px]">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <div className={`w-3 h-3 rounded-full shrink-0 ${pi === 0 ? "bg-[#c07820]" : pi === protagonist.phases.length - 1 ? "bg-red-500" : "bg-white/30"}`} />
-                              {pi < protagonist.phases.length - 1 && (
-                                <div className="flex-1 h-px bg-white/10 mx-1" />
-                              )}
-                            </div>
-                            <div className="mt-2 pr-2">
-                              <div className="text-xs text-white/60 uppercase tracking-wider font-medium">
-                                {p.phase_id?.replace(/_/g, " ") || `Phase ${pi + 1}`}
-                              </div>
-                              {p.emotional_state && (
-                                <div className="text-xs text-white/80 mt-0.5 leading-snug">{p.emotional_state}</div>
-                              )}
-                              {p.motivations?.[0] && (
-                                <div className="text-xs text-white/50 mt-1 leading-snug italic">"{p.motivations[0]}"</div>
-                              )}
-                            </div>
+            {/* Narrative arc — light warm theme */}
+            {(() => {
+              const protagonist = overview.character_arcs?.find((a: any) => a.role === "protagonist") || overview.character_arcs?.[0];
+              if (!protagonist?.phases?.length) return null;
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[#a09282] uppercase tracking-widest font-semibold">Narrative Arc</span>
+                    <span className="text-[#c8b89a] text-xs">· {protagonist.phases.length} phases</span>
+                  </div>
+                  {/* Phase cards — horizontal scroll */}
+                  <div className="flex gap-3 overflow-x-auto pb-2">
+                    {protagonist.phases.map((p: any, pi: number) => {
+                      const isFirst = pi === 0;
+                      const isLast = pi === protagonist.phases.length - 1;
+                      return (
+                        <div key={pi} className="flex items-start shrink-0 gap-2" style={{ minWidth: 160, maxWidth: 200 }}>
+                          <div className="flex flex-col items-center pt-2 shrink-0">
+                            <div className={`w-3 h-3 rounded-full border-2 ${isFirst ? "bg-[#c07820] border-[#c07820]" : isLast ? "bg-red-400 border-red-300" : "bg-[#e8e0d5] border-[#c8b89a]"}`} />
+                            {pi < protagonist.phases.length - 1 && (
+                              <div className="w-px flex-1 bg-[#e8e0d5] mt-1" style={{ minHeight: 20 }} />
+                            )}
                           </div>
+                          <div className={`flex-1 rounded-xl border p-3 ${isFirst ? "bg-[#fef9f0] border-[#f0c060]/50" : isLast ? "bg-red-50/60 border-red-200/60" : "bg-white border-[#e8e0d5]"}`}>
+                            <div className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isFirst ? "text-[#c07820]" : isLast ? "text-red-500" : "text-[#a09282]"}`}>
+                              {p.phase_id?.replace(/_/g, " ") || `Phase ${pi + 1}`}
+                            </div>
+                            {p.emotional_state && <div className="text-xs text-[#6b5c4e] leading-snug">{p.emotional_state}</div>}
+                            {p.motivations?.[0] && <div className="text-xs text-[#a09282] mt-1 leading-snug italic">"{p.motivations[0]}"</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* All characters arc bars */}
+                  {overview.character_arcs?.length > 1 && (
+                    <div className="bg-white border border-[#e8e0d5] rounded-xl px-5 py-4 space-y-2.5">
+                      <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium mb-3">All characters</div>
+                      {overview.character_arcs.map((arc: any, ai: number) => (
+                        <div key={arc.name} className="flex items-center gap-3">
+                          <div className="w-28 shrink-0">
+                            <span className={`text-xs font-medium ${
+                              arc.role === "protagonist" ? "text-[#c07820]" :
+                              arc.role === "antagonist" ? "text-red-500" : "text-[#6b5c4e]"
+                            }`}>{arc.name}</span>
+                          </div>
+                          <div className="flex-1 flex items-center gap-0.5">
+                            {arc.phases.map((_: any, pi: number) => (
+                              <div key={pi} className={`h-2 flex-1 rounded-sm ${
+                                arc.role === "protagonist" ? "bg-[#c07820]/50" :
+                                arc.role === "antagonist" ? "bg-red-400/40" :
+                                `bg-[${CHAR_COLORS[ai % CHAR_COLORS.length]}]/30`
+                              }`} style={ arc.role !== "protagonist" && arc.role !== "antagonist" ? { backgroundColor: CHAR_COLORS[ai % CHAR_COLORS.length] + "44" } : {} } />
+                            ))}
+                          </div>
+                          <span className="text-xs text-[#a09282] w-14 text-right shrink-0">{arc.phases.length} phases</span>
                         </div>
                       ))}
                     </div>
-                    {/* All characters' arc overview */}
-                    {overview.character_arcs?.length > 1 && (
-                      <div className="border-t border-white/10 pt-4 space-y-2">
-                        <div className="text-xs text-white/50 uppercase tracking-widest font-medium mb-3">All Characters</div>
-                        {overview.character_arcs.map((arc: any) => (
-                          <div key={arc.name} className="flex items-center gap-3">
-                            <div className="w-24 shrink-0">
-                              <span className={`text-xs font-medium ${
-                                arc.role === "protagonist" ? "text-[#c07820]" :
-                                arc.role === "antagonist" ? "text-red-400" : "text-white/50"
-                              }`}>{arc.name}</span>
-                            </div>
-                            <div className="flex-1 flex items-center gap-1">
-                              {arc.phases.map((_: any, pi: number) => (
-                                <div key={pi} className={`h-1.5 flex-1 rounded-full ${
-                                  arc.role === "protagonist" ? "bg-[#c07820]/60" :
-                                  arc.role === "antagonist" ? "bg-red-500/50" : "bg-white/15"
-                                }`} />
-                              ))}
-                            </div>
-                            <span className="text-xs text-white/45 w-12 text-right">{arc.phases.length} phases</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+                  )}
+                </div>
+              );
+            })()}
 
               {/* Key power dynamics */}
               {overview.relationships?.length > 0 && (
@@ -527,22 +517,22 @@ export default function StoryPage() {
                             {grp.phase && (
                               <div className="flex gap-4 items-center mb-3 mt-4 first:mt-0">
                                 <div className="w-6 h-6 rounded-lg bg-[#c07820] flex items-center justify-center text-white text-xs font-bold shrink-0 z-10">{gi + 1}</div>
-                                <div className="flex-1 bg-[#1c1410] rounded-xl px-4 py-2.5">
+                                <div className="flex-1 bg-[#fef9f0] border border-[#f0c060]/40 rounded-xl px-4 py-2.5">
                                   <div className="flex items-center justify-between gap-2 flex-wrap">
                                     <span className="text-[#c07820] text-xs font-semibold uppercase tracking-wide">
                                       {grp.phase.name || grp.phase.phase_id?.replace(/_/g, " ")}
                                     </span>
                                     {grp.phase.chapter_range && (
-                                      <span className="text-white/30 text-xs">
+                                      <span className="text-[#a09282] text-xs">
                                         Ch. {grp.phase.chapter_range[0]}{grp.phase.chapter_range[1] !== grp.phase.chapter_range[0] ? `–${grp.phase.chapter_range[1]}` : ""}
                                       </span>
                                     )}
                                   </div>
                                   {grp.phase.description && (
-                                    <p className="text-white/55 text-xs mt-0.5 leading-relaxed">{grp.phase.description}</p>
+                                    <p className="text-[#6b5c4e] text-xs mt-0.5 leading-relaxed">{grp.phase.description}</p>
                                   )}
                                   {grp.phase.trigger_event && (
-                                    <p className="text-[#c07820]/60 text-xs mt-1 italic">Triggered by: {grp.phase.trigger_event}</p>
+                                    <p className="text-[#c07820]/70 text-xs mt-1 italic">Triggered by: {grp.phase.trigger_event}</p>
                                   )}
                                 </div>
                               </div>
@@ -672,7 +662,6 @@ export default function StoryPage() {
             </div>
           )}
 
-        </div>
       </div>
 
       {/* ── Right: tabbed panel ── */}
