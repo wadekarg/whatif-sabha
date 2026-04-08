@@ -84,6 +84,11 @@ export default function DebatePage() {
   const [showGraph, setShowGraph] = useState(true);
   const [activeTab, setActiveTab] = useState<"graph"|"heatmap"|"emotions">("graph");
   const [showStats, setShowStats] = useState(true);
+  const [heatmapLegendOpen, setHeatmapLegendOpen] = useState(false);
+  const [emotionLegendOpen, setEmotionLegendOpen] = useState(false);
+  const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(false);
+  const [graphLegendPos, setGraphLegendPos] = useState({ x: 12, y: -1 }); // -1 y = anchor to bottom
+  const graphLegendDragRef = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0 });
   const [splitPct, setSplitPct] = useState(42);
   const pendingExplorationRef = useRef<string | null>(null);
   const splitContainerRef = useRef<HTMLDivElement>(null);
@@ -570,10 +575,10 @@ export default function DebatePage() {
     const N = chars.length;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = "#09090b"; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#f7f3ed"; ctx.fillRect(0, 0, W, H);
     if (transcript.length === 0) {
       ctx.font = "13px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      ctx.fillStyle = "#c8b89a";
       ctx.fillText("Waiting for debate to begin…", W/2, H/2);
       return;
     }
@@ -586,48 +591,79 @@ export default function DebatePage() {
       if (i >= 0 && j >= 0 && i !== j) { counts[i][j]++; maxCount = Math.max(maxCount, counts[i][j]); }
     }
 
-    const pad = Math.min(W, H) * 0.18;
-    const cellSize = Math.min((W - pad) / N, (H - pad) / N, 64);
-    const gridLeft = pad, gridTop = pad;
+    // Compute a centered square grid with equal visual margins
+    const labelW = Math.min(W * 0.18, 72);   // left: row-label space
+    const labelH = Math.min(H * 0.18, 60);   // top: rotated col-label space
+    const padR = 16, padB = 16;
+    const availW = W - labelW - padR;
+    const availH = H - labelH - padB;
+    const cellSize = Math.min(availW / N, availH / N, 76);
+    const gridW = cellSize * N, gridH = cellSize * N;
+    const gridLeft = labelW + (availW - gridW) / 2;
+    const gridTop  = labelH + (availH - gridH) / 2;
+
+    const fontSize = Math.min(12, Math.max(9, cellSize * 0.36));
 
     for (let i = 0; i < N; i++) {
       for (let j = 0; j < N; j++) {
         const x = gridLeft + j * cellSize, y = gridTop + i * cellSize;
         const intensity = maxCount > 0 ? counts[i][j] / maxCount : 0;
-        ctx.fillStyle = i === j
-          ? "rgba(255,255,255,0.04)"
-          : `rgba(${Math.round(192*intensity+20*(1-intensity))},${Math.round(100*intensity+20*(1-intensity))},${Math.round(20*intensity)},${0.15 + intensity * 0.8})`;
-        ctx.fillRect(x, y, cellSize - 2, cellSize - 2);
-        if (counts[i][j] > 0) {
-          ctx.font = `bold ${Math.max(9, cellSize * 0.32)}px Inter, sans-serif`;
-          ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillStyle = `rgba(255,255,255,${0.45 + intensity * 0.55})`;
-          ctx.fillText(String(counts[i][j]), x + cellSize/2, y + cellSize/2);
+        if (i === j) {
+          ctx.fillStyle = "rgba(200,184,154,0.15)";
+          ctx.fillRect(x + 1, y + 1, cellSize - 3, cellSize - 3);
+          // Diagonal marker
+          ctx.strokeStyle = "rgba(200,184,154,0.3)"; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(x+4, y+4); ctx.lineTo(x+cellSize-5, y+cellSize-5); ctx.stroke();
+        } else {
+          ctx.fillStyle = `rgba(${Math.round(192*intensity+230*(1-intensity))},${Math.round(80*intensity+180*(1-intensity))},${Math.round(10*intensity+140*(1-intensity))},${0.12 + intensity * 0.75})`;
+          ctx.fillRect(x + 1, y + 1, cellSize - 3, cellSize - 3);
+          if (counts[i][j] > 0) {
+            ctx.font = `bold ${Math.max(9, cellSize * 0.32)}px Inter, sans-serif`;
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillStyle = intensity > 0.5 ? "#ffffff" : "#3d2f20";
+            ctx.fillText(String(counts[i][j]), x + cellSize/2, y + cellSize/2);
+          }
         }
       }
     }
 
-    // Row labels (speaker)
+    // Grid lines
+    ctx.strokeStyle = "rgba(200,184,154,0.5)"; ctx.lineWidth = 0.5;
+    for (let i = 0; i <= N; i++) {
+      ctx.beginPath(); ctx.moveTo(gridLeft + i * cellSize, gridTop); ctx.lineTo(gridLeft + i * cellSize, gridTop + gridH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gridLeft, gridTop + i * cellSize); ctx.lineTo(gridLeft + gridW, gridTop + i * cellSize); ctx.stroke();
+    }
+
+    // Row labels (speaker = who said it)
     for (let i = 0; i < N; i++) {
-      ctx.font = `600 ${Math.min(11, cellSize * 0.38)}px Inter, sans-serif`;
+      ctx.font = `600 ${fontSize}px Inter, sans-serif`;
       ctx.textAlign = "right"; ctx.textBaseline = "middle";
       ctx.fillStyle = (CHAR_COLORS[i % CHAR_COLORS.length]).hex;
-      ctx.fillText(chars[i].split(" ")[0], gridLeft - 6, gridTop + i * cellSize + cellSize/2);
+      ctx.fillText(chars[i].split(" ")[0], gridLeft - 8, gridTop + i * cellSize + cellSize/2);
     }
-    // Column labels (target), rotated
+    // Column labels (target = spoken to), rotated
     for (let j = 0; j < N; j++) {
       ctx.save();
-      ctx.translate(gridLeft + j * cellSize + cellSize/2, gridTop - 6);
+      ctx.translate(gridLeft + j * cellSize + cellSize/2, gridTop - 8);
       ctx.rotate(-Math.PI / 4);
-      ctx.font = `600 ${Math.min(11, cellSize * 0.38)}px Inter, sans-serif`;
+      ctx.font = `600 ${fontSize}px Inter, sans-serif`;
       ctx.textAlign = "right"; ctx.textBaseline = "middle";
       ctx.fillStyle = (CHAR_COLORS[j % CHAR_COLORS.length]).hex;
       ctx.fillText(chars[j].split(" ")[0], 0, 0);
       ctx.restore();
     }
-    ctx.font = "9px Inter, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
-    ctx.fillText("row = speaker   col = spoken to   cell = reply count", 4, H - 4);
+
+    // Axis header labels
+    ctx.font = `500 ${fontSize - 1}px Inter, sans-serif`;
+    ctx.fillStyle = "#a09282";
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.fillText("spoken to →", gridLeft + gridW / 2, gridTop - labelH * 0.05);
+    ctx.save();
+    ctx.translate(gridLeft - labelW * 0.55, gridTop + gridH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("speaker ↓", 0, 0);
+    ctx.restore();
   }, [transcript, activeCharacters, activeTab]);
 
   // ── Emotions arc: redraw whenever transcript or active tab changes ──
@@ -640,15 +676,15 @@ export default function DebatePage() {
     const chars = activeCharacters;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = "#09090b"; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#f7f3ed"; ctx.fillRect(0, 0, W, H);
     if (transcript.length === 0) {
       ctx.font = "13px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      ctx.fillStyle = "#c8b89a";
       ctx.fillText("Waiting for debate to begin…", W/2, H/2);
       return;
     }
 
-    const padL = 72, padR = 16, padT = 16, padB = 24;
+    const padL = 76, padR = 16, padT = 20, padB = 28;
     const rowH = (H - padT - padB) / chars.length;
     const totalTurns = transcript.length;
     const xOf = (idx: number) => padL + (totalTurns <= 1 ? 0.5 : idx / (totalTurns - 1)) * (W - padL - padR);
@@ -658,21 +694,27 @@ export default function DebatePage() {
       const color = CHAR_COLORS[ci % CHAR_COLORS.length].hex;
       const y = padT + ci * rowH + rowH / 2;
 
+      // Lane background (alternating subtle stripe)
+      if (ci % 2 === 0) {
+        ctx.fillStyle = "rgba(200,184,154,0.08)";
+        ctx.fillRect(padL, padT + ci * rowH, W - padL - padR, rowH);
+      }
+
       // Lane separator
-      ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(200,184,154,0.3)"; ctx.lineWidth = 0.5;
       ctx.beginPath(); ctx.moveTo(padL, padT + ci * rowH); ctx.lineTo(W - padR, padT + ci * rowH); ctx.stroke();
 
       // Character label
-      ctx.font = `600 10px Inter, sans-serif`;
+      ctx.font = `600 11px Inter, sans-serif`;
       ctx.textAlign = "right"; ctx.textBaseline = "middle";
       ctx.fillStyle = color;
-      ctx.fillText(charName.split(" ")[0], padL - 6, y);
+      ctx.fillText(charName.split(" ")[0], padL - 8, y);
 
       const turns = transcript.map((e, idx) => ({ ...e, idx })).filter(e => e.character === charName);
       if (turns.length === 0) continue;
 
       // Connecting line — solid, subtle
-      ctx.strokeStyle = color + "25"; ctx.lineWidth = 1.2;
+      ctx.strokeStyle = color + "40"; ctx.lineWidth = 1.5;
       ctx.setLineDash([]);
       ctx.beginPath();
       turns.forEach((t, ti) => { const x = xOf(t.idx); ti === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
@@ -682,43 +724,52 @@ export default function DebatePage() {
       for (const turn of turns) {
         const x = xOf(turn.idx);
         const em = EMOTION_STYLE[turn.emotion || "neutral"] || EMOTION_STYLE.neutral;
-        // Glow
-        const grd = ctx.createRadialGradient(x, y, 2, x, y, 11);
-        grd.addColorStop(0, em.dot + "70"); grd.addColorStop(1, "transparent");
-        ctx.beginPath(); ctx.arc(x, y, 11, 0, 2*Math.PI); ctx.fillStyle = grd; ctx.fill();
+        // Soft glow on light background
+        const grd = ctx.createRadialGradient(x, y, 1, x, y, 9);
+        grd.addColorStop(0, em.dot + "55"); grd.addColorStop(1, "transparent");
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, 2*Math.PI); ctx.fillStyle = grd; ctx.fill();
         // Dot (exploration turns get a diamond shape)
         if (turn.isExploration) {
           ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/4);
           ctx.fillStyle = em.dot;
           ctx.fillRect(-5, -5, 10, 10);
           ctx.restore();
-          // Star indicator
-          ctx.font = "8px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-          ctx.fillStyle = "#f0c060cc";
+          ctx.font = "9px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+          ctx.fillStyle = "#c07820cc";
           ctx.fillText("✦", x, y - 7);
         } else {
           ctx.beginPath(); ctx.arc(x, y, 5, 0, 2*Math.PI);
           ctx.fillStyle = em.dot; ctx.fill();
+          // White ring for visibility on light bg
+          ctx.beginPath(); ctx.arc(x, y, 5, 0, 2*Math.PI);
+          ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 1.5; ctx.stroke();
         }
         // Emotion label if space allows
         if (em.label && W / Math.max(totalTurns, 1) > 36) {
           ctx.font = "8px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-          ctx.fillStyle = em.dot + "aa";
+          ctx.fillStyle = em.dot + "bb";
           ctx.fillText(em.label, x, y + 8);
         }
       }
     }
 
-    // Turn axis
+    // Bottom lane border
+    ctx.strokeStyle = "rgba(200,184,154,0.3)"; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(padL, padT + chars.length * rowH); ctx.lineTo(W - padR, padT + chars.length * rowH); ctx.stroke();
+
+    // Turn axis tick marks + numbers
     ctx.font = "9px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillStyle = "#a09282";
     const step = Math.max(1, Math.floor(totalTurns / 8));
     for (let i = 0; i < totalTurns; i += step) {
-      ctx.fillText(String(i + 1), xOf(i), H - padB + 4);
+      const tx = xOf(i);
+      ctx.strokeStyle = "rgba(200,184,154,0.4)"; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(tx, padT); ctx.lineTo(tx, padT + chars.length * rowH); ctx.stroke();
+      ctx.fillText(String(i + 1), tx, padT + chars.length * rowH + 4);
     }
-    ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(255,255,255,0.15)";
-    ctx.fillText("◆ = hidden depth turn", padL, H - padB + 4);
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#c8b89a";
+    ctx.fillText("turn →", padL + (W - padL - padR) / 2, H - 2);
   }, [transcript, activeCharacters, activeTab]);
 
   const startDebate = async () => {
@@ -1742,22 +1793,132 @@ export default function DebatePage() {
                   </button>
                 ))}
               </div>
-              <div className="absolute bottom-3 left-3 bg-white/80 backdrop-blur-sm border border-[#d8cfc5] rounded-xl px-3 py-2.5 space-y-1.5 shadow-sm">
-                <div className="text-[#a09282] text-xs uppercase tracking-widest font-medium mb-1">Legend</div>
-                <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#8a7260]/50" /><span className="text-[#8a7260] text-xs">Replied</span></div>
-                <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#c07820]/70" /><span className="text-[#c07820]/80 text-xs">Asked</span></div>
-                <span className="text-[#a09282] text-xs">Node size = speech count</span>
+              {/* Graph legend — collapsible + draggable */}
+              <div
+                className="absolute select-none"
+                style={{
+                  left: graphLegendPos.x,
+                  bottom: graphLegendPos.y < 0 ? 12 : undefined,
+                  top: graphLegendPos.y >= 0 ? graphLegendPos.y : undefined,
+                  cursor: "grab",
+                  zIndex: 10,
+                }}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  const el = e.currentTarget.parentElement!;
+                  const rect = el.getBoundingClientRect();
+                  graphLegendDragRef.current = {
+                    active: true,
+                    sx: e.clientX, sy: e.clientY,
+                    ox: graphLegendPos.x,
+                    oy: graphLegendPos.y < 0 ? rect.height - (e.currentTarget.getBoundingClientRect().bottom - rect.top) - 12 : graphLegendPos.y,
+                  };
+                  const onMove = (me: MouseEvent) => {
+                    if (!graphLegendDragRef.current.active) return;
+                    const dx = me.clientX - graphLegendDragRef.current.sx;
+                    const dy = me.clientY - graphLegendDragRef.current.sy;
+                    setGraphLegendPos({
+                      x: Math.max(4, graphLegendDragRef.current.ox + dx),
+                      y: Math.max(4, graphLegendDragRef.current.oy + dy),
+                    });
+                  };
+                  const onUp = () => { graphLegendDragRef.current.active = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                  window.addEventListener("mousemove", onMove);
+                  window.addEventListener("mouseup", onUp);
+                }}
+              >
+                <div className="bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
+                  <button
+                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#f7f3ed] transition-colors"
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => setGraphLegendCollapsed(v => !v)}
+                  >
+                    <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">Legend</span>
+                    <span className="text-[#a09282] text-xs ml-3">{graphLegendCollapsed ? "▸" : "▾"}</span>
+                  </button>
+                  {!graphLegendCollapsed && (
+                    <div className="px-3 pb-2.5 space-y-1.5 border-t border-[#e8e0d5]">
+                      <div className="flex items-center gap-2 pt-1.5"><div className="w-8 h-px bg-[#8a7260]/50" /><span className="text-[#8a7260] text-xs">Replied</span></div>
+                      <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#c07820]/70" /><span className="text-[#c07820]/80 text-xs">Asked question</span></div>
+                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#8a7260]/40 border border-[#8a7260]/40" /><span className="text-[#a09282] text-xs">Node size = speeches</span></div>
+                      <div className="flex items-center gap-2"><span className="text-[#c07820] text-xs">✦</span><span className="text-[#a09282] text-xs">Hidden depth turn</span></div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Heatmap */}
             <div style={{ position:"absolute", inset:0, opacity: activeTab==="heatmap" ? 1 : 0, pointerEvents: activeTab==="heatmap" ? "auto" : "none", transition:"opacity 0.15s" }}>
               <canvas ref={heatmapCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
+              {/* Heatmap legend */}
+              <div className="absolute top-3 right-3">
+                <div className="bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors"
+                    onClick={() => setHeatmapLegendOpen(v => !v)}
+                  >
+                    <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">How to read</span>
+                    <span className="text-[#a09282] text-xs">{heatmapLegendOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {heatmapLegendOpen && (
+                    <div className="px-3 pb-3 space-y-2 border-t border-[#e8e0d5] max-w-[220px]">
+                      <p className="text-xs text-[#6b5c4e] pt-2 leading-relaxed">
+                        Each cell shows how many times the <span className="font-semibold text-[#3d2f20]">row character</span> directly addressed the <span className="font-semibold text-[#3d2f20]">column character</span>.
+                      </p>
+                      <div className="space-y-1.5 pt-0.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-sm shrink-0" style={{ background: "rgba(192,80,10,0.8)" }} />
+                          <span className="text-xs text-[#6b5c4e]">Many replies (high intensity)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-sm shrink-0" style={{ background: "rgba(230,180,140,0.2)" }} />
+                          <span className="text-xs text-[#6b5c4e]">Few replies (low intensity)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-sm shrink-0 border border-[#c8b89a]/40" style={{ background: "rgba(200,184,154,0.15)" }} />
+                          <span className="text-xs text-[#6b5c4e]">Diagonal — same character</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-[#a09282] border-t border-[#e8e0d5] pt-2">The number inside = exact reply count.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Emotions arc */}
             <div style={{ position:"absolute", inset:0, opacity: activeTab==="emotions" ? 1 : 0, pointerEvents: activeTab==="emotions" ? "auto" : "none", transition:"opacity 0.15s" }}>
               <canvas ref={emotionsCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
+              {/* Emotion legend */}
+              <div className="absolute top-3 right-3">
+                <div className="bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors"
+                    onClick={() => setEmotionLegendOpen(v => !v)}
+                  >
+                    <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">Emotions</span>
+                    <span className="text-[#a09282] text-xs">{emotionLegendOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {emotionLegendOpen && (
+                    <div className="px-3 pb-3 border-t border-[#e8e0d5] max-w-[200px]">
+                      <p className="text-xs text-[#6b5c4e] pt-2 pb-2 leading-relaxed">Each dot = one speech. Colour = detected emotion at that moment.</p>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        {Object.entries(EMOTION_STYLE).filter(([k]) => k !== "neutral").map(([, em]) => (
+                          <div key={em.label} className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
+                            <span className="text-xs text-[#6b5c4e]">{em.label}</span>
+                          </div>
+                        ))}
+                        <div className="flex items-center gap-1.5 col-span-2 pt-1 border-t border-[#e8e0d5]">
+                          <span className="text-[#c07820] text-xs">✦</span>
+                          <span className="text-xs text-[#6b5c4e]">hidden depth turn</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
