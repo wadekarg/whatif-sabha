@@ -94,6 +94,8 @@ export default function DebatePage() {
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const [chatMessages, setChatMessages] = useState<{role:"user"|"assistant";content:string}[]>([]);
   const [chatInput, setChatInput]       = useState("");
   const [chatLoading, setChatLoading]   = useState(false);
@@ -142,8 +144,10 @@ export default function DebatePage() {
   }, [id]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     transcriptRef.current = transcript;
+    if (!userScrolledUpRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [transcript, streaming]);
 
   // Resizable split drag
@@ -1289,7 +1293,17 @@ export default function DebatePage() {
         <div className="flex flex-col overflow-hidden" style={{ width: showGraph ? `${splitPct}%` : "100%" }}>
 
           {/* Scrollable transcript */}
-          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-1 min-h-0">
+          <div
+            ref={transcriptScrollRef}
+            className="flex-1 overflow-y-auto px-5 py-5 space-y-1 min-h-0"
+            onScroll={() => {
+              const el = transcriptScrollRef.current;
+              if (!el) return;
+              // Consider "at bottom" if within 80px of the bottom
+              const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+              userScrolledUpRef.current = !atBottom;
+            }}
+          >
 
             {/* Emotion legend */}
             <div className="mb-3">
