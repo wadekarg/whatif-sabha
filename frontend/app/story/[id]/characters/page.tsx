@@ -28,9 +28,9 @@ export default function CharactersPage() {
   const sorted = [...characters].sort((a, b) => (b.importance || 0) - (a.importance || 0));
 
   return (
-    <main className="flex-1 bg-[#f7f3ed]">
-      <div className="bg-white border-b border-[#e8e0d5]">
-        <div className="max-w-4xl mx-auto px-8 py-5 flex items-center gap-4">
+    <main className="flex flex-col overflow-hidden bg-[#f7f3ed]" style={{ height: "calc(100vh - 56px)" }}>
+      <div className="shrink-0 bg-white border-b border-[#e8e0d5]">
+        <div className="px-8 lg:px-12 py-4 flex items-center gap-4">
           <Link href={`/story/${id}`} className="text-[#a09282] hover:text-[#1c1410] text-sm transition-colors">
             ← Back
           </Link>
@@ -44,15 +44,15 @@ export default function CharactersPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-8 py-8">
+      <div className="flex-1 overflow-y-auto px-8 lg:px-12 py-8">
         {loading ? (
-          <div className="grid grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map(i => (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4, 6, 8].map(i => (
               <div key={i} className="bg-white border border-[#e8e0d5] rounded-2xl h-28 animate-pulse" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {sorted.map((c, i) => {
               const s = ROLE_STYLE[c.role] || ROLE_STYLE.neutral;
               const importance = Math.round((c.importance || 0.5) * 100);

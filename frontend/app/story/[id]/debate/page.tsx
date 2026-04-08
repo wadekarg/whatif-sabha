@@ -992,10 +992,10 @@ export default function DebatePage() {
   /* ── IDLE / SETUP SCREEN ── */
   if (status === "idle" || status === "starting") {
     return (
-      <main className="flex-1 flex flex-col bg-[#f7f3ed] overflow-y-auto">
+      <main className="flex flex-col overflow-hidden bg-[#f7f3ed]" style={{ height: "calc(100vh - 56px)" }}>
         {/* Top bar */}
-        <div className="bg-white border-b border-[#e8e0d5] shrink-0">
-          <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
+        <div className="shrink-0 bg-white border-b border-[#e8e0d5]">
+          <div className="px-8 lg:px-12 py-3 flex items-center justify-between">
             <Link href={`/story/${id}`} className="text-[#a09282] hover:text-[#1c1410] text-sm transition-colors flex items-center gap-1.5">
               ← {storyTitle || "Back"}
             </Link>
@@ -1003,7 +1003,8 @@ export default function DebatePage() {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-6 py-10 gap-8">
+        <div className="flex-1 overflow-y-auto">
+        <div className="flex flex-col px-8 lg:px-12 py-10 gap-8">
 
           {/* Page heading */}
           <div className="text-center space-y-2">
@@ -1226,6 +1227,7 @@ export default function DebatePage() {
             </div>
           </div>
         </div>
+        </div>{/* end flex-1 overflow-y-auto */}
       </main>
     );
   }

@@ -94,12 +94,14 @@ export default function CharacterDetailPage() {
     return next;
   });
 
-  return (
-    <main className="flex-1 bg-[#f7f3ed] overflow-y-auto">
+  const lastPhase = sortedPhases[sortedPhases.length - 1];
 
-      {/* ── Hero ── */}
-      <div className="bg-white border-b border-[#e8e0d5] sticky top-14 z-30">
-        <div className="max-w-4xl mx-auto px-8 py-5 flex items-center gap-4">
+  return (
+    <main className="flex flex-col overflow-hidden bg-[#f7f3ed]" style={{ height: "calc(100vh - 56px)" }}>
+
+      {/* ── Header (full-width, not sticky — main is fixed height) ── */}
+      <div className="shrink-0 bg-white border-b border-[#e8e0d5]">
+        <div className="px-8 lg:px-12 py-4 flex items-center gap-4">
           <Link href={`/story/${id}/characters`} className="text-[#a09282] hover:text-[#1c1410] text-sm transition-colors shrink-0">
             ← Characters
           </Link>
@@ -115,12 +117,23 @@ export default function CharacterDetailPage() {
               </span>
               {fw && <span className="text-xs bg-[#fef3e2] text-[#c07820] border border-[#f0c060] px-2 py-0.5 rounded-full font-medium">✦ Fair Witness</span>}
             </div>
-            <p className="text-[#6b5c4e] text-xs leading-relaxed mt-0.5 truncate max-w-xl">{character.description}</p>
+            <p className="text-[#6b5c4e] text-xs leading-relaxed mt-0.5 truncate max-w-2xl">{character.description}</p>
           </div>
+          <Link
+            href={`/story/${id}/debate`}
+            className="shrink-0 flex items-center gap-2 bg-[#c07820] hover:bg-[#a86a18] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-sm"
+          >
+            ⚡ Debate
+          </Link>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-8 py-8 space-y-8">
+      {/* ── Split body ── */}
+      <div className="flex-1 flex overflow-hidden">
+
+      {/* LEFT: main content */}
+      <div className="flex-1 overflow-y-auto">
+      <div className="px-8 lg:px-12 py-8 space-y-8">
 
         {/* ── Story Timeline Bar ── */}
         {tlPhases.length > 0 && (
@@ -502,7 +515,132 @@ export default function CharacterDetailPage() {
           </div>
         )}
 
-      </div>
+      </div>{/* end inner content div */}
+      </div>{/* end left panel */}
+
+      {/* RIGHT: quick-summary sidebar */}
+      <div className="w-[340px] shrink-0 border-l border-[#e8e0d5] bg-white overflow-y-auto flex flex-col">
+
+        {/* Current state */}
+        {lastPhase && (
+          <div className="px-5 py-5 border-b border-[#e8e0d5] space-y-4">
+            <div className="text-xs font-semibold text-[#a09282] uppercase tracking-widest">Current state</div>
+
+            {lastPhase.emotional_state && (
+              <div className="flex items-start gap-2">
+                <span className="text-[#c07820] text-xs mt-0.5 shrink-0">◉</span>
+                <p className="text-sm text-[#6b5c4e] italic leading-snug">{lastPhase.emotional_state}</p>
+              </div>
+            )}
+
+            {lastPhase.personality_traits?.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Traits</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {lastPhase.personality_traits.slice(0, 8).map((t: string) => (
+                    <span key={t} className="text-xs bg-[#f7f3ed] text-[#6b5c4e] px-2.5 py-1 rounded-full border border-[#e8e0d5]">{t}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {lastPhase.motivations?.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Drives</div>
+                <ul className="space-y-1">
+                  {lastPhase.motivations.slice(0, 4).map((m: any, i: number) => (
+                    <li key={i} className="text-xs text-[#6b5c4e] flex gap-2 items-start">
+                      <span style={{ color }} className="shrink-0 mt-0.5">›</span>
+                      {typeof m === "string" ? m : JSON.stringify(m)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {lastPhase.fears?.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Fears</div>
+                <ul className="space-y-1">
+                  {lastPhase.fears.slice(0, 3).map((f: any, i: number) => (
+                    <li key={i} className="text-xs text-[#6b5c4e] flex gap-2 items-start">
+                      <span className="text-red-400 shrink-0 mt-0.5">◦</span>
+                      {typeof f === "string" ? f : JSON.stringify(f)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Relationships */}
+        {lastPhase?.relationships && Object.keys(lastPhase.relationships).length > 0 && (
+          <div className="px-5 py-5 border-b border-[#e8e0d5] space-y-3">
+            <div className="text-xs font-semibold text-[#a09282] uppercase tracking-widest">Relationships</div>
+            <div className="space-y-2">
+              {Object.entries(lastPhase.relationships).map(([rname, rel]: [string, any]) => {
+                const trust = Math.round((rel.trust ?? 0.5) * 100);
+                return (
+                  <div key={rname} className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-[#1c1410] w-24 truncate shrink-0">{rname}</span>
+                    <div className="flex-1 h-1.5 bg-[#e8e0d5] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${trust}%`, backgroundColor: trust > 60 ? "#10b981" : trust > 30 ? "#f59e0b" : "#ef4444" }} />
+                    </div>
+                    <span className="text-xs text-[#a09282] w-8 text-right shrink-0">{trust}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Hidden dimensions count */}
+        {character.hidden_dimensions?.length > 0 && (
+          <div className="px-5 py-4 border-b border-[#e8e0d5]">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[#c07820] text-xs font-bold">✦</span>
+              <div className="text-xs font-semibold text-[#a09282] uppercase tracking-widest">Hidden depths</div>
+            </div>
+            <p className="text-sm text-[#6b5c4e] leading-relaxed">
+              {character.hidden_dimensions[0]}
+            </p>
+            {character.hidden_dimensions.length > 1 && (
+              <p className="text-xs text-[#a09282] mt-1">+{character.hidden_dimensions.length - 1} more — scroll left to read all</p>
+            )}
+          </div>
+        )}
+
+        {/* Fair Witness teaser */}
+        {fw?.consensus_view && (
+          <div className="px-5 py-4 border-b border-[#e8e0d5]">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-5 h-5 rounded bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-[#c07820] text-xs">✦</div>
+              <div className="text-xs font-semibold text-[#c07820] uppercase tracking-widest">Fair Witness</div>
+            </div>
+            <p className="text-sm text-[#6b5c4e] leading-relaxed italic">"{fw.consensus_view}"</p>
+          </div>
+        )}
+
+        {/* Spacer + CTA at bottom */}
+        <div className="flex-1" />
+        <div className="px-5 py-5 border-t border-[#e8e0d5] space-y-2">
+          <Link
+            href={`/story/${id}/debate`}
+            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-[#c07820] hover:bg-[#a86a18] text-white font-semibold text-sm transition-colors shadow-sm"
+          >
+            ⚡ Debate this character
+          </Link>
+          <Link
+            href={`/story/${id}/characters`}
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-[#e8e0d5] text-[#6b5c4e] hover:bg-[#f7f3ed] text-sm transition-colors"
+          >
+            ← All characters
+          </Link>
+        </div>
+      </div>{/* end right sidebar */}
+
+      </div>{/* end split body */}
     </main>
   );
 }
