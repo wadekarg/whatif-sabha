@@ -1198,7 +1198,9 @@ export default function DebatePage() {
           <div className="flex items-center gap-3 shrink-0">
             {/* Debate stats — only show once debate has started */}
             {transcript.length > 0 && (() => {
-              const currentRound = transcript[transcript.length - 1]?.round ?? 0;
+              const N = Math.max(activeCharacters.length, 1);
+              const lastTurn = transcript[transcript.length - 1]?.round ?? 0;
+              const currentRound = Math.floor(lastTurn / N) + 1;
               const topSpeaker = [...graphStats].sort((a, b) => b.speeches - a.speeches)[0];
               return (
                 <div className="flex items-center gap-2 text-xs text-[#a09282]">
@@ -1206,7 +1208,7 @@ export default function DebatePage() {
                     <span className="font-semibold text-[#6b5c4e]">{transcript.length}</span> turns
                   </span>
                   <span className="text-[#e8e0d5]">·</span>
-                  <span title="Current round" className="flex items-center gap-0.5">
+                  <span title={`Round ${currentRound} — each round everyone speaks once`} className="flex items-center gap-0.5">
                     round <span className="font-semibold text-[#6b5c4e]">{currentRound}</span>
                   </span>
                   {topSpeaker && (
@@ -1314,8 +1316,10 @@ export default function DebatePage() {
             </div>
 
             {transcript.map((entry, i) => {
-              const prevRound = i > 0 ? transcript[i - 1].round : null;
-              const showRoundSep = entry.round !== prevRound && !entry.isObserver;
+              const N = Math.max(activeCharacters.length, 1);
+              const entryRound = Math.floor(entry.round / N) + 1;
+              const prevEntryRound = i > 0 ? Math.floor(transcript[i - 1].round / N) + 1 : null;
+              const showRoundSep = entryRound !== prevEntryRound && !entry.isObserver;
               const isTwoChar = activeCharacters.length === 2;
               const charIdx = activeCharacters.indexOf(entry.character);
               const isRight = isTwoChar && charIdx === 1;
@@ -1373,7 +1377,7 @@ export default function DebatePage() {
                   {showRoundSep && (
                     <div className="flex items-center gap-3 my-4 px-1">
                       <div className="flex-1 h-px bg-[#e8e0d5]" />
-                      <span className="text-xs uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entry.round}</span>
+                      <span className="text-xs uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entryRound}</span>
                       <div className="flex-1 h-px bg-[#e8e0d5]" />
                     </div>
                   )}

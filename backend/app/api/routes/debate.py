@@ -336,6 +336,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             yield sse("character_end", {
                 "character": next_speaker_name,
                 "message": full_response,
+                "round": round_number,
                 "judge_score": judge_result.get("score", 7),
                 "target_character": target_char,
                 "emotion": judge_result.get("dominant_emotion", "neutral"),
