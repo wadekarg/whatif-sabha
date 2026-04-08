@@ -3,46 +3,60 @@ from app.config import get_agent_llm
 from app.core.agents.base_agent import build_character_system_prompt
 
 
-def _build_turn_prompt(character_name: str, debate_history: list, correction_hint: str = None) -> str:
+def _build_turn_prompt(
+    character_name: str,
+    debate_history: list,
+    correction_hint: str = None,
+) -> tuple[str, bool]:
     """
-    Build a context-aware turn prompt based on what just happened in the debate.
-    The character should know WHY they're speaking now — not just that it's "their turn".
+    Build a context-aware turn prompt.
+    Returns (prompt_text, is_direct_response).
+    is_direct_response=True means the character was directly addressed — use higher token limit.
     """
+    is_direct = False
+
     if not debate_history:
-        prompt = "The debate is opening. Speak your first words on this scenario — set your position."
+        prompt = (
+            "The debate is opening. Speak your first words on this scenario — "
+            "set your position clearly and forcefully."
+        )
     else:
         last = debate_history[-1]
         last_speaker = last["character"]
         last_msg = last["message"]
         target = last.get("target_character")
 
-        # Truncate last message for context — first 200 chars is enough
-        snippet = last_msg[:200].rstrip() + ("…" if len(last_msg) > 200 else "")
+        snippet = last_msg[:250].rstrip() + ("…" if len(last_msg) > 250 else "")
 
         if target == character_name:
-            # Directly addressed — must respond
+            is_direct = True
             prompt = (
                 f'{last_speaker} just spoke directly to you:\n"{snippet}"\n\n'
-                f'Respond to {last_speaker} — directly, personally. '
-                f'Keep it tight: 1–3 sentences unless this is a breaking-point moment.'
+                f'You MUST respond to {last_speaker} — directly and personally. '
+                f'Name the specific claim they made. Either counter it with your own logic, '
+                f'concede a point and reframe it, or attack the premise entirely. '
+                f'Do not speak in vague generalities. Speak to THIS argument. '
+                f'2–4 sentences unless this is a pivotal moment that demands more.'
             )
         elif "?" in last_msg and character_name.lower() in last_msg.lower():
-            # Named in a question
+            is_direct = True
             prompt = (
                 f'{last_speaker} just called your name:\n"{snippet}"\n\n'
-                f'Answer them. Be direct. 1–3 sentences.'
+                f'They asked you something specific. Answer it directly — '
+                f'engage with their actual question, not around it. '
+                f'2–3 sentences.'
             )
         else:
-            # General — react or push the debate
             prompt = (
                 f'{last_speaker} just said:\n"{snippet}"\n\n'
-                f'React or push back — sharply. 1–2 sentences unless you have something major to reveal.'
+                f'React. Push back or build on it — stay sharp. '
+                f'1–2 sentences unless you have something major to reveal.'
             )
 
     if correction_hint:
-        prompt += f"\n\nIMPORTANT: Your last response was flagged as out of character. Correction needed: {correction_hint}"
+        prompt += f"\n\nIMPORTANT: Your last response was flagged. Correction needed: {correction_hint}"
 
-    return prompt
+    return prompt, is_direct
 
 
 def _inject_memories(messages: list, memories: list[str]) -> None:
@@ -81,7 +95,8 @@ async def character_respond(
         else:
             messages.append(HumanMessage(content=f"{speaker}: {text}"))
 
-    messages.append(HumanMessage(content=_build_turn_prompt(character["name"], debate_history)))
+    turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history)
+    messages.append(HumanMessage(content=turn_prompt))
 
     if exploration_hint:
         messages.append(HumanMessage(content=(
@@ -90,7 +105,7 @@ async def character_respond(
             f"{exploration_hint}"
         )))
 
-    llm = get_agent_llm()
+    llm = get_agent_llm(max_tokens=300 if is_direct else 180)
     response = await llm.ainvoke(messages)
     return response.content.strip()
 
@@ -104,6 +119,7 @@ async def character_respond_stream(
     correction_hint: str = None,
     exploration_hint: str = None,
     memory_context: list[str] = None,
+    observer_challenge: dict | None = None,
 ):
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
@@ -120,7 +136,17 @@ async def character_respond_stream(
         else:
             messages.append(HumanMessage(content=f"{speaker}: {text}"))
 
-    messages.append(HumanMessage(content=_build_turn_prompt(character["name"], debate_history, correction_hint)))
+    turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history, correction_hint)
+    messages.append(HumanMessage(content=turn_prompt))
+
+    if observer_challenge:
+        messages.append(HumanMessage(content=(
+            f"[DIRECT CHALLENGE FROM OUTSIDE THE STORY]\n"
+            f"{observer_challenge['observer_name']} — a historical observer — has just confronted you:\n"
+            f"\"{observer_challenge['question']}\"\n\n"
+            f"You MUST respond to this challenge in your reply. Address it head-on — with your own logic, "
+            f"your own values, your own blindspot if necessary. Do not ignore it."
+        )))
 
     if exploration_hint:
         messages.append(HumanMessage(content=(
@@ -129,10 +155,34 @@ async def character_respond_stream(
             f"{exploration_hint}"
         )))
 
-    llm = get_agent_llm()
-    async for chunk in llm.astream(messages):
-        if chunk.content:
-            yield chunk.content
+    # Try Cerebras first (fastest), fall back to NVIDIA/Groq on rate limit
+    from app.config import _make_nvidia_llm, _make_groq_llm, _is_rate_limit
+    from app.config import get_settings as _get_settings
+    _s = _get_settings()
+
+    token_limit = 300 if is_direct else 180
+    llm_candidates = [get_agent_llm(max_tokens=token_limit)]
+    nvidia = _make_nvidia_llm("meta/llama-3.3-70b-instruct", temperature=0.85)
+    if nvidia:
+        llm_candidates.append(nvidia)
+    groq = _make_groq_llm(_s.NARRATOR_MODEL, temperature=0.85)
+    if groq:
+        llm_candidates.append(groq)
+
+    last_exc = None
+    for llm in llm_candidates:
+        try:
+            async for chunk in llm.astream(messages):
+                if chunk.content:
+                    yield chunk.content
+            return
+        except Exception as e:
+            if _is_rate_limit(e):
+                last_exc = e
+                continue
+            raise
+    if last_exc:
+        raise last_exc
 
 
 async def character_continue_stream(

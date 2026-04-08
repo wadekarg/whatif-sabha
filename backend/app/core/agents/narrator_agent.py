@@ -30,12 +30,17 @@ THE ALTERNATE SCENARIO BEING EXPLORED:
 THE CHARACTERS DEBATED AND REACHED THESE CONCLUSIONS:
 {transcript_text}
 
-Now write the alternate ending as a proper story passage (400-600 words).
-- Write in the same tone and style as the original story
-- Show how each major character's arc changes based on the debate
-- Be specific — reference actual events and character decisions from the debate
-- End with a sense of closure, even if bittersweet
-- Write as narrative prose, not as dialogue
+Now write the alternate ending as a rich, detailed story passage (900-1200 words).
+
+REQUIREMENTS:
+- Write in the same tone and style as the original story — match its voice exactly
+- Begin from the moment of divergence and trace consequences forward in time
+- Show what each major character specifically argued for and how that shaped the outcome
+- Include at least 3 concrete events or turning points that follow from this alternate scenario
+- Show how relationships between characters change — who gains, who loses, who is transformed
+- Let the world feel different: what is life like now, for those who remain?
+- End with a closing image or moment that carries the weight of what was changed
+- Write as narrative prose with scenes, not as a list or dialogue transcript
 
 THE ALTERNATE ENDING:"""
 
@@ -66,8 +71,17 @@ THE ALTERNATE SCENARIO BEING EXPLORED:
 THE CHARACTERS DEBATED AND REACHED THESE CONCLUSIONS:
 {transcript_text}
 
-Write the alternate ending as a proper story passage (400-600 words).
-Write in narrative prose. Be specific. Reference the debate conclusions.
+Write the alternate ending as a rich, detailed story passage (900-1200 words).
+
+REQUIREMENTS:
+- Write in the same tone and style as the original story — match its voice exactly
+- Begin from the moment of divergence and trace consequences forward in time
+- Show what each major character specifically argued for and how that shaped the outcome
+- Include at least 3 concrete events or turning points that follow from this alternate scenario
+- Show how relationships between characters change — who gains, who loses, who is transformed
+- Let the world feel different: what is life like now, for those who remain?
+- End with a closing image or moment that carries the weight of what was changed
+- Write as narrative prose with scenes, not as a list or dialogue transcript
 
 THE ALTERNATE ENDING:"""
 

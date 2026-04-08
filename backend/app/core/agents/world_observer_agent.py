@@ -67,8 +67,38 @@ You are NOT a character in the story. You are an OUTSIDER who sees patterns the
 characters cannot see because they are living inside them. You know how this kind
 of story ends in history. You may be right or wrong — but you speak with conviction.
 
-Keep your contribution to 2-4 sentences. Be specific. Cite your historical context.
-Challenge or affirm what's been said — but add something the characters literally cannot say."""
+IMPORTANT: End your response by directing a sharp, specific question AT ONE of the
+debating characters by name. Format the question on its own line as:
+→ [CharacterName]: Your question here?
+
+This forces them to respond directly to your historical challenge."""
+
+
+def _extract_question_target(observer_text: str, valid_characters: list[str]) -> tuple[str | None, str | None]:
+    """
+    Extract the character being questioned and the question text from an observer response.
+    Looks for the '→ [Name]:' pattern at the end of observer output.
+    Returns (character_name, question_text) or (None, None) if not found.
+    """
+    import re
+    # Match "→ CharacterName: question text?" at end of response
+    pattern = r"→\s*\[?([A-Za-z][A-Za-z\s\-']+?)\]?:\s*(.+?)[\.\?!]*$"
+    match = re.search(pattern, observer_text.strip(), re.MULTILINE | re.DOTALL)
+    if not match:
+        # Fallback: look for "→ Name:" anywhere
+        match = re.search(r"→\s*([A-Za-z][A-Za-z\s\-']{1,30}):\s*(.+)", observer_text)
+    if not match:
+        return None, None
+
+    name_candidate = match.group(1).strip()
+    question = match.group(2).strip()
+
+    # Fuzzy match against valid characters
+    for char in valid_characters:
+        if char.lower() in name_candidate.lower() or name_candidate.lower() in char.lower():
+            return char, question
+
+    return None, None
 
 
 async def observer_respond_stream(
@@ -76,9 +106,11 @@ async def observer_respond_stream(
     story_title: str,
     divergence: str,
     debate_history: list,
+    characters: list[str] | None = None,
 ):
     """
     Stream a world observer's reaction to the current state of the debate.
+    The observer ends with a directed question to one of the characters.
     Observers react to the last few turns, not the full history.
     """
     from app.config import get_narrator_fallbacks
@@ -88,15 +120,18 @@ async def observer_respond_stream(
 
     # Observers only see the last 6 turns — they react to the current moment
     recent = debate_history[-6:] if len(debate_history) > 6 else debate_history
+    char_list = characters or list({e["character"] for e in debate_history if not e.get("isObserver")})
+
     for entry in recent:
         speaker = entry["character"]
         text = entry["message"]
         messages.append(HumanMessage(content=f"{speaker}: {text}"))
 
     messages.append(HumanMessage(content=(
-        "You have heard these arguments. React. What does your historical knowledge "
-        "tell you about what's really at stake here? What are these characters missing? "
-        "2-4 sentences. Be direct."
+        f"You have heard these arguments. React with your historical perspective. "
+        f"Then END by directing a sharp question at ONE of these characters: {', '.join(char_list)}. "
+        f"Format the final line as: → [CharacterName]: Your question?\n"
+        f"2-4 sentences of commentary, then the directed question. Be specific."
     )))
 
     # Use narrator LLM (Groq/NVIDIA) — fast and varied

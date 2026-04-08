@@ -356,8 +356,8 @@ export default function GraphPage() {
               window.addEventListener("mouseup", onUp);
             }}
           >
-            <span className="text-white/40 uppercase tracking-widest font-medium text-[10px]">Legend</span>
-            <span className="text-white/25 text-[10px] ml-3">{opensUp ? (legendOpen ? "▼" : "▲") : (legendOpen ? "▲" : "▼")}</span>
+            <span className="text-white/40 uppercase tracking-widest font-medium text-xs">Legend</span>
+            <span className="text-white/55 text-xs ml-3">{opensUp ? (legendOpen ? "▼" : "▲") : (legendOpen ? "▲" : "▼")}</span>
           </div>
 
           {/* Body — below header in top half, above header in bottom half */}
@@ -367,7 +367,7 @@ export default function GraphPage() {
               style={opensUp ? { position: "absolute", bottom: "100%", width: "100%", marginBottom: 4 } : { marginTop: 4 }}
             >
               <div>
-                <div className="text-white/30 uppercase tracking-widest mb-2 font-medium text-[10px]">Roles</div>
+                <div className="text-white/55 uppercase tracking-widest mb-2 font-medium text-xs">Roles</div>
                 {Object.entries(ROLE_COLORS).map(([role, color]) => (
                   <div key={role} className="flex items-center gap-2 mt-1.5">
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
@@ -376,7 +376,7 @@ export default function GraphPage() {
                 ))}
               </div>
               <div className="border-t border-white/10 pt-3">
-                <div className="text-white/30 uppercase tracking-widest mb-2 font-medium text-[10px]">Relationships</div>
+                <div className="text-white/55 uppercase tracking-widest mb-2 font-medium text-xs">Relationships</div>
                 {Object.entries(EDGE_COLORS).map(([type, color]) => (
                   <div key={type} className="flex items-center gap-2 mt-1.5">
                     <div className="w-5 h-0.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
@@ -396,10 +396,10 @@ export default function GraphPage() {
             style={{ left: hoveredEdge.sx + 12, top: hoveredEdge.sy - 10 }}
           >
             <span className="text-white/90 font-medium">{hoveredEdge.edge.source}</span>
-            <span className="text-white/30 mx-2">—</span>
+            <span className="text-white/55 mx-2">—</span>
             <span className="text-white/90 font-medium">{hoveredEdge.edge.target}</span>
             <span
-              className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold capitalize"
+              className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold capitalize"
               style={{ color: hoveredEdge.edge.color, backgroundColor: hoveredEdge.edge.color + "22" }}
             >
               {hoveredEdge.edge.type}
@@ -420,7 +420,7 @@ export default function GraphPage() {
                     {selected.role}
                   </span>
                 </div>
-                <button onClick={() => setSelected(null)} className="text-white/30 hover:text-white/70 w-7 h-7 flex items-center justify-center text-xl leading-none shrink-0 mt-0.5">×</button>
+                <button onClick={() => setSelected(null)} className="text-white/55 hover:text-white/70 w-7 h-7 flex items-center justify-center text-xl leading-none shrink-0 mt-0.5">×</button>
               </div>
               {selected.description && (
                 <p className="text-white/55 text-sm leading-relaxed mt-3">{selected.description}</p>
@@ -430,7 +430,7 @@ export default function GraphPage() {
             {/* Scrollable body */}
             <div className="overflow-y-auto flex-1 min-h-0 p-5 space-y-6">
               {!selectedData && (
-                <p className="text-white/30 text-sm animate-breathe text-center py-4">Loading...</p>
+                <p className="text-white/55 text-sm animate-breathe text-center py-4">Loading...</p>
               )}
 
               {/* Connections from graph edges */}
@@ -439,7 +439,7 @@ export default function GraphPage() {
                 if (!conns.length) return null;
                 return (
                   <div>
-                    <div className="text-white/30 text-xs uppercase tracking-widest mb-2 font-medium">Connections</div>
+                    <div className="text-white/55 text-xs uppercase tracking-widest mb-2 font-medium">Connections</div>
                     <div className="space-y-2">
                       {conns.map((e, i) => {
                         const other = e.source === selected.name ? e.target : e.source;
@@ -468,12 +468,12 @@ export default function GraphPage() {
                         <span className="text-[#c07820]">✦</span>
                         <span className="text-[#c07820] text-xs font-semibold uppercase tracking-widest">Fair Witness</span>
                       </div>
-                      <span className={`text-white/30 text-xs transition-transform duration-200 ${showFairWitness ? "rotate-180" : ""}`}>▼</span>
+                      <span className={`text-white/55 text-xs transition-transform duration-200 ${showFairWitness ? "rotate-180" : ""}`}>▼</span>
                     </button>
                     {showFairWitness && <div className="p-4 space-y-3 border-t border-[#c07820]/20 animate-fade-up">
                       {fw.fair_role && (
                         <div className="text-sm">
-                          <span className="text-white/30">True role · </span>
+                          <span className="text-white/55">True role · </span>
                           <span className="text-[#c07820] font-medium">{fw.fair_role}</span>
                         </div>
                       )}
@@ -482,7 +482,7 @@ export default function GraphPage() {
                       )}
                       {fw.hidden_motivations && (
                         <div className="text-sm">
-                          <span className="text-white/30">Hidden · </span>
+                          <span className="text-white/55">Hidden · </span>
                           <span className="text-white/55">{fw.hidden_motivations}</span>
                         </div>
                       )}
@@ -501,7 +501,7 @@ export default function GraphPage() {
                       )}
                       {fw.disputed_aspects?.length > 0 && (
                         <div className="space-y-1.5">
-                          <div className="text-white/25 text-xs uppercase tracking-wider">Disputed</div>
+                          <div className="text-white/55 text-xs uppercase tracking-wider">Disputed</div>
                           {fw.disputed_aspects.map((a: any, i: number) => (
                             <div key={i} className="text-sm text-white/40 flex gap-2">
                               <span className="text-white/20 shrink-0">◦</span>
@@ -518,7 +518,7 @@ export default function GraphPage() {
               {/* Character Arc with phase tabs */}
               {phases.length > 0 && (
                 <div>
-                  <div className="text-white/30 text-xs uppercase tracking-widest mb-2 font-medium">Character Arc</div>
+                  <div className="text-white/55 text-xs uppercase tracking-widest mb-2 font-medium">Character Arc</div>
                   {/* Phase tabs */}
                   <div className="flex gap-1.5 flex-wrap mb-3">
                     {phases.map((p: any, i: number) => (
@@ -544,7 +544,7 @@ export default function GraphPage() {
                       <div className="space-y-3 bg-white/[0.03] rounded-xl p-4 border border-white/5">
                         {phase.emotional_state && (
                           <div className="text-sm">
-                            <span className="text-white/30">Feeling · </span>
+                            <span className="text-white/55">Feeling · </span>
                             <span className="text-white/65">{phase.emotional_state}</span>
                           </div>
                         )}
@@ -555,7 +555,7 @@ export default function GraphPage() {
                         )}
                         {phase.personality_traits?.length > 0 && (
                           <div>
-                            <div className="text-white/25 text-xs uppercase tracking-wider mb-1.5">Traits</div>
+                            <div className="text-white/55 text-xs uppercase tracking-wider mb-1.5">Traits</div>
                             <div className="flex flex-wrap gap-1.5">
                               {phase.personality_traits.map((t: string, ti: number) => (
                                 <span key={ti} className="text-xs px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/50">{t}</span>
@@ -565,7 +565,7 @@ export default function GraphPage() {
                         )}
                         {phase.motivations?.length > 0 && (
                           <div>
-                            <div className="text-white/25 text-xs uppercase tracking-wider mb-1.5">Motivations</div>
+                            <div className="text-white/55 text-xs uppercase tracking-wider mb-1.5">Motivations</div>
                             <div className="space-y-1.5">
                               {phase.motivations.map((m: any, mi: number) => (
                                 <div key={mi} className="text-sm text-white/55 flex gap-2">
@@ -578,7 +578,7 @@ export default function GraphPage() {
                         )}
                         {phase.fears?.length > 0 && (
                           <div>
-                            <div className="text-white/25 text-xs uppercase tracking-wider mb-1.5">Fears</div>
+                            <div className="text-white/55 text-xs uppercase tracking-wider mb-1.5">Fears</div>
                             <div className="space-y-1.5">
                               {phase.fears.map((f: any, fi: number) => (
                                 <div key={fi} className="text-sm text-white/55 flex gap-2">
@@ -591,14 +591,14 @@ export default function GraphPage() {
                         )}
                         {phase.knowledge_state && Object.keys(phase.knowledge_state).length > 0 && (
                           <div>
-                            <div className="text-white/25 text-xs uppercase tracking-wider mb-1.5">Knowledge</div>
+                            <div className="text-white/55 text-xs uppercase tracking-wider mb-1.5">Knowledge</div>
                             <div className="space-y-1.5">
                               {Object.entries(phase.knowledge_state).map(([key, val]) => (
                                 <div key={key} className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${
                                   val ? "bg-emerald-900/20 border border-emerald-500/20" : "bg-white/[0.03] border border-white/5"
                                 }`}>
                                   <span className={val ? "text-emerald-400" : "text-white/20"}>{val ? "✓" : "✗"}</span>
-                                  <span className={val ? "text-white/65" : "text-white/30"}>{key.replace(/_/g, " ")}</span>
+                                  <span className={val ? "text-white/65" : "text-white/55"}>{key.replace(/_/g, " ")}</span>
                                 </div>
                               ))}
                             </div>
@@ -606,13 +606,13 @@ export default function GraphPage() {
                         )}
                         {phase.relationships && Object.keys(phase.relationships).length > 0 && (
                           <div>
-                            <div className="text-white/25 text-xs uppercase tracking-wider mb-1.5">Relationships</div>
+                            <div className="text-white/55 text-xs uppercase tracking-wider mb-1.5">Relationships</div>
                             <div className="space-y-2.5">
                               {Object.entries(phase.relationships).map(([name, rel]: [string, any]) => (
                                 <div key={name} className="border-l-2 border-white/10 pl-3">
                                   <div className="flex items-center justify-between">
                                     <span className="text-white/65 font-medium text-sm">{name}</span>
-                                    {rel.type && <span className="text-white/30 text-xs capitalize">{rel.type}</span>}
+                                    {rel.type && <span className="text-white/55 text-xs capitalize">{rel.type}</span>}
                                   </div>
                                   {rel.trust !== undefined && (
                                     <div className="mt-1 h-1 bg-white/5 rounded-full overflow-hidden">
@@ -634,7 +634,7 @@ export default function GraphPage() {
               {/* Key Revelations */}
               {selectedData?.knowledge_events?.length > 0 && (
                 <div>
-                  <div className="text-white/30 text-xs uppercase tracking-widest mb-2 font-medium">Key Revelations</div>
+                  <div className="text-white/55 text-xs uppercase tracking-widest mb-2 font-medium">Key Revelations</div>
                   <div className="space-y-2">
                     {selectedData.knowledge_events.map((ev: any, i: number) => (
                       <div key={i} className="bg-white/[0.03] border border-white/5 rounded-xl p-3.5">

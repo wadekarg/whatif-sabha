@@ -452,10 +452,12 @@ export default function DebateViewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ character_name: oracleCharacter, question: q, history: oracleHistory }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       if (!res.body) throw new Error("no body");
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let full = "";
+      let gotDone = false;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -465,9 +467,18 @@ export default function DebateViewPage() {
           try {
             const ev = JSON.parse(line.slice(6));
             if (ev.type === "token") { full += ev.text; setOracleStreaming(full); }
-            if (ev.type === "done") { setOracleHistory(prev => [...prev, { role: "assistant", content: full, character: oracleCharacter }]); setOracleStreaming(""); }
+            if (ev.type === "error") { full = ev.message || "The oracle could not reach this character."; }
+            if (ev.type === "done") {
+              setOracleHistory(prev => [...prev, { role: "assistant", content: full || "…", character: oracleCharacter }]);
+              setOracleStreaming("");
+              gotDone = true;
+            }
           } catch {}
         }
+      }
+      if (!gotDone) {
+        setOracleHistory(prev => [...prev, { role: "assistant", content: full || "The oracle could not reach this character.", character: oracleCharacter }]);
+        setOracleStreaming("");
       }
     } catch {
       setOracleHistory(prev => [...prev, { role: "assistant", content: "The oracle could not reach this character.", character: oracleCharacter }]);
@@ -508,7 +519,7 @@ export default function DebateViewPage() {
                 const col = CHAR_COLORS[i % CHAR_COLORS.length].hex;
                 return (
                   <div key={name} title={name}
-                    className="-ml-1 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-white font-bold text-[10px]"
+                    className="-ml-1 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-white font-bold text-xs"
                     style={{ backgroundColor: col, zIndex: chars.length - i }}>
                     {initials(name)}
                   </div>
@@ -542,7 +553,7 @@ export default function DebateViewPage() {
             <div className="mb-3">
               <button
                 onClick={() => setShowLegend(v => !v)}
-                className="flex items-center gap-2 text-[10px] text-[#a09282] hover:text-[#6b5c4e] uppercase tracking-widest font-medium transition-colors"
+                className="flex items-center gap-2 text-xs text-[#a09282] hover:text-[#6b5c4e] uppercase tracking-widest font-medium transition-colors"
               >
                 <span>{showLegend ? "▾" : "▸"}</span>
                 Emotion colours
@@ -554,7 +565,7 @@ export default function DebateViewPage() {
                     .map(([key, em]) => (
                       <div key={key} className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
-                        <span className="text-[11px] text-[#6b5c4e]">{em.label}</span>
+                        <span className="text-xs text-[#6b5c4e]">{em.label}</span>
                       </div>
                     ))}
                 </div>
@@ -570,14 +581,34 @@ export default function DebateViewPage() {
               const isRight = isTwoChar && charIdx === 1;
 
               // World observer entry
+              if (entry.isObserver && entry.character === "The Interrogator") {
+                return (
+                  <div key={i}>
+                    <div className="my-4 mx-1 rounded-xl px-4 py-3 border border-zinc-600/60" style={{ background: "linear-gradient(135deg, #18181b 0%, #1c1917 100%)" }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs uppercase tracking-widest font-bold text-zinc-400">⚖ The Interrogator</span>
+                        <span className="text-xs text-zinc-600 italic">· structural voice</span>
+                      </div>
+                      <div className="text-sm leading-relaxed text-zinc-200">
+                        <ReactMarkdown components={{
+                          p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
+                          strong: ({children}) => <strong style={{fontWeight:600,color:"#e4e4e7"}}>{children}</strong>,
+                          em: ({children}) => <em style={{fontStyle:"italic",color:"#a1a1aa"}}>{children}</em>,
+                        }}>{entry.message}</ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               if (entry.isObserver) {
                 return (
                   <div key={i}>
                     <div className="my-3 mx-1 bg-slate-900 rounded-xl px-4 py-3 border border-slate-700/60">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[9px] uppercase tracking-widest font-bold text-slate-400">🌍 World Observer</span>
-                        {entry.observerEra && <span className="text-[9px] text-slate-500 italic">· {entry.observerEra}</span>}
-                        <span className="text-[9px] text-slate-500 font-medium ml-1">{entry.character}</span>
+                        <span className="text-xs uppercase tracking-widest font-bold text-slate-400">🌍 World Observer</span>
+                        {entry.observerEra && <span className="text-xs text-slate-500 italic">· {entry.observerEra}</span>}
+                        <span className="text-xs text-slate-500 font-medium ml-1">{entry.character}</span>
                       </div>
                       <div className="text-sm leading-relaxed text-slate-200">
                         <ReactMarkdown components={{
@@ -608,7 +639,7 @@ export default function DebateViewPage() {
                   {showRoundSep && (
                     <div className="flex items-center gap-3 my-4 px-1">
                       <div className="flex-1 h-px bg-[#e8e0d5]" />
-                      <span className="text-[9px] uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entry.round}</span>
+                      <span className="text-xs uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entry.round}</span>
                       <div className="flex-1 h-px bg-[#e8e0d5]" />
                     </div>
                   )}
@@ -623,15 +654,15 @@ export default function DebateViewPage() {
                         {em.label && (
                           <span className="flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
-                            <span className="text-[10px] text-[#a09282]">{em.label}</span>
+                            <span className="text-xs text-[#a09282]">{em.label}</span>
                           </span>
                         )}
                       </div>
                       {/* Reply quote preview */}
                       {quoteSnippet && (
-                        <div className={`mb-1 px-3 py-1.5 rounded-lg text-[11px] text-[#6b5c4e] italic max-w-[90%] ${isRight ? "self-end" : "self-start"}`}
+                        <div className={`mb-1 px-3 py-1.5 rounded-lg text-xs text-[#6b5c4e] italic max-w-[90%] ${isRight ? "self-end" : "self-start"}`}
                           style={{ borderLeft: isRight ? undefined : `2px solid ${targetColor?.hex}`, borderRight: isRight ? `2px solid ${targetColor?.hex}` : undefined, backgroundColor: targetColor?.hex + "12" }}>
-                          <span className="font-semibold not-italic text-[10px]" style={{ color: targetColor?.hex }}>{targetChar}</span>
+                          <span className="font-semibold not-italic text-xs" style={{ color: targetColor?.hex }}>{targetChar}</span>
                           <span className="mx-1 text-[#c8b89a]">·</span>
                           {quoteSnippet}
                         </div>
@@ -678,7 +709,7 @@ export default function DebateViewPage() {
               onClick={() => setShowChat(v => !v)}
               className="w-full flex items-center gap-2 px-5 py-2.5 hover:bg-[#faf7f2] transition-colors text-left"
             >
-              <div className="w-5 h-5 rounded-md bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-[10px] text-[#c07820] shrink-0">✦</div>
+              <div className="w-5 h-5 rounded-md bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs text-[#c07820] shrink-0">✦</div>
               <span className="text-xs font-semibold text-[#1c1410]">Ask the Orchestrator</span>
               <span className="text-xs text-[#a09282]">about this debate</span>
               <span className="ml-auto text-[#c8b89a] text-xs">{showChat ? "▾" : "▸"}</span>
@@ -702,7 +733,7 @@ export default function DebateViewPage() {
                 {chatMessages.map((m, i) => (
                   <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                     {m.role === "assistant" && (
-                      <div className="w-5 h-5 rounded-md bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-[10px] shrink-0 mr-1.5 mt-0.5">✦</div>
+                      <div className="w-5 h-5 rounded-md bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs shrink-0 mr-1.5 mt-0.5">✦</div>
                     )}
                     <div className={`max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
                       m.role === "user"
@@ -725,7 +756,7 @@ export default function DebateViewPage() {
                 ))}
                 {chatLoading && (
                   <div className="flex justify-start">
-                    <div className="w-5 h-5 rounded-md bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-[10px] shrink-0 mr-1.5 mt-0.5">✦</div>
+                    <div className="w-5 h-5 rounded-md bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs shrink-0 mr-1.5 mt-0.5">✦</div>
                     <div className="bg-[#f7f3ed] border border-[#e8e0d5] px-3 py-2 rounded-xl rounded-bl-sm flex gap-1 items-center h-8">
                       <div className="w-1.5 h-1.5 rounded-full bg-[#c8b89a] animate-breathe" style={{ animationDelay:"0ms" }} />
                       <div className="w-1.5 h-1.5 rounded-full bg-[#c8b89a] animate-breathe" style={{ animationDelay:"300ms" }} />
@@ -766,7 +797,7 @@ export default function DebateViewPage() {
           <div className="shrink-0 flex border-b border-white/10 bg-black/30">
             {(["graph", "heatmap", "emotions"] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-[11px] font-medium transition-colors border-b-2 ${
+                className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
                   activeTab === tab ? "text-white border-[#c07820]" : "text-white/35 border-transparent hover:text-white/60"
                 }`}>
                 {tab === "graph" ? "⬡ Graph" : tab === "heatmap" ? "▦ Heatmap" : "◉ Emotions"}
@@ -799,10 +830,10 @@ export default function DebateViewPage() {
                 ))}
               </div>
               <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm border border-white/10 rounded-xl px-3 py-2.5 space-y-1.5">
-                <div className="text-white/30 text-[9px] uppercase tracking-widest font-medium mb-1">Legend</div>
-                <div className="flex items-center gap-2"><div className="w-8 h-px bg-white/50" /><span className="text-white/50 text-[10px]">Replied</span></div>
-                <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#f0c060]/70" /><span className="text-[#f0c060]/70 text-[10px]">Asked</span></div>
-                <span className="text-white/30 text-[9px]">Node size = speech count</span>
+                <div className="text-white/30 text-xs uppercase tracking-widest font-medium mb-1">Legend</div>
+                <div className="flex items-center gap-2"><div className="w-8 h-px bg-white/50" /><span className="text-white/50 text-xs">Replied</span></div>
+                <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#f0c060]/70" /><span className="text-[#f0c060]/70 text-xs">Asked</span></div>
+                <span className="text-white/30 text-xs">Node size = speech count</span>
               </div>
             </div>
             {/* Heatmap */}
@@ -823,11 +854,11 @@ export default function DebateViewPage() {
               <div className="shrink-0 border-t border-white/10 px-3 py-2.5 space-y-1.5 bg-black/40">
                 {sorted.map(n => (
                   <div key={n.id} className="flex items-center gap-2">
-                    <span className="text-[10px] text-white/45 w-16 shrink-0 truncate">{n.id.split(" ")[0]}</span>
+                    <span className="text-xs text-white/45 w-16 shrink-0 truncate">{n.id.split(" ")[0]}</span>
                     <div className="flex-1 h-1.5 bg-white/8 rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(n.speeches/maxS)*100}%`, backgroundColor: n.color }} />
                     </div>
-                    <span className="text-[10px] font-bold w-10 text-right shrink-0" style={{ color: n.color }}>{Math.round((n.speeches/total)*100)}%</span>
+                    <span className="text-xs font-bold w-10 text-right shrink-0" style={{ color: n.color }}>{Math.round((n.speeches/total)*100)}%</span>
                   </div>
                 ))}
               </div>
@@ -866,7 +897,7 @@ export default function DebateViewPage() {
             <div className="relative flex flex-col items-center justify-center text-center px-8 py-28 overflow-hidden" style={{ minHeight: "55vh" }}>
               <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(192,120,32,0.14) 0%, transparent 70%)" }} />
               <div className="relative z-10 space-y-7 max-w-3xl">
-                <div className="text-[#f0c060]/50 text-[10px] uppercase tracking-[0.45em] font-semibold">Alternate History</div>
+                <div className="text-[#f0c060]/50 text-xs uppercase tracking-[0.45em] font-semibold">Alternate History</div>
                 <h1 className="text-4xl sm:text-5xl font-bold leading-tight" style={{ color: "#f5f0e8" }}>
                   {debate.divergence_description}
                 </h1>
@@ -892,7 +923,7 @@ export default function DebateViewPage() {
               <div style={{ background: "#f7f3ed" }} className="py-20 px-8">
                 <div className="max-w-3xl mx-auto">
                   <div className="text-center mb-14">
-                    <div className="text-[10px] uppercase tracking-[0.35em] text-[#a09282] font-semibold mb-2">Timeline</div>
+                    <div className="text-xs uppercase tracking-[0.35em] text-[#a09282] font-semibold mb-2">Timeline</div>
                     <div className="text-xl font-bold text-[#1c1410]">How this world unfolds</div>
                   </div>
                   <div className="relative">
@@ -909,7 +940,7 @@ export default function DebateViewPage() {
                             <div className="flex-1 bg-white border border-[#e8e0d5] rounded-2xl px-6 py-4 shadow-sm">
                               <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
                                 <div>
-                                  <span className="text-[9px] uppercase tracking-widest font-bold" style={{ color: col }}>{(ev.type || "").replace(/_/g, " ")}</span>
+                                  <span className="text-xs uppercase tracking-widest font-bold" style={{ color: col }}>{(ev.type || "").replace(/_/g, " ")}</span>
                                   <h3 className="font-bold text-[#1c1410] text-[15px] mt-0.5">{ev.label}</h3>
                                 </div>
                                 {ev.characters?.length > 0 && (
@@ -917,7 +948,7 @@ export default function DebateViewPage() {
                                     {(ev.characters as string[]).map((c: string) => {
                                       const ci = chars.indexOf(c);
                                       const ccol = CHAR_COLORS[ci >= 0 ? ci % CHAR_COLORS.length : 0].hex;
-                                      return <span key={c} className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: ccol + "18", color: ccol }}>{c}</span>;
+                                      return <span key={c} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: ccol + "18", color: ccol }}>{c}</span>;
                                     })}
                                   </div>
                                 )}
@@ -942,7 +973,7 @@ export default function DebateViewPage() {
                     <span className="text-[#c07820] text-xl">✦</span>
                     <div className="flex-1 h-px bg-[#e8e0d5]" />
                   </div>
-                  <div className="text-[10px] uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Alternate Ending</div>
+                  <div className="text-xs uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Alternate Ending</div>
                 </div>
                 <div className="text-[#2d1f14] leading-[2.15] text-[18px]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
                   <ReactMarkdown
@@ -972,7 +1003,7 @@ export default function DebateViewPage() {
                 <div className="max-w-2xl mx-auto space-y-8">
                   <div className="text-center space-y-3">
                     <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center text-[#f0c060] text-xl border border-[#f0c060]/25" style={{ background: "rgba(240,192,96,0.08)" }}>◉</div>
-                    <div className="text-[10px] uppercase tracking-[0.35em] text-white/35 font-semibold">Oracle Mode</div>
+                    <div className="text-xs uppercase tracking-[0.35em] text-white/35 font-semibold">Oracle Mode</div>
                     <p className="text-white/50 text-sm max-w-sm mx-auto leading-relaxed">Enter the alternate world. Ask any character a question — they answer from inside this reality.</p>
                   </div>
                   <div className="flex flex-wrap gap-2 justify-center">

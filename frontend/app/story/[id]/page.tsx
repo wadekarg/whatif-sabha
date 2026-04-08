@@ -10,6 +10,11 @@ const API = "http://localhost:8001";
 const STAGE_STEPS = ["uploaded", "analyzing", "researching"];
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
+type CharChatMsg = { role: "user" | "assistant"; content: string };
+
+const CHAR_COLORS = [
+  "#c07820","#3b82f6","#10b981","#a855f7","#ec4899","#06b6d4","#f97316","#ef4444",
+];
 
 export default function StoryPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,12 +24,80 @@ export default function StoryPage() {
   const [whatIf, setWhatIf]         = useState("");
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [overview, setOverview]     = useState<any>(null);
+  const [storyCharacters, setStoryCharacters] = useState<any[]>([]);
 
-  // Chat state
+  // Right panel tab: "story" | "character"
+  const [rightTab, setRightTab]     = useState<"story" | "character">("story");
+
+  // Story chat state
   const [messages, setMessages]     = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput]   = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Character chat state
+  const [charChatCharacter, setCharChatCharacter] = useState<any>(null);
+  const [charMessages, setCharMessages] = useState<CharChatMsg[]>([]);
+  const [charInput, setCharInput]   = useState("");
+  const [charLoading, setCharLoading] = useState(false);
+  const [charStreaming, setCharStreaming] = useState("");
+  const charChatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    charChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [charMessages, charStreaming]);
+
+  const sendCharMessage = async () => {
+    const q = charInput.trim();
+    if (!q || charLoading || !charChatCharacter) return;
+    setCharInput("");
+    setCharMessages(prev => [...prev, { role: "user", content: q }]);
+    setCharLoading(true);
+    setCharStreaming("");
+    try {
+      const res = await fetch(
+        `${API}/stories/${id}/characters/${encodeURIComponent(charChatCharacter.name)}/chat/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, history: charMessages }),
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.body) throw new Error("no body");
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let full = "";
+      let gotDone = false;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = dec.decode(value);
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6));
+            if (ev.type === "token") { full += ev.text; setCharStreaming(full); }
+            if (ev.type === "error") { full = ev.message || "Could not reach this character."; }
+            if (ev.type === "done") {
+              setCharMessages(prev => [...prev, { role: "assistant", content: full || "…" }]);
+              setCharStreaming("");
+              gotDone = true;
+            }
+          } catch {}
+        }
+      }
+      if (!gotDone) {
+        setCharMessages(prev => [...prev, { role: "assistant", content: full || "Could not reach this character." }]);
+        setCharStreaming("");
+      }
+    } catch {
+      setCharMessages(prev => [...prev, { role: "assistant", content: "Could not reach this character right now." }]);
+      setCharStreaming("");
+    } finally {
+      setCharLoading(false);
+    }
+  };
 
   useEffect(() => {
     const poll = async () => {
@@ -33,15 +106,18 @@ export default function StoryPage() {
         const data = await res.json();
         setStatus(data.status);
         if (data.status === "ready") {
-          const [sr, dr, sgr] = await Promise.all([
+          const [sr, dr, sgr, cr] = await Promise.all([
             fetch(`${API}/stories/${id}`),
             fetch(`${API}/stories/${id}/debates`),
             fetch(`${API}/stories/${id}/divergence-points`),
+            fetch(`${API}/stories/${id}/characters`),
           ]);
           setStory(await sr.json());
           setPastDebates(await dr.json());
           const sg = await sgr.json();
           if (Array.isArray(sg)) setSuggestions(sg);
+          const chars = await cr.json();
+          if (Array.isArray(chars)) setStoryCharacters(chars);
           // Fetch overview independently so a failure doesn't break the page
           fetch(`${API}/stories/${id}/overview`)
             .then(r => r.ok ? r.json() : null)
@@ -335,14 +411,14 @@ export default function StoryPage() {
                               )}
                             </div>
                             <div className="mt-2 pr-2">
-                              <div className="text-[10px] text-white/40 uppercase tracking-wider font-medium">
+                              <div className="text-xs text-white/60 uppercase tracking-wider font-medium">
                                 {p.phase_id?.replace(/_/g, " ") || `Phase ${pi + 1}`}
                               </div>
                               {p.emotional_state && (
-                                <div className="text-xs text-white/65 mt-0.5 leading-snug">{p.emotional_state}</div>
+                                <div className="text-xs text-white/80 mt-0.5 leading-snug">{p.emotional_state}</div>
                               )}
                               {p.motivations?.[0] && (
-                                <div className="text-[10px] text-white/30 mt-1 leading-snug italic">"{p.motivations[0]}"</div>
+                                <div className="text-xs text-white/50 mt-1 leading-snug italic">"{p.motivations[0]}"</div>
                               )}
                             </div>
                           </div>
@@ -352,7 +428,7 @@ export default function StoryPage() {
                     {/* All characters' arc overview */}
                     {overview.character_arcs?.length > 1 && (
                       <div className="border-t border-white/10 pt-4 space-y-2">
-                        <div className="text-[10px] text-white/25 uppercase tracking-widest font-medium mb-3">All Characters</div>
+                        <div className="text-xs text-white/50 uppercase tracking-widest font-medium mb-3">All Characters</div>
                         {overview.character_arcs.map((arc: any) => (
                           <div key={arc.name} className="flex items-center gap-3">
                             <div className="w-24 shrink-0">
@@ -369,7 +445,7 @@ export default function StoryPage() {
                                 }`} />
                               ))}
                             </div>
-                            <span className="text-[10px] text-white/20 w-12 text-right">{arc.phases.length} phases</span>
+                            <span className="text-xs text-white/45 w-12 text-right">{arc.phases.length} phases</span>
                           </div>
                         ))}
                       </div>
@@ -390,7 +466,7 @@ export default function StoryPage() {
                         <div key={i} className="bg-white border border-[#e8e0d5] rounded-xl p-4">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <span className="font-semibold text-sm text-[#1c1410]">{r.from}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${
                               r.type === "enemies"  || r.type === "rivals"  ? "text-red-600 bg-red-50 border-red-200" :
                               r.type === "controls"                          ? "text-purple-700 bg-purple-50 border-purple-200" :
                               r.type === "mentor"                            ? "text-blue-700 bg-blue-50 border-blue-200" :
@@ -450,23 +526,23 @@ export default function StoryPage() {
                             {/* Phase header */}
                             {grp.phase && (
                               <div className="flex gap-4 items-center mb-3 mt-4 first:mt-0">
-                                <div className="w-6 h-6 rounded-lg bg-[#c07820] flex items-center justify-center text-white text-[10px] font-bold shrink-0 z-10">{gi + 1}</div>
+                                <div className="w-6 h-6 rounded-lg bg-[#c07820] flex items-center justify-center text-white text-xs font-bold shrink-0 z-10">{gi + 1}</div>
                                 <div className="flex-1 bg-[#1c1410] rounded-xl px-4 py-2.5">
                                   <div className="flex items-center justify-between gap-2 flex-wrap">
                                     <span className="text-[#c07820] text-xs font-semibold uppercase tracking-wide">
                                       {grp.phase.name || grp.phase.phase_id?.replace(/_/g, " ")}
                                     </span>
                                     {grp.phase.chapter_range && (
-                                      <span className="text-white/30 text-[10px]">
+                                      <span className="text-white/30 text-xs">
                                         Ch. {grp.phase.chapter_range[0]}{grp.phase.chapter_range[1] !== grp.phase.chapter_range[0] ? `–${grp.phase.chapter_range[1]}` : ""}
                                       </span>
                                     )}
                                   </div>
                                   {grp.phase.description && (
-                                    <p className="text-white/55 text-[11px] mt-0.5 leading-relaxed">{grp.phase.description}</p>
+                                    <p className="text-white/55 text-xs mt-0.5 leading-relaxed">{grp.phase.description}</p>
                                   )}
                                   {grp.phase.trigger_event && (
-                                    <p className="text-[#c07820]/60 text-[10px] mt-1 italic">Triggered by: {grp.phase.trigger_event}</p>
+                                    <p className="text-[#c07820]/60 text-xs mt-1 italic">Triggered by: {grp.phase.trigger_event}</p>
                                   )}
                                 </div>
                               </div>
@@ -484,7 +560,7 @@ export default function StoryPage() {
                                 return (
                                   <div key={ii} className="flex gap-4 pl-0">
                                     {/* Node */}
-                                    <div className={`w-6 h-6 rounded-full shrink-0 mt-0.5 z-10 flex items-center justify-center text-[9px] font-bold border-2 ${
+                                    <div className={`w-6 h-6 rounded-full shrink-0 mt-0.5 z-10 flex items-center justify-center text-xs font-bold border-2 ${
                                       isFirst        ? "bg-[#fef3e2] border-[#c07820] text-[#c07820]" :
                                       isLast         ? "bg-red-50 border-red-400 text-red-500" :
                                       isTurning      ? "bg-purple-50 border-purple-400 text-purple-600" :
@@ -505,27 +581,27 @@ export default function StoryPage() {
                                       {/* Top row */}
                                       <div className="flex items-center gap-2 flex-wrap mb-1.5">
                                         {/* Type badge */}
-                                        {isTurning && <span className="text-[9px] font-bold text-purple-700 bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Turning Point</span>}
-                                        {isRevelation && <span className="text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Revelation</span>}
-                                        {isFirst && <span className="text-[9px] font-bold text-[#c07820] bg-[#fef3e2] border border-[#f0c060]/50 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Opening</span>}
-                                        {isLast && <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Climax</span>}
+                                        {isTurning && <span className="text-xs font-bold text-purple-700 bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Turning Point</span>}
+                                        {isRevelation && <span className="text-xs font-bold text-blue-700 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Revelation</span>}
+                                        {isFirst && <span className="text-xs font-bold text-[#c07820] bg-[#fef3e2] border border-[#f0c060]/50 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Opening</span>}
+                                        {isLast && <span className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Climax</span>}
 
                                         {/* Characters */}
                                         {item._type === "event" && item.characters_involved?.length > 0 && (
                                           <div className="flex gap-1 flex-wrap">
                                             {item.characters_involved.slice(0, 4).map((c: string) => (
-                                              <span key={c} className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
+                                              <span key={c} className="text-xs px-1.5 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
                                             ))}
                                           </div>
                                         )}
                                         {item._type === "revelation" && (
-                                          <span className="text-[9px] text-[#c07820] font-semibold">
+                                          <span className="text-xs text-[#c07820] font-semibold">
                                             {item.character}{item.from_character ? ` ← ${item.from_character}` : ""}
                                           </span>
                                         )}
 
                                         {/* Chapter */}
-                                        {item.chapter && <span className="ml-auto text-[9px] text-[#c8b89a]">Ch. {item.chapter}</span>}
+                                        {item.chapter && <span className="ml-auto text-xs text-[#c8b89a]">Ch. {item.chapter}</span>}
                                       </div>
 
                                       {/* Title / what happened */}
@@ -541,8 +617,8 @@ export default function StoryPage() {
                                       {/* Consequence / impact */}
                                       {(item.consequence || item.impact_on_character) && (
                                         <div className="mt-2 flex gap-1.5 items-start">
-                                          <span className="text-[10px] text-[#a09282] shrink-0 mt-px">→</span>
-                                          <p className="text-[11px] text-[#a09282] leading-relaxed italic">{item.consequence || item.impact_on_character}</p>
+                                          <span className="text-xs text-[#a09282] shrink-0 mt-px">→</span>
+                                          <p className="text-xs text-[#a09282] leading-relaxed italic">{item.consequence || item.impact_on_character}</p>
                                         </div>
                                       )}
                                     </div>
@@ -580,7 +656,7 @@ export default function StoryPage() {
                             {d.affected_characters?.length > 0 && (
                               <div className="flex gap-1.5 flex-wrap mt-2">
                                 {d.affected_characters.map((c: string) => (
-                                  <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
+                                  <span key={c} className="text-xs px-2 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
                                 ))}
                               </div>
                             )}
@@ -599,104 +675,258 @@ export default function StoryPage() {
         </div>
       </div>
 
-      {/* ── Right: story chat ── */}
+      {/* ── Right: tabbed panel ── */}
       <div className="w-[460px] shrink-0 border-l border-[#e8e0d5] bg-white flex flex-col">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-[#e8e0d5] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-sm">✦</div>
-            <div>
-              <div className="font-semibold text-[#1c1410] text-sm">Ask about the story</div>
-              <div className="text-[#a09282] text-xs">Characters · events · what-ifs</div>
-            </div>
-          </div>
+
+        {/* Tab bar */}
+        <div className="shrink-0 border-b border-[#e8e0d5] flex">
+          <button
+            onClick={() => setRightTab("story")}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-semibold transition-colors border-b-2 ${
+              rightTab === "story"
+                ? "text-[#c07820] border-[#c07820]"
+                : "text-[#a09282] border-transparent hover:text-[#6b5c4e]"
+            }`}
+          >
+            <span>✦</span> Ask the Story
+          </button>
+          <button
+            onClick={() => setRightTab("character")}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-semibold transition-colors border-b-2 ${
+              rightTab === "character"
+                ? "text-[#c07820] border-[#c07820]"
+                : "text-[#a09282] border-transparent hover:text-[#6b5c4e]"
+            }`}
+          >
+            <span>◉</span> Talk to Characters
+          </button>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.length === 0 && (
-            <div className="space-y-2 pt-2">
-              <p className="text-[#a09282] text-xs text-center mb-4">Ask anything about {story.title}</p>
-              {[
-                "Who is the main antagonist and why?",
-                "What are the key themes of this story?",
-                "How do the characters relate to each other?",
-                "What would happen if the ending changed?",
-              ].map(q => (
-                <button
-                  key={q}
-                  onClick={() => { setChatInput(q); }}
-                  className="w-full text-left text-xs text-[#6b5c4e] bg-[#f7f3ed] hover:bg-[#fef3e2] border border-[#e8e0d5] hover:border-[#f0c060]/50 px-3 py-2.5 rounded-xl transition-colors leading-relaxed"
-                >
-                  {q}
-                </button>
+        {/* ── Story chat tab ── */}
+        {rightTab === "story" && (
+          <>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.length === 0 && (
+                <div className="space-y-2 pt-2">
+                  <p className="text-[#a09282] text-xs text-center mb-4">Ask anything about {story.title}</p>
+                  {[
+                    "Who is the main antagonist and why?",
+                    "What are the key themes of this story?",
+                    "How do the characters relate to each other?",
+                    "What would happen if the ending changed?",
+                  ].map(q => (
+                    <button key={q} onClick={() => setChatInput(q)}
+                      className="w-full text-left text-sm text-[#6b5c4e] bg-[#f7f3ed] hover:bg-[#fef3e2] border border-[#e8e0d5] hover:border-[#f0c060]/50 px-4 py-3 rounded-xl transition-colors leading-relaxed">
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  {m.role === "assistant" && (
+                    <div className="w-6 h-6 rounded-lg bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs shrink-0 mr-2 mt-0.5">✦</div>
+                  )}
+                  <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                    m.role === "user" ? "bg-[#c07820] text-white rounded-br-sm" : "bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5] rounded-bl-sm"
+                  }`}>
+                    {m.role === "assistant" ? (
+                      <ReactMarkdown components={{
+                        p: ({children}) => <p className="mb-1 last:mb-0">{children}</p>,
+                        strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                        h3: ({children}) => <p className="font-semibold mt-2 mb-0.5">{children}</p>,
+                        h2: ({children}) => <p className="font-semibold mt-2 mb-0.5">{children}</p>,
+                        ul: ({children}) => <ul className="list-disc list-outside pl-4 space-y-0.5">{children}</ul>,
+                        ol: ({children}) => <ol className="list-decimal list-outside pl-4 space-y-0.5">{children}</ol>,
+                        li: ({children}) => <li>{children}</li>,
+                      }}>{typeof m.content === "string" ? m.content : String(m.content)}</ReactMarkdown>
+                    ) : (
+                      typeof m.content === "string" ? m.content : String(m.content)
+                    )}
+                  </div>
+                </div>
               ))}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="w-6 h-6 rounded-lg bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs shrink-0 mr-2 mt-0.5">✦</div>
+                  <div className="bg-[#f7f3ed] border border-[#e8e0d5] px-4 py-3 rounded-2xl rounded-bl-sm">
+                    <div className="flex gap-1.5 items-center h-4">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#c8b89a] animate-breathe" style={{ animationDelay: "0ms" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#c8b89a] animate-breathe" style={{ animationDelay: "300ms" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#c8b89a] animate-breathe" style={{ animationDelay: "600ms" }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
             </div>
-          )}
-
-          {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              {m.role === "assistant" && (
-                <div className="w-6 h-6 rounded-lg bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs shrink-0 mr-2 mt-0.5">✦</div>
-              )}
-              <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                m.role === "user"
-                  ? "bg-[#c07820] text-white rounded-br-sm"
-                  : "bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5] rounded-bl-sm"
-              }`}>
-                {m.role === "assistant" ? (
-                <ReactMarkdown components={{
-                  p: ({children}) => <p className="mb-1 last:mb-0">{children}</p>,
-                  strong: ({children}) => <strong className="font-semibold">{children}</strong>,
-                  h3: ({children}) => <p className="font-semibold mt-2 mb-0.5">{children}</p>,
-                  h2: ({children}) => <p className="font-semibold mt-2 mb-0.5">{children}</p>,
-                  ul: ({children}) => <ul className="list-disc list-outside pl-4 space-y-0.5">{children}</ul>,
-                  ol: ({children}) => <ol className="list-decimal list-outside pl-4 space-y-0.5">{children}</ol>,
-                  li: ({children}) => <li>{children}</li>,
-                }}>{typeof m.content === "string" ? m.content : Array.isArray(m.content) ? (m.content as {text?:string}[]).map(b => b?.text ?? "").join("") : String(m.content)}</ReactMarkdown>
-              ) : (
-                typeof m.content === "string" ? m.content : Array.isArray(m.content) ? (m.content as {text?:string}[]).map(b => b?.text ?? "").join("") : String(m.content)
-              )}
+            <div className="p-4 border-t border-[#e8e0d5] shrink-0">
+              <div className="flex gap-2 items-end">
+                <textarea value={chatInput} onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                  placeholder="Ask about characters, plot, themes…" rows={2}
+                  className="flex-1 resize-none bg-[#f7f3ed] border border-[#e8e0d5] focus:border-[#c07820] rounded-xl px-3.5 py-2.5 text-sm text-[#1c1410] placeholder-[#c8b89a] focus:outline-none leading-relaxed transition-colors" />
+                <button onClick={sendMessage} disabled={!chatInput.trim() || chatLoading}
+                  className="w-10 h-10 rounded-xl bg-[#c07820] hover:bg-[#a86a18] disabled:bg-[#e8e0d5] disabled:text-[#c8b89a] text-white flex items-center justify-center transition-colors shrink-0 text-lg">
+                  ↑
+                </button>
               </div>
+              <p className="text-[#c8b89a] text-xs mt-1.5">Enter to send · Shift+Enter for new line</p>
             </div>
-          ))}
+          </>
+        )}
 
-          {chatLoading && (
-            <div className="flex justify-start">
-              <div className="w-6 h-6 rounded-lg bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center text-xs shrink-0 mr-2 mt-0.5">✦</div>
-              <div className="bg-[#f7f3ed] border border-[#e8e0d5] px-4 py-3 rounded-2xl rounded-bl-sm">
-                <div className="flex gap-1.5 items-center h-4">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#c8b89a] animate-breathe" style={{ animationDelay: "0ms" }} />
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#c8b89a] animate-breathe" style={{ animationDelay: "300ms" }} />
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#c8b89a] animate-breathe" style={{ animationDelay: "600ms" }} />
+        {/* ── Character chat tab ── */}
+        {rightTab === "character" && (
+          <>
+            {/* Character picker */}
+            <div className="shrink-0 px-4 py-3 border-b border-[#e8e0d5] bg-[#faf7f2]">
+              {storyCharacters.length === 0 ? (
+                <p className="text-xs text-[#a09282] text-center py-2">Loading characters…</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {storyCharacters.map((c, i) => {
+                    const col = CHAR_COLORS[i % CHAR_COLORS.length];
+                    const active = charChatCharacter?.name === c.name;
+                    return (
+                      <button key={c.name}
+                        onClick={() => {
+                          setCharChatCharacter(c);
+                          setCharMessages([]);
+                          setCharStreaming("");
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all border"
+                        style={active
+                          ? { background: col, color: "#fff", borderColor: col }
+                          : { background: "white", color: "#6b5c4e", borderColor: "#e8e0d5" }
+                        }
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: active ? "rgba(255,255,255,0.6)" : col }} />
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Chat area */}
+            {!charChatCharacter ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-8 gap-4">
+                <div className="w-14 h-14 rounded-full border-2 border-[#e8e0d5] flex items-center justify-center text-2xl text-[#c8b89a]">◉</div>
+                <div>
+                  <p className="text-sm font-semibold text-[#1c1410]">Choose a character</p>
+                  <p className="text-xs text-[#a09282] mt-1 leading-relaxed max-w-xs">They'll speak from inside their story — with full memory of everything that happened to them.</p>
                 </div>
               </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
+            ) : (
+              <>
+                {/* Character header */}
+                <div className="shrink-0 px-4 py-3 flex items-center gap-3 bg-white border-b border-[#e8e0d5]">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                    style={{ backgroundColor: CHAR_COLORS[storyCharacters.findIndex(c => c.name === charChatCharacter.name) % CHAR_COLORS.length] }}>
+                    {charChatCharacter.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-[#1c1410] text-sm">{charChatCharacter.name}</div>
+                    <div className="text-xs text-[#a09282] truncate italic">
+                      {charChatCharacter.role && <span className="capitalize">{charChatCharacter.role} · </span>}
+                      speaking from inside {story.title}
+                    </div>
+                  </div>
+                  <button onClick={() => { setCharMessages([]); setCharStreaming(""); }}
+                    className="text-sm text-[#c8b89a] hover:text-[#a09282] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#f7f3ed]">
+                    clear
+                  </button>
+                </div>
 
-        {/* Input */}
-        <div className="p-4 border-t border-[#e8e0d5] shrink-0">
-          <div className="flex gap-2 items-end">
-            <textarea
-              value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder="Ask about characters, plot, themes…"
-              rows={2}
-              className="flex-1 resize-none bg-[#f7f3ed] border border-[#e8e0d5] focus:border-[#c07820] rounded-xl px-3.5 py-2.5 text-sm text-[#1c1410] placeholder-[#c8b89a] focus:outline-none leading-relaxed transition-colors"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!chatInput.trim() || chatLoading}
-              className="w-10 h-10 rounded-xl bg-[#c07820] hover:bg-[#a86a18] disabled:bg-[#e8e0d5] disabled:text-[#c8b89a] text-white flex items-center justify-center transition-colors shrink-0 text-lg"
-            >
-              ↑
-            </button>
-          </div>
-          <p className="text-[#c8b89a] text-[10px] mt-1.5">Enter to send · Shift+Enter for new line</p>
-        </div>
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                  {charMessages.length === 0 && !charStreaming && (
+                    <div className="space-y-2 pt-2">
+                      <p className="text-[#a09282] text-xs text-center mb-3">Ask {charChatCharacter.name} anything</p>
+                      {[
+                        `Why did you make the choices you did?`,
+                        `What do you regret most?`,
+                        `What do you think of ${storyCharacters.find(c => c.name !== charChatCharacter.name)?.name || "the others"}?`,
+                        `What would you do differently?`,
+                      ].map(q => (
+                        <button key={q} onClick={() => setCharInput(q)}
+                          className="w-full text-left text-sm text-[#6b5c4e] bg-[#f7f3ed] hover:bg-[#fef3e2] border border-[#e8e0d5] hover:border-[#f0c060]/50 px-4 py-3 rounded-xl transition-colors leading-relaxed">
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {charMessages.map((m, i) => {
+                    const charIdx = storyCharacters.findIndex(c => c.name === charChatCharacter.name);
+                    const col = CHAR_COLORS[charIdx % CHAR_COLORS.length];
+                    return (
+                      <div key={i} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                        {m.role === "assistant" && (
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5"
+                            style={{ backgroundColor: col }}>
+                            {charChatCharacter.name[0]}
+                          </div>
+                        )}
+                        <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                          m.role === "user" ? "rounded-br-sm text-white" : "rounded-bl-sm bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5]"
+                        }`} style={m.role === "user" ? { backgroundColor: col } : {}}>
+                          {m.content}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Streaming */}
+                  {(charLoading || charStreaming) && (() => {
+                    const charIdx = storyCharacters.findIndex(c => c.name === charChatCharacter.name);
+                    const col = CHAR_COLORS[charIdx % CHAR_COLORS.length];
+                    return (
+                      <div className="flex gap-2 justify-start">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5"
+                          style={{ backgroundColor: col, boxShadow: `0 0 0 3px ${col}30` }}>
+                          {charChatCharacter.name[0]}
+                        </div>
+                        <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl rounded-bl-sm bg-[#f7f3ed] border border-[#e8e0d5] text-sm leading-relaxed text-[#1c1410]">
+                          {charStreaming ? (
+                            <>{charStreaming}<span className="animate-pulse" style={{ color: col }}>▌</span></>
+                          ) : (
+                            <div className="flex gap-1.5 items-center h-4">
+                              <div className="w-1.5 h-1.5 rounded-full animate-breathe" style={{ backgroundColor: col, animationDelay: "0ms" }} />
+                              <div className="w-1.5 h-1.5 rounded-full animate-breathe" style={{ backgroundColor: col, animationDelay: "300ms" }} />
+                              <div className="w-1.5 h-1.5 rounded-full animate-breathe" style={{ backgroundColor: col, animationDelay: "600ms" }} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div ref={charChatEndRef} />
+                </div>
+
+                {/* Input */}
+                <div className="p-4 border-t border-[#e8e0d5] shrink-0">
+                  <div className="flex gap-2 items-end">
+                    <textarea value={charInput} onChange={e => setCharInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendCharMessage(); } }}
+                      placeholder={`Ask ${charChatCharacter.name}…`} rows={2}
+                      className="flex-1 resize-none bg-[#f7f3ed] border border-[#e8e0d5] focus:border-[#c07820] rounded-xl px-3.5 py-2.5 text-sm text-[#1c1410] placeholder-[#c8b89a] focus:outline-none leading-relaxed transition-colors" />
+                    <button onClick={sendCharMessage} disabled={!charInput.trim() || charLoading}
+                      className="w-10 h-10 rounded-xl disabled:bg-[#e8e0d5] disabled:text-[#c8b89a] text-white flex items-center justify-center transition-colors shrink-0 text-lg"
+                      style={{ backgroundColor: !charInput.trim() || charLoading ? undefined : CHAR_COLORS[storyCharacters.findIndex(c => c.name === charChatCharacter.name) % CHAR_COLORS.length] }}>
+                      ↑
+                    </button>
+                  </div>
+                  <p className="text-[#c8b89a] text-xs mt-1.5">Enter to send · Shift+Enter for new line</p>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
       </div>
 
     </main>

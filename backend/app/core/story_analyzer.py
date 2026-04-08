@@ -174,6 +174,107 @@ async def generate_world_observers(title: str, summary: str, themes: list) -> li
         return []
 
 
+STRUCTURE_PROMPT = """You are a literary analyst. Analyze the following story and return a JSON object describing its structure.
+Do NOT include characters — they are extracted separately.
+
+STORY TEXT:
+{story_text}
+
+Return a JSON object:
+{{
+  "title": "story title",
+  "author": "author name or Unknown",
+  "summary": "2-3 sentence summary",
+  "themes": ["theme1", "theme2"],
+
+  "timeline_metadata": {{
+    "unit_name": "Year",
+    "unit_plural": "Years",
+    "total_duration": 3.0,
+    "start_label": "Year 1",
+    "description": "The story spans 3 years"
+  }},
+
+  "timeline_phases": [
+    {{
+      "phase_id": "snake_case_id",
+      "name": "Phase Name",
+      "description": "what happens in this phase",
+      "timeline_position_start": 0.0,
+      "timeline_position_end": 0.2,
+      "chapter_range": [1, 2],
+      "trigger_event": "what caused this phase to begin"
+    }}
+  ],
+
+  "relationships": [
+    {{
+      "from": "Character A",
+      "to": "Character B",
+      "type": "controls|rivals|friends|enemies|family|uses",
+      "description": "relationship description",
+      "strength": 0.8
+    }}
+  ],
+
+  "key_events": [
+    {{
+      "event_id": "snake_case_id",
+      "name": "Event Name",
+      "description": "what happened",
+      "timeline_position": 0.15,
+      "chapter": 2,
+      "characters_involved": ["Character A"],
+      "is_turning_point": true,
+      "consequence": "what changed"
+    }}
+  ],
+
+  "knowledge_events": [
+    {{
+      "character": "Character Name",
+      "learns": "what they learn",
+      "timeline_position": 0.7,
+      "from_character": "who told them or null",
+      "was_hidden_before": true,
+      "impact_on_character": "how this changes them"
+    }}
+  ],
+
+  "potential_divergence_points": [
+    {{
+      "event_id": "reference to key_events event_id",
+      "description": "what could have been different here",
+      "affected_characters": ["Character A"]
+    }}
+  ]
+}}
+
+For timeline_metadata: use a story-native time unit.
+Animal Farm → Farm Years · Mahabharata → Parvas · war story → War Years.
+Return ONLY valid JSON. No markdown."""
+
+
+async def analyze_story_structure(full_text: str) -> dict:
+    """
+    Extract story structure — title, themes, events, phases.
+    Does NOT extract characters (handled by multi_pass_extractor).
+    Output is small so fits within model output token limits.
+    """
+    llm = get_analysis_llm()
+    prompt = STRUCTURE_PROMPT.format(story_text=full_text)
+    response = await llm.ainvoke(prompt)
+    raw = response.content
+    if isinstance(raw, list):
+        raw = "".join(
+            part.get("text", "") if isinstance(part, dict) else str(part)
+            for part in raw
+        )
+    raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
+    raw = re.sub(r"\n?```$", "", raw.strip())
+    return json.loads(raw)
+
+
 async def analyze_story(full_text: str) -> dict:
     """
     Analyze a story using the LLM and return structured JSON.

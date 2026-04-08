@@ -12,10 +12,8 @@ from app.db.database import get_db
 from app.models.story import Story
 from app.config import get_settings
 from app.core.pdf_extractor import extract_text, needs_chunking
-from app.core.story_analyzer import analyze_story, generate_world_observers
+from app.core.story_analyzer import analyze_story_structure, analyze_story, generate_world_observers
 from app.core.lightrag_analyzer import build_causal_graph
-from app.core.rag.chunker import chunk_by_chapter
-from app.core.rag.embedder import embed_chunks
 from app.core.character_research.researcher import research_all_characters
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -98,35 +96,67 @@ async def _analyze_story_background(story_id: str, pdf_path: str):
             _push_log(story, f"📄 Extracted {pages} pages · {words} words")
             await db.commit()
 
-            _push_log(story, "🔬 Sending full text to Gemini for analysis...")
+            # Step 2: Identify story structure (title, summary, themes, events)
+            # Uses structure-only prompt — output is small, no character extraction here
+            _push_log(story, "🔬 Analyzing story structure (title, themes, events)...")
             await db.commit()
 
-            # Step 2: Analyze story
-            analysis = await analyze_story(extracted["full_text"])
+            from app.core.multi_pass_extractor import determine_strategy
+            strategy = determine_strategy(extracted["word_count"])
+
+            if strategy["name"] == "single_pass":
+                # Small story: one Gemini call gets everything including characters
+                analysis = await analyze_story(extracted["full_text"])
+            else:
+                # Medium/large: structure-only call (characters handled by multi_pass_extractor)
+                analysis = await analyze_story_structure(extracted["full_text"])
             story.analysis = analysis
             story.title = analysis.get("title")
             story.author = analysis.get("author")
             story.summary = analysis.get("summary")
             story.themes = analysis.get("themes", [])
 
-            chars = analysis.get("characters", [])
-            phases = analysis.get("timeline_phases", [])
-            div_pts = analysis.get("potential_divergence_points", [])
-            char_names = [c["name"] for c in chars[:6]]
-            name_str = ", ".join(char_names) + ("…" if len(chars) > 6 else "")
-
             title_line = story.title or "Unknown title"
             if story.author:
                 title_line += f" by {story.author}"
             _push_log(story, f"📖 Story identified: {title_line}")
-            _push_log(story, f"🎭 {len(chars)} characters found: {name_str}")
+
+            phases = analysis.get("timeline_phases", [])
+            div_pts = analysis.get("potential_divergence_points", [])
             if phases:
                 _push_log(story, f"📅 {len(phases)} story phases mapped")
             if div_pts:
                 _push_log(story, f"⚡ {len(div_pts)} divergence points identified")
             await db.commit()
 
-            # Generate world observer personas (historically-situated external voices)
+            # Step 3: Multi-pass character extraction (scales with story size)
+            # Builds ChromaDB index, then extracts + enriches ALL characters via RAG
+            from app.core.multi_pass_extractor import multi_pass_extract, determine_strategy
+
+            story.status = "analyzing"
+            await db.commit()
+
+            _push_log(story, f"🧠 {strategy['description']}")
+            await db.commit()
+
+            # For single_pass, analysis already has characters — pass them through
+            existing_chars = analysis.get("characters") if strategy["name"] == "single_pass" else None
+
+            extracted_characters = await multi_pass_extract(
+                full_text=extracted["full_text"],
+                story_id=story_id,
+                title=story.title or "Unknown",
+                word_count=extracted["word_count"],
+                log_fn=char_log,
+                existing_characters=existing_chars,
+            )
+
+            char_names = [c["name"] for c in extracted_characters[:6]]
+            name_str = ", ".join(char_names) + ("…" if len(extracted_characters) > 6 else "")
+            _push_log(story, f"🎭 {len(extracted_characters)} characters found: {name_str}")
+            await db.commit()
+
+            # Generate world observer personas
             _push_log(story, "🌍 Generating world observer perspectives...")
             await db.commit()
             observers = await generate_world_observers(
@@ -136,8 +166,6 @@ async def _analyze_story_background(story_id: str, pdf_path: str):
             )
             if observers:
                 analysis["world_observers"] = observers
-                story.analysis = analysis
-                flag_modified(story, "analysis")
                 _push_log(story, f"🌍 {len(observers)} world observer perspectives generated")
             await db.commit()
 
@@ -149,35 +177,27 @@ async def _analyze_story_background(story_id: str, pdf_path: str):
                 causal_graph = await build_causal_graph(extracted["full_text"], story_id)
                 if causal_graph:
                     analysis["causal_graph"] = causal_graph
-                    story.analysis = analysis
-                    flag_modified(story, "analysis")
                     _push_log(story, "🕸️ Narrative causal graph complete")
                     await db.commit()
 
-            # Step 3: Character research
+            # Step 4: Deep character research (Wikipedia, web, multi-perspective)
             story.status = "researching"
-            _push_log(story, f"🔍 Starting deep research on {len(chars)} characters (2 at a time)...")
+            _push_log(story, f"🔍 Deep research on {len(extracted_characters)} characters...")
             await db.commit()
 
             enriched_characters = await research_all_characters(
-                characters=chars,
+                characters=extracted_characters,
                 story_title=analysis.get("title", "Unknown"),
                 log_fn=char_log,
             )
+
             updated_analysis = copy.deepcopy(analysis)
             updated_analysis["characters"] = enriched_characters
             story.analysis = updated_analysis
             flag_modified(story, "analysis")
             await db.commit()
 
-            # Step 4: Build RAG index
-            _push_log(story, "🏗️ Building semantic search index...")
-            await db.commit()
-            chunks = chunk_by_chapter(extracted["full_text"])
-            embed_chunks(story_id, chunks)
-            _push_log(story, f"🏗️ Indexed {len(chunks)} text chunks")
-
-            _push_log(story, f"✅ Done! {len(enriched_characters)} characters fully researched")
+            _push_log(story, f"✅ Done! {len(enriched_characters)} characters fully profiled")
             story.status = "ready"
             await db.commit()
 

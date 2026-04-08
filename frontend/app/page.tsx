@@ -52,19 +52,22 @@ export default function Home() {
   const hasStarted   = isProcessing || isDone;
 
   // Polling
+  const pollStoppedRef = useRef(false);
   useEffect(() => {
     if (!storyId) return;
-    let stopped = false;
+    pollStoppedRef.current = false;
     const poll = async () => {
-      if (stopped) return;
+      if (pollStoppedRef.current) return;
       try {
         const res  = await fetch(`${API}/stories/${storyId}/status`);
         const data = await res.json();
+        if (pollStoppedRef.current) return;
         setStatus(data.status);
         if (Array.isArray(data.progress_log) && data.progress_log.length > 0) {
           setActivityLog(data.progress_log.map((e: { msg: string }) => e.msg));
         }
         if (data.status === "ready") {
+          pollStoppedRef.current = true;
           const [sr, cr] = await Promise.all([
             fetch(`${API}/stories/${storyId}`),
             fetch(`${API}/stories/${storyId}/characters`),
@@ -75,10 +78,10 @@ export default function Home() {
         } else if (data.status !== "error") {
           setTimeout(poll, 2500);
         }
-      } catch { if (!stopped) setTimeout(poll, 3000); }
+      } catch { if (!pollStoppedRef.current) setTimeout(poll, 3000); }
     };
     poll();
-    return () => { stopped = true; };
+    return () => { pollStoppedRef.current = true; };
   }, [storyId]);
 
   // Sync characters → live graph nodes
@@ -316,23 +319,24 @@ export default function Home() {
                 </p>
               )}
 
-              {/* Terminal feed — shown below the upload box while processing */}
-              {isProcessing && (
+              {/* Terminal feed — shown while processing and after completion */}
+              {(isProcessing || (isDone && activityLog.length > 0)) && (
                 <div className="bg-[#0f0d0a] rounded-xl overflow-hidden border border-[#2a2018]">
                   <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[#2a2018]">
                     <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
                     <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
                     <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
-                    <span className="ml-2 text-[10px] text-white/20 font-mono">analysis.log</span>
+                    <span className="ml-2 text-xs text-white/50 font-mono">analysis.log</span>
+                    {isDone && <span className="ml-auto text-xs text-emerald-400/60 font-mono">done</span>}
                   </div>
-                  <div className="px-3 py-3 space-y-1.5 max-h-52 overflow-y-auto">
+                  <div className="px-3 py-3 space-y-1.5">
                     {activityLog.length === 0 ? (
                       <div className="flex items-center gap-2">
                         <span className="text-[#c07820] font-mono text-xs animate-breathe">▶</span>
                         <span className="text-white/40 font-mono text-xs">Starting pipeline...</span>
                       </div>
                     ) : activityLog.map((msg, i) => {
-                      const isLast = i === activityLog.length - 1;
+                      const isLast = i === activityLog.length - 1 && isProcessing;
                       return (
                         <div key={i} className="flex items-start gap-2 font-mono text-xs">
                           <span className={`shrink-0 mt-px ${isLast ? "text-[#c07820] animate-breathe" : "text-emerald-400/70"}`}>

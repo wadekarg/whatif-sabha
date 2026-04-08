@@ -30,6 +30,10 @@ class Debate(Base):
     # { characters: {name: {survived, new_role, new_beliefs, ...}}, world_state: {...}, new_events: [...] }
     alternate_world_state = Column(JSON, nullable=True)
 
+    # Per-character exploration rates — {character_name: float 0.0–1.0}
+    # Controls how often a character's hidden dimensions surface during debate
+    character_exploration = Column(JSON, default=dict)
+
     # "pending" | "running" | "completed" | "error"
     status = Column(String, default="pending")
 

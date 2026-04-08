@@ -2,6 +2,9 @@ import json
 import uuid
 import asyncio
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +30,16 @@ from app.core.agents.world_observer_agent import (
     _select_observers,
     observer_respond_stream,
     should_invite_observer,
+    _extract_question_target,
+)
+from app.core.agents.power_interrogator import (
+    should_interrogate,
+    interrogator_stream,
+    extract_interrogation_target,
+)
+from app.core.agents.character_evolution import (
+    evolve_characters_after_debate,
+    get_objective_hint,
 )
 
 router = APIRouter(prefix="/debates", tags=["debates"])
@@ -37,6 +50,7 @@ class DebateStartRequest(BaseModel):
     divergence_description: str
     character_names: Optional[list[str]] = None  # None = use all characters
     max_rounds: int = 20
+    character_exploration: Optional[dict[str, float]] = None  # {name: 0.0–1.0}, default 0.10
 
 
 @router.post("")
@@ -55,11 +69,17 @@ async def start_debate(req: DebateStartRequest, db: AsyncSession = Depends(get_d
             if c["name"] in req.character_names
         ]
     else:
-        # Use characters with importance > 0.5 — keep core cast, avoid 10+ character debates
-        characters = [c for c in all_characters if c.get("importance", 0) > 0.5]
+        characters = all_characters
 
     if len(characters) < 2:
         raise HTTPException(status_code=400, detail="Need at least 2 characters to debate.")
+
+    # Clamp exploration rates to [0.0, 1.0] and default missing characters to 0.10
+    exploration_map = {}
+    for c in characters:
+        name = c["name"]
+        raw = (req.character_exploration or {}).get(name, 0.10)
+        exploration_map[name] = max(0.0, min(1.0, float(raw)))
 
     debate = Debate(
         id=str(uuid.uuid4()),
@@ -68,6 +88,7 @@ async def start_debate(req: DebateStartRequest, db: AsyncSession = Depends(get_d
         participating_characters=[c["name"] for c in characters],
         transcript=[],
         status="pending",
+        character_exploration=exploration_map,
     )
     db.add(debate)
     await db.commit()
@@ -110,14 +131,21 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     participating = set(debate.participating_characters)
     characters = [c for c in all_characters if c["name"] in participating]
 
+    # Per-character exploration rates (default 0.10 if not stored)
+    exploration_rates: dict[str, float] = debate.character_exploration or {}
+
     # World observers — select 4 most relevant to this divergence question
     all_observers = story.analysis.get("world_observers", [])
     active_observers = _select_observers(all_observers, debate.divergence_description, num_active=4)
     last_observer_at: int = 0  # transcript index when an observer last spoke
+    pending_observer_question: dict | None = None  # {character, question, observer_name}
+
+    # Power interrogator — fires once at debate midpoint
+    last_interrogation_at: int = 0  # 0 = not yet fired
 
     transcript = list(debate.transcript or [])
     round_number = len(transcript)
-    max_rounds = max(len(characters) * 3, 20)
+    max_rounds = max(len(characters) * 5, 30)
 
     def sse(event_type: str, data: dict) -> str:
         return f"data: {json.dumps({'type': event_type, **data})}\n\n"
@@ -163,13 +191,31 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             judge_result = {"score": 7, "issue": None}
             correction_hint = None
 
-            # 10% exploration: inject a hidden dimension so character reveals something unexpected
+            # Per-character exploration: inject a hidden dimension at configured rate
+            # Also surfaces evolved objective hints (from prior debate history)
             exploration_hint = None
-            if character.get("hidden_dimensions") and random.random() < 0.10:
+            char_exploration_rate = exploration_rates.get(next_speaker_name, 0.10)
+            if character.get("hidden_dimensions") and random.random() < char_exploration_rate:
                 exploration_hint = random.choice(character["hidden_dimensions"])
                 yield sse("exploration", {
                     "character": next_speaker_name,
                     "hint": exploration_hint,
+                    "rate": char_exploration_rate,
+                })
+            # Evolved objective hint — surfaces true drive from accumulated debate history
+            elif objective_hint := get_objective_hint(character):
+                if random.random() < 0.25:  # 25% chance to surface evolved drive
+                    exploration_hint = objective_hint
+
+            # Check if an observer directed a question at this character
+            observer_challenge = None
+            if pending_observer_question and pending_observer_question["character"] == next_speaker_name:
+                observer_challenge = pending_observer_question
+                pending_observer_question = None
+                yield sse("observer_challenge", {
+                    "character": next_speaker_name,
+                    "observer_name": observer_challenge["observer_name"],
+                    "question": observer_challenge["question"],
                 })
 
             # Recall relevant memories from previous debates (character soul)
@@ -200,6 +246,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         correction_hint=correction_hint,
                         exploration_hint=exploration_hint,
                         memory_context=memory_context,
+                        observer_challenge=observer_challenge,
                     ):
                         full_response += token
                         yield sse("token", {"character": next_speaker_name, "text": token})
@@ -253,15 +300,24 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         yield sse("token", {"character": next_speaker_name, "text": token})
 
             except Exception as e:
-                # LLM call failed — skip this turn and keep going
+                from app.config import _is_rate_limit
+                if _is_rate_limit(e):
+                    # Rate limit — wait and retry the same turn, don't count as hard error
+                    yield sse("turn_error", {
+                        "character": next_speaker_name,
+                        "reason": "rate limited — retrying...",
+                    })
+                    await asyncio.sleep(8)
+                    continue  # retry same round_number
+                # Real error — count toward hard stop
                 consecutive_errors += 1
                 yield sse("turn_error", {
                     "character": next_speaker_name,
                     "reason": str(e)[:120],
                 })
-                if consecutive_errors >= 3:
+                if consecutive_errors >= 5:
                     break
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
                 round_number += 1
                 continue
 
@@ -325,11 +381,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         "observer_name": observer["name"],
                         "era": observer.get("era", ""),
                     })
+                    char_names = [c["name"] for c in characters]
                     async for token in observer_respond_stream(
                         observer=observer,
                         story_title=story.title or "",
                         divergence=debate.divergence_description,
                         debate_history=transcript,
+                        characters=char_names,
                     ):
                         obs_response += token
                         yield sse("observer_token", {
@@ -338,16 +396,54 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             "text": token,
                         })
                     if obs_response:
+                        # Extract directed question if observer challenged a character
+                        q_target, q_text = _extract_question_target(obs_response, char_names)
+                        if q_target and q_text:
+                            pending_observer_question = {
+                                "character": q_target,
+                                "question": q_text,
+                                "observer_name": observer["name"],
+                            }
                         yield sse("observer_end", {
                             "observer_id": observer["id"],
                             "observer_name": observer["name"],
                             "era": observer.get("era", ""),
                             "message": obs_response,
+                            "question_target": q_target,
                         })
                         last_observer_at = len(transcript)
                 except Exception as obs_exc:
                     import logging as _log
                     _log.getLogger(__name__).warning(f"Observer failed (non-fatal): {obs_exc}")
+
+            # Power interrogator — fires once at debate midpoint
+            if await should_interrogate(transcript, last_interrogation_at, max_rounds):
+                char_names = [c["name"] for c in characters]
+                interrog_response = ""
+                try:
+                    yield sse("interrogator_start", {})
+                    async for token in interrogator_stream(
+                        transcript=transcript,
+                        divergence=debate.divergence_description,
+                        characters=char_names,
+                    ):
+                        interrog_response += token
+                        yield sse("interrogator_token", {"text": token})
+                    if interrog_response:
+                        i_target, i_question = extract_interrogation_target(interrog_response, char_names)
+                        if i_target and i_question and not pending_observer_question:
+                            pending_observer_question = {
+                                "character": i_target,
+                                "question": i_question,
+                                "observer_name": "The Interrogator",
+                            }
+                        yield sse("interrogator_end", {
+                            "message": interrog_response,
+                            "question_target": i_target,
+                        })
+                        last_interrogation_at = len(transcript)
+                except Exception as interrog_exc:
+                    logger.warning(f"Interrogator failed (non-fatal): {interrog_exc}")
 
             await asyncio.sleep(0.3)
 
@@ -401,6 +497,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             "total_rounds": round_number,
             "oracle_ready": bool(alternate_world_state),
         })
+
+        # Character evolution — run in background after debate ends (non-blocking)
+        asyncio.create_task(evolve_characters_after_debate(
+            story_id=debate.story_id,
+            debate_id=debate_id,
+            transcript=transcript,
+            characters=characters,
+            divergence=debate.divergence_description,
+        ))
 
     finally:
         # Always persist final state — even if client disconnects mid-stream
@@ -467,16 +572,20 @@ async def oracle_stream(
     from app.core.agents.oracle_agent import oracle_respond_stream
 
     async def generate():
-        async for token in oracle_respond_stream(
-            character_name=body.character_name,
-            character_data=character_data,
-            alternate_world_state=debate.alternate_world_state,
-            divergence=debate.divergence_description,
-            story_title=story.title if story else "",
-            question=body.question,
-            chat_history=body.history,
-        ):
-            yield f"data: {json.dumps({'type': 'token', 'text': token})}\n\n"
+        try:
+            async for token in oracle_respond_stream(
+                character_name=body.character_name,
+                character_data=character_data,
+                alternate_world_state=debate.alternate_world_state,
+                divergence=debate.divergence_description,
+                story_title=story.title if story else "",
+                question=body.question,
+                chat_history=body.history,
+            ):
+                yield f"data: {json.dumps({'type': 'token', 'text': token})}\n\n"
+        except Exception as e:
+            logger.warning(f"Oracle stream error for {body.character_name}: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': 'The oracle could not reach this character right now.'})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     from fastapi.responses import StreamingResponse as SR

@@ -55,19 +55,19 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           <label className="text-xs font-semibold text-[#1c1410]">{label}</label>
           {configured !== undefined && (
             configured
-              ? <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full font-medium">✓ configured</span>
-              : <span className="text-[10px] text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full font-medium">missing</span>
+              ? <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-medium">✓ set</span>
+              : <span className="text-xs text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full font-medium">missing</span>
           )}
         </div>
         <a href={href} target="_blank" rel="noopener noreferrer"
-          className="text-[10px] text-[#c07820] hover:underline">Get free key →</a>
+          className="text-xs text-[#c07820] hover:underline">Get free key →</a>
       </div>
       <input
         type="password"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={configured && !value ? "already set — paste new key to override" : placeholder}
-        className={`w-full px-3 py-2 text-xs rounded-lg border bg-white focus:outline-none focus:border-[#c07820] font-mono placeholder:font-sans transition-colors ${
+        className={`w-full px-3 py-2.5 text-sm rounded-lg border bg-white focus:outline-none focus:border-[#c07820] font-mono placeholder:font-sans transition-colors ${
           configured && !value ? "border-emerald-200 placeholder:text-emerald-400/70" : "border-[#e8e0d5] placeholder:text-[#b8a898]"
         }`}
       />
@@ -82,10 +82,10 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="px-6 pt-5 pb-4 border-b border-[#e8e0d5]">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold text-[15px] text-[#1c1410]">AI Settings</h2>
-              <p className="text-xs text-[#6b5c4e] mt-0.5">Add your API keys to use WhatIfSabha. All free tiers work.</p>
+              <h2 className="font-bold text-lg text-[#1c1410]">AI Settings</h2>
+              <p className="text-sm text-[#6b5c4e] mt-0.5">Add your API keys. All free tiers work.</p>
             </div>
-            <button onClick={onClose} className="w-7 h-7 rounded-full bg-[#e8e0d5] hover:bg-[#d8c8b8] flex items-center justify-center text-[#6b5c4e] text-sm transition-colors">✕</button>
+            <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#e8e0d5] hover:bg-[#d8c8b8] flex items-center justify-center text-[#6b5c4e] text-base transition-colors">✕</button>
           </div>
         </div>
 
@@ -125,7 +125,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           />
 
           <div className="pt-1 rounded-xl bg-[#fef9f0] border border-[#f0c060]/40 px-4 py-3">
-            <p className="text-[11px] text-[#6b5c4e] leading-relaxed">
+            <p className="text-xs text-[#6b5c4e] leading-relaxed">
               <span className="font-semibold text-[#c07820]">How keys are used:</span>{" "}
               Gemini · story analysis — Cerebras · character agents — Groq · judge &amp; narrator (with auto-fallback through gemma2, llama-3.1-8b) — NVIDIA · final fallback when Groq limits are hit.
               Keys stored in your browser only.
@@ -138,11 +138,11 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={save}
             disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-[#c07820] hover:bg-[#a86a18] text-white text-sm font-semibold transition-colors disabled:opacity-60"
+            className="flex-1 py-3 rounded-xl bg-[#c07820] hover:bg-[#a86a18] text-white text-base font-semibold transition-colors disabled:opacity-60"
           >
             {saved ? "✓ Saved!" : saving ? "Saving..." : "Save Keys"}
           </button>
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-[#e8e0d5] text-[#6b5c4e] hover:bg-white text-sm transition-colors">
+          <button onClick={onClose} className="px-5 py-3 rounded-xl border border-[#e8e0d5] text-[#6b5c4e] hover:bg-white text-base transition-colors">
             Cancel
           </button>
         </div>
@@ -186,7 +186,7 @@ export default function NavBar() {
       <div className="w-8 h-8 rounded-xl bg-[#c07820] flex items-center justify-center shadow-sm group-hover:bg-[#a86a18] transition-colors overflow-hidden">
         <span style={{ color: "#fef9c3", fontSize: "28px", lineHeight: 1 }}>☸</span>
       </div>
-      <span className="font-bold text-[17px] tracking-tight text-[#1c1410]">
+      <span className="font-bold text-lg tracking-tight text-[#1c1410]">
         WhatIf<span className="text-[#c07820]">Sabha</span>
       </span>
     </Link>
@@ -196,7 +196,7 @@ export default function NavBar() {
     <Link
       key={href}
       href={href}
-      className={`text-xs font-medium transition-colors px-3.5 py-1.5 rounded-full border ${
+      className={`text-sm font-medium transition-colors px-4 py-2 rounded-full border ${
         active
           ? "bg-[#c07820] text-white border-[#c07820]"
           : "text-[#6b5c4e] hover:text-[#1c1410] border-[#e8e0d5] hover:border-[#c8b89a] bg-white/60 hover:bg-white"
@@ -225,7 +225,7 @@ export default function NavBar() {
             <button
               onClick={() => setShowSettings(true)}
               title="AI Settings"
-              className="ml-1 relative w-8 h-8 rounded-full border border-[#e8e0d5] bg-white/60 hover:bg-white hover:border-[#c8b89a] flex items-center justify-center text-[#6b5c4e] hover:text-[#1c1410] transition-colors text-sm"
+              className="ml-1 relative w-9 h-9 rounded-full border border-[#e8e0d5] bg-white/60 hover:bg-white hover:border-[#c8b89a] flex items-center justify-center text-[#6b5c4e] hover:text-[#1c1410] transition-colors text-base"
             >
               ⚙
               {keysConfigured !== null && (

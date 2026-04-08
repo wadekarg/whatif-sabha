@@ -136,7 +136,7 @@ export default function CharacterDetailPage() {
                 const hue = (i / tlPhases.length) * 240; // blue → orange
                 return (
                   <div key={i} title={tl.name}
-                    className="absolute h-full flex items-center justify-center text-[10px] font-medium text-white/80 overflow-hidden"
+                    className="absolute h-full flex items-center justify-center text-xs font-medium text-white/80 overflow-hidden"
                     style={{ left: `${start}%`, width: `${width}%`, backgroundColor: `hsl(${hue},50%,45%)`, borderRight: "1px solid rgba(255,255,255,0.3)" }}>
                     <span className="truncate px-1">{tl.name}</span>
                   </div>
@@ -149,7 +149,7 @@ export default function CharacterDetailPage() {
                   style={{ left: `${ke.timeline_position * 100}%` }} />
               ))}
             </div>
-            <div className="flex justify-between text-[10px] text-[#a09282]">
+            <div className="flex justify-between text-xs text-[#a09282]">
               <span>{toUnit(0)}</span>
               <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#c07820]/70 inline-block" /> = knowledge gained</span>
               <span>{toUnit(1)}</span>
@@ -184,7 +184,7 @@ export default function CharacterDetailPage() {
                       {/* ── What changed since last phase ── */}
                       {hasDiff && (
                         <div className="ml-12 mb-2 mt-1 bg-[#fef9f0] border border-[#f0c060]/40 rounded-xl px-4 py-2.5 space-y-1">
-                          <div className="text-[10px] text-[#c07820] font-semibold uppercase tracking-widest mb-1">↕ What changed</div>
+                          <div className="text-xs text-[#c07820] font-semibold uppercase tracking-widest mb-1">↕ What changed</div>
                           {(diff!.added as string[]).map((t) => <div key={t} className="text-xs text-emerald-700 flex gap-1.5 items-center"><span className="text-emerald-500 font-bold">+</span> trait: {t}</div>)}
                           {(diff!.removed as string[]).map((t) => <div key={t} className="text-xs text-red-500 flex gap-1.5 items-center"><span className="font-bold">−</span> trait: {t}</div>)}
                           {(diff!.newKnowledge as string[]).map((k) => <div key={k} className="text-xs text-blue-700 flex gap-1.5 items-center"><span className="text-blue-500 font-bold">↗</span> learned: {k}</div>)}
@@ -211,12 +211,12 @@ export default function CharacterDetailPage() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-semibold text-sm text-[#1c1410]">{phase.tl_name}</span>
                                   {phase.tl_start != null && (
-                                    <span className="text-[10px] text-[#a09282] bg-[#f0ebe4] px-2 py-0.5 rounded-full">
+                                    <span className="text-xs text-[#a09282] bg-[#f0ebe4] px-2 py-0.5 rounded-full">
                                       {toUnit(phase.tl_start)} → {toUnit(phase.tl_end)}
                                     </span>
                                   )}
                                   {phase.chapter_range?.length === 2 && (
-                                    <span className="text-[10px] text-[#a09282]">ch. {phase.chapter_range[0]}–{phase.chapter_range[1]}</span>
+                                    <span className="text-xs text-[#a09282]">ch. {phase.chapter_range[0]}–{phase.chapter_range[1]}</span>
                                   )}
                                 </div>
                                 {phase.emotional_state && (
@@ -225,9 +225,9 @@ export default function CharacterDetailPage() {
                                 {!isOpen && phase.personality_traits?.length > 0 && (
                                   <div className="flex flex-wrap gap-1 mt-2">
                                     {phase.personality_traits.slice(0, 4).map((t: string) => (
-                                      <span key={t} className="text-[10px] bg-[#f7f3ed] text-[#6b5c4e] px-2 py-0.5 rounded-full border border-[#e8e0d5]">{t}</span>
+                                      <span key={t} className="text-xs bg-[#f7f3ed] text-[#6b5c4e] px-2 py-0.5 rounded-full border border-[#e8e0d5]">{t}</span>
                                     ))}
-                                    {phase.personality_traits.length > 4 && <span className="text-[10px] text-[#a09282]">+{phase.personality_traits.length - 4}</span>}
+                                    {phase.personality_traits.length > 4 && <span className="text-xs text-[#a09282]">+{phase.personality_traits.length - 4}</span>}
                                   </div>
                                 )}
                               </div>
@@ -242,7 +242,7 @@ export default function CharacterDetailPage() {
                               {/* Trigger event */}
                               {phase.tl_trigger && (
                                 <div className="px-5 py-3 bg-[#fef9f0] border-b border-[#f0c060]/30">
-                                  <span className="text-[10px] text-[#c07820] uppercase tracking-widest font-semibold">What triggered this phase · </span>
+                                  <span className="text-xs text-[#c07820] uppercase tracking-widest font-semibold">What triggered this phase · </span>
                                   <span className="text-xs text-[#6b5c4e]">{phase.tl_trigger}</span>
                                 </div>
                               )}
@@ -251,7 +251,7 @@ export default function CharacterDetailPage() {
                                 {/* Traits */}
                                 {phase.personality_traits?.length > 0 && (
                                   <div>
-                                    <div className="text-[10px] text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Personality</div>
+                                    <div className="text-xs text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Personality</div>
                                     <div className="flex flex-wrap gap-1.5">
                                       {phase.personality_traits.map((t: string, ti: number) => {
                                         const isNew = pi > 0 && !(sortedPhases[pi-1].personality_traits || []).includes(t);
@@ -268,7 +268,7 @@ export default function CharacterDetailPage() {
                                 {/* Motivations */}
                                 {phase.motivations?.length > 0 && (
                                   <div>
-                                    <div className="text-[10px] text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Drives</div>
+                                    <div className="text-xs text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Drives</div>
                                     <ul className="space-y-1.5">
                                       {phase.motivations.map((m: any, mi: number) => {
                                         const s = typeof m === "string" ? m : JSON.stringify(m);
@@ -287,7 +287,7 @@ export default function CharacterDetailPage() {
                                 {/* Fears */}
                                 {phase.fears?.length > 0 && (
                                   <div>
-                                    <div className="text-[10px] text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Fears</div>
+                                    <div className="text-xs text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Fears</div>
                                     <ul className="space-y-1.5">
                                       {phase.fears.map((f: any, fi: number) => (
                                         <li key={fi} className="text-xs text-[#6b5c4e] flex gap-2">
@@ -302,7 +302,7 @@ export default function CharacterDetailPage() {
                                 {/* Relationships */}
                                 {phase.relationships && Object.keys(phase.relationships).length > 0 && (
                                   <div>
-                                    <div className="text-[10px] text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Relationships</div>
+                                    <div className="text-xs text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Relationships</div>
                                     <div className="space-y-1.5">
                                       {Object.entries(phase.relationships).map(([rname, rel]: [string, any]) => {
                                         const trust = Math.round((rel.trust ?? 0.5) * 100);
@@ -314,9 +314,9 @@ export default function CharacterDetailPage() {
                                             <div className="flex-1 h-1.5 bg-[#e8e0d5] rounded-full overflow-hidden">
                                               <div className="h-full rounded-full transition-all" style={{ width: `${trust}%`, backgroundColor: trust > 60 ? "#10b981" : trust > 30 ? "#f59e0b" : "#ef4444" }} />
                                             </div>
-                                            <span className="text-[10px] text-[#a09282] w-8 text-right shrink-0">{trust}%</span>
+                                            <span className="text-xs text-[#a09282] w-8 text-right shrink-0">{trust}%</span>
                                             {trustDelta !== 0 && (
-                                              <span className={`text-[10px] font-medium shrink-0 ${trustDelta > 0 ? "text-emerald-600" : "text-red-500"}`}>
+                                              <span className={`text-xs font-medium shrink-0 ${trustDelta > 0 ? "text-emerald-600" : "text-red-500"}`}>
                                                 {trustDelta > 0 ? "+" : ""}{trustDelta}
                                               </span>
                                             )}
@@ -331,7 +331,7 @@ export default function CharacterDetailPage() {
                               {/* Knowledge state */}
                               {phase.knowledge_state && Object.keys(phase.knowledge_state).length > 0 && (
                                 <div className="px-5 pb-5">
-                                  <div className="text-[10px] text-[#a09282] uppercase tracking-widest mb-2 font-semibold">What they know</div>
+                                  <div className="text-xs text-[#a09282] uppercase tracking-widest mb-2 font-semibold">What they know</div>
                                   <div className="grid grid-cols-2 gap-1.5">
                                     {Object.entries(phase.knowledge_state).map(([k, v]) => {
                                       const prevKnow = pi > 0 ? (sortedPhases[pi-1].knowledge_state || {})[k] : undefined;
@@ -357,7 +357,7 @@ export default function CharacterDetailPage() {
                               {/* Internal voice */}
                               {phase.internal_voice && (
                                 <div className="px-5 pb-5 border-t border-[#e8e0d5] pt-4">
-                                  <div className="text-[10px] text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Inner voice</div>
+                                  <div className="text-xs text-[#a09282] uppercase tracking-widest mb-2 font-semibold">Inner voice</div>
                                   <p className="text-sm text-[#6b5c4e] leading-relaxed italic border-l-2 pl-3" style={{ borderColor: color + "60" }}>
                                     {phase.internal_voice}
                                   </p>
@@ -367,18 +367,18 @@ export default function CharacterDetailPage() {
                               {/* Knowledge events in this phase */}
                               {phaseKE.length > 0 && (
                                 <div className="px-5 pb-5 border-t border-[#e8e0d5] pt-4">
-                                  <div className="text-[10px] text-[#c07820] uppercase tracking-widest mb-3 font-semibold">Knowledge gained this phase</div>
+                                  <div className="text-xs text-[#c07820] uppercase tracking-widest mb-3 font-semibold">Knowledge gained this phase</div>
                                   <div className="space-y-2">
                                     {phaseKE.map((ke, ki) => (
                                       <div key={ki} className="flex gap-3 items-start">
                                         <div className="w-5 h-5 rounded-full bg-[#fef3e2] border border-[#f0c060] flex items-center justify-center shrink-0 mt-0.5">
-                                          <span className="text-[9px] text-[#c07820] font-bold">↗</span>
+                                          <span className="text-xs text-[#c07820] font-bold">↗</span>
                                         </div>
                                         <div>
                                           <div className="text-xs font-medium text-[#1c1410]">{ke.learns}</div>
-                                          <div className="text-[10px] text-[#c07820] mt-0.5">{toUnit(ke.timeline_position)}</div>
+                                          <div className="text-xs text-[#c07820] mt-0.5">{toUnit(ke.timeline_position)}</div>
                                           {ke.from_character && (
-                                            <div className="text-[10px] text-[#a09282] mt-0.5">from {ke.from_character}{ke.was_hidden_before ? " · was hidden" : ""}</div>
+                                            <div className="text-xs text-[#a09282] mt-0.5">from {ke.from_character}{ke.was_hidden_before ? " · was hidden" : ""}</div>
                                           )}
                                           {ke.impact_on_character && (
                                             <div className="text-xs text-[#6b5c4e] mt-1 italic">{ke.impact_on_character}</div>
