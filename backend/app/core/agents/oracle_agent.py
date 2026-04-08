@@ -143,8 +143,6 @@ async def oracle_respond_stream(
 
     They do NOT break the fourth wall — they speak as if this IS their reality.
     """
-    from app.config import get_narrator_fallbacks
-
     world_state = alternate_world_state or {}
     char_state = world_state.get("characters", {}).get(character_name, {})
     world_summary = world_state.get("world_summary", "")
@@ -186,20 +184,25 @@ Be authentic to who you are — your personality, your voice, your way of speaki
 
     messages.append(HumanMessage(content=question))
 
-    fallbacks = get_narrator_fallbacks(temperature=0.75)
-    if not fallbacks:
+    from app.config import get_agent_llm, get_narrator_fallbacks, _is_rate_limit
+
+    # Try Cerebras first (same as character agents — most reliable), then Groq/NVIDIA
+    candidates = [get_agent_llm(max_tokens=400)]
+    for llm, _label in get_narrator_fallbacks(temperature=0.75):
+        candidates.append(llm)
+
+    if not candidates:
         return
 
     last_exc = None
-    for llm, _label in fallbacks:
+    for llm in candidates:
         try:
             async for chunk in llm.astream(messages):
                 if chunk.content:
                     yield chunk.content
             return
         except Exception as e:
-            msg_str = str(e).lower()
-            if "429" in msg_str or "rate_limit" in msg_str or "quota" in msg_str:
+            if _is_rate_limit(e):
                 last_exc = e
                 continue
             raise
