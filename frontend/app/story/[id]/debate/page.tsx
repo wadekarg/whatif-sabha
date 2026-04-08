@@ -992,163 +992,238 @@ export default function DebatePage() {
   /* ── IDLE / SETUP SCREEN ── */
   if (status === "idle" || status === "starting") {
     return (
-      <main className="flex-1 flex flex-col bg-[#f7f3ed]">
-        <div className="bg-white border-b border-[#e8e0d5]">
-          <div className="max-w-2xl mx-auto px-6 py-4 flex items-center gap-3">
-            <Link href={`/story/${id}`} className="text-[#a09282] hover:text-[#1c1410] text-sm transition-colors">
-              ← Back
+      <main className="flex-1 flex flex-col bg-[#f7f3ed] overflow-y-auto">
+        {/* Top bar */}
+        <div className="bg-white border-b border-[#e8e0d5] shrink-0">
+          <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
+            <Link href={`/story/${id}`} className="text-[#a09282] hover:text-[#1c1410] text-sm transition-colors flex items-center gap-1.5">
+              ← {storyTitle || "Back"}
             </Link>
+            <div className="text-xs font-semibold tracking-[0.2em] text-[#c07820] uppercase">Sabha · The Great Debate</div>
           </div>
         </div>
 
-        <div className="flex-1 flex items-start justify-center p-8 pt-12">
-          <div className="max-w-xl w-full space-y-8 animate-fade-up">
-            <div className="text-center space-y-3">
-              <div className="text-xs font-semibold tracking-[0.25em] text-[#c07820] bg-[#fef3e2] border border-[#f0c060]/50 px-4 py-1.5 rounded-full uppercase inline-block">
-                Sabha — The Great Debate
-              </div>
-              <h1 className="text-4xl font-bold text-[#1c1410] leading-tight">
-                What if things had<br />gone <span className="ink-shimmer">differently?</span>
-              </h1>
-              <p className="text-[#6b5c4e] leading-relaxed">
-                Describe the alternate scenario. The characters will take it from there.
-              </p>
-            </div>
+        <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-6 py-10 gap-8">
 
-            <div className="bg-white rounded-2xl border-2 border-[#e8e0d5] focus-within:border-[#c07820] transition-colors overflow-hidden">
-              <div className="px-5 pt-4 pb-1">
-                <div className="text-xs font-semibold text-[#c07820] uppercase tracking-widest mb-2">What if...</div>
-                <textarea
-                  value={divergence}
-                  onChange={(e) => setDivergence(e.target.value)}
-                  placeholder="Boxer refused to go to the slaughterhouse and led a revolt against Napoleon..."
-                  className="w-full bg-transparent resize-none h-28 text-[#1c1410] placeholder-[#c8b89a] focus:outline-none text-base leading-relaxed"
-                />
-              </div>
-              <div className="px-5 py-3 bg-[#faf7f2] border-t border-[#e8e0d5] flex items-center justify-between">
-                <span className="text-xs text-[#a09282]">
-                  {divergence.length > 0 ? `${divergence.length} chars` : "Describe an alternate scenario"}
-                </span>
-                <button
-                  onClick={startDebate}
-                  disabled={!divergence.trim() || status === "starting"}
-                  className="flex items-center gap-2 bg-[#c07820] hover:bg-[#a86a18] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-6 py-2.5 rounded-xl transition-all text-base shadow-sm"
-                >
-                  {status === "starting" ? (
-                    <><span className="animate-breathe">⚡</span> Starting...</>
-                  ) : (
-                    <><span>⚡</span> Begin Sabha</>
-                  )}
-                </button>
-              </div>
-            </div>
+          {/* Page heading */}
+          <div className="text-center space-y-2">
+            <h1 className="text-4xl font-bold text-[#1c1410] leading-tight">
+              What if things had gone <span className="ink-shimmer">differently?</span>
+            </h1>
+            <p className="text-[#6b5c4e]">Set the scenario, pick your cast, and let the debate begin.</p>
+          </div>
 
-            {storyCharacters.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-xs text-[#a09282] uppercase tracking-widest font-medium">
-                  <span className="w-4 h-px bg-[#e8e0d5]" />
-                  Character exploration
-                  <span className="w-4 h-px bg-[#e8e0d5]" />
+          {/* Two-column body */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+            {/* ── SECTION 1: The Scenario ── */}
+            <div className="flex flex-col gap-4">
+              {/* Section header */}
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full bg-[#c07820] text-white text-xs font-bold flex items-center justify-center shrink-0">1</div>
+                <div>
+                  <div className="text-base font-bold text-[#1c1410]">Set the Scenario</div>
+                  <div className="text-xs text-[#a09282]">Describe the alternate divergence point</div>
                 </div>
-                <p className="text-xs text-[#a09282] leading-relaxed -mt-1">
-                  How often each character reveals something unexpected — a hidden dimension beneath their public position.
-                </p>
-                <div className="flex items-center gap-3 mb-1">
-                  <button onClick={() => setSelectedCharacters(new Set(storyCharacters.map(c => c.name)))}
-                    className="text-xs text-[#c07820] hover:underline">Select all</button>
-                  <span className="text-[#e8e0d5]">·</span>
-                  <button onClick={() => setSelectedCharacters(new Set())}
-                    className="text-xs text-[#a09282] hover:underline">Clear</button>
-                  <span className="text-xs text-[#a09282] ml-auto">{selectedCharacters.size} selected</span>
-                </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {storyCharacters.map((char) => {
-                    const rate = explorationRates[char.name] ?? 10;
-                    const color = CHAR_COLORS[storyCharacters.indexOf(char) % CHAR_COLORS.length];
-                    const selected = selectedCharacters.has(char.name);
+              </div>
+
+              {/* Suggestions */}
+              {suggestions.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium text-[#a09282] uppercase tracking-widest mb-2">Story suggests</div>
+                  {suggestions.map((s) => {
+                    const active = divergence === s.description;
                     return (
-                      <div key={char.name}
-                        className={`rounded-xl border px-4 py-3 transition-all ${selected ? "bg-white border-[#e8e0d5]" : "bg-[#faf7f2] border-[#f0ebe4] opacity-60"}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
+                      <button
+                        key={s.event_id}
+                        onClick={() => setDivergence(s.description)}
+                        className={`w-full text-left px-4 py-3 rounded-xl border transition-all duration-150 group ${
+                          active
+                            ? "border-[#c07820] bg-[#fef3e2]"
+                            : "border-[#e8e0d5] bg-white hover:border-[#c07820]/50 hover:bg-[#fef9f2]"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className={`mt-0.5 shrink-0 text-sm font-bold transition-colors ${active ? "text-[#c07820]" : "text-[#c8b89a] group-hover:text-[#c07820]"}`}>→</span>
+                          <div>
+                            <p className={`text-sm leading-snug ${active ? "text-[#1c1410] font-medium" : "text-[#6b5c4e]"}`}>{s.description}</p>
+                            {s.affected_characters.length > 0 && (
+                              <div className="flex gap-1 mt-1.5 flex-wrap">
+                                {s.affected_characters.map((c: string, ci: number) => (
+                                  <span key={c} className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                    style={{ background: CHAR_COLORS[ci % CHAR_COLORS.length].hex + "18", color: CHAR_COLORS[ci % CHAR_COLORS.length].hex }}>
+                                    {c}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  <div className="flex items-center gap-3 pt-1">
+                    <div className="flex-1 h-px bg-[#e8e0d5]" />
+                    <span className="text-xs text-[#c8b89a]">or write your own</span>
+                    <div className="flex-1 h-px bg-[#e8e0d5]" />
+                  </div>
+                </div>
+              )}
+
+              {/* Textarea card */}
+              <div className={`bg-white rounded-2xl border-2 transition-colors overflow-hidden ${divergence.trim() ? "border-[#c07820]" : "border-[#e8e0d5] focus-within:border-[#c07820]"}`}>
+                <div className="px-5 pt-4 pb-2">
+                  <div className="text-xs font-bold text-[#c07820] uppercase tracking-widest mb-2.5">What if…</div>
+                  <textarea
+                    value={divergence}
+                    onChange={(e) => setDivergence(e.target.value)}
+                    placeholder="Boxer refused to go to the slaughterhouse and led a revolt against Napoleon…"
+                    className="w-full bg-transparent resize-none h-32 text-[#1c1410] placeholder-[#c8b89a] focus:outline-none text-base leading-relaxed"
+                  />
+                </div>
+                <div className="px-5 py-3 bg-[#faf7f2] border-t border-[#e8e0d5] flex items-center justify-between">
+                  <span className="text-xs text-[#a09282]">
+                    {divergence.length > 0 ? `${divergence.length} chars` : "Be specific — characters will debate this exact point"}
+                  </span>
+                  <button
+                    onClick={startDebate}
+                    disabled={!divergence.trim() || status === "starting"}
+                    className="flex items-center gap-2 bg-[#c07820] hover:bg-[#a86a18] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-5 py-2 rounded-xl transition-all text-sm shadow-sm"
+                  >
+                    {status === "starting" ? (
+                      <><span className="animate-breathe">⚡</span> Starting…</>
+                    ) : (
+                      <><span>⚡</span> Begin Sabha</>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* How it works — subtle hint */}
+              <div className="flex items-start gap-3 px-1">
+                <div className="shrink-0 w-5 h-5 rounded-full bg-[#f0ece5] border border-[#e8e0d5] flex items-center justify-center mt-0.5">
+                  <span className="text-[#a09282] text-xs">?</span>
+                </div>
+                <p className="text-xs text-[#a09282] leading-relaxed">
+                  Characters will argue, question, and reveal hidden depths across multiple rounds. A judge scores each turn. When the debate concludes, an alternate ending is written.
+                </p>
+              </div>
+            </div>
+
+            {/* ── SECTION 2: The Cast ── */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full bg-[#3d2f20] text-white text-xs font-bold flex items-center justify-center shrink-0">2</div>
+                <div>
+                  <div className="text-base font-bold text-[#1c1410]">Assemble the Cast</div>
+                  <div className="text-xs text-[#a09282]">Choose who debates and tune their depth</div>
+                </div>
+              </div>
+
+              {storyCharacters.length > 0 ? (
+                <>
+                  {/* Select all / clear */}
+                  <div className="flex items-center gap-3 px-1">
+                    <button onClick={() => setSelectedCharacters(new Set(storyCharacters.map(c => c.name)))}
+                      className="text-xs font-medium text-[#c07820] hover:underline">Select all</button>
+                    <span className="text-[#e8e0d5]">·</span>
+                    <button onClick={() => setSelectedCharacters(new Set())}
+                      className="text-xs text-[#a09282] hover:underline">Clear all</button>
+                    <span className="text-xs text-[#a09282] ml-auto">
+                      <span className="font-semibold text-[#6b5c4e]">{selectedCharacters.size}</span> of {storyCharacters.length} selected
+                    </span>
+                  </div>
+
+                  {/* Character cards */}
+                  <div className="space-y-2">
+                    {storyCharacters.map((char) => {
+                      const rate = explorationRates[char.name] ?? 10;
+                      const color = CHAR_COLORS[storyCharacters.indexOf(char) % CHAR_COLORS.length];
+                      const selected = selectedCharacters.has(char.name);
+                      return (
+                        <div key={char.name}
+                          className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+                            selected
+                              ? "bg-white border-[#e8e0d5] shadow-sm"
+                              : "bg-[#faf7f2] border-[#ede8e1] opacity-55"
+                          }`}
+                        >
+                          {/* Card header row */}
+                          <div
+                            className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                            onClick={() => setSelectedCharacters(prev => {
+                              const next = new Set(prev);
+                              next.has(char.name) ? next.delete(char.name) : next.add(char.name);
+                              return next;
+                            })}
+                          >
                             {/* Checkbox */}
-                            <button
-                              onClick={() => setSelectedCharacters(prev => {
-                                const next = new Set(prev);
-                                next.has(char.name) ? next.delete(char.name) : next.add(char.name);
-                                return next;
-                              })}
-                              className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${selected ? "border-[#c07820] bg-[#c07820]" : "border-[#c8b89a] bg-white"}`}
-                            >
-                              {selected && <span className="text-white text-xs font-bold leading-none">✓</span>}
-                            </button>
-                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${selected ? "border-[#c07820] bg-[#c07820]" : "border-[#c8b89a] bg-white"}`}>
+                              {selected && <span className="text-white text-[10px] font-bold leading-none">✓</span>}
+                            </div>
+                            {/* Avatar */}
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm"
                               style={{ backgroundColor: selected ? color.hex : "#c8b89a" }}>
                               {char.name.split(" ").map((w:string) => w[0]).join("").slice(0,2).toUpperCase()}
                             </div>
-                            <span className="text-sm font-semibold text-[#1c1410]">{char.name}</span>
-                            {char.role && <span className="text-xs text-[#a09282] italic">{char.role}</span>}
+                            {/* Name + role */}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-semibold text-[#1c1410] truncate">{char.name}</div>
+                              {char.role && <div className="text-xs text-[#a09282] truncate">{char.role}</div>}
+                            </div>
+                            {/* Exploration badge */}
+                            {selected && (
+                              <div className="shrink-0 text-right">
+                                <div className="text-sm font-bold tabular-nums" style={{ color: rate > 25 ? color.hex : "#c8b89a" }}>{rate}%</div>
+                                <div className="text-[10px] text-[#c8b89a] leading-none">depth</div>
+                              </div>
+                            )}
                           </div>
+
+                          {/* Slider row — only when selected */}
                           {selected && (
-                            <span className="text-sm font-bold tabular-nums" style={{ color: rate > 30 ? color.hex : "#a09282" }}>
-                              {rate}%
-                            </span>
+                            <div className="px-4 pb-3 space-y-1.5 border-t border-[#f0ece5]">
+                              <div className="flex items-center gap-3 pt-2">
+                                <span className="text-xs text-[#c8b89a] shrink-0">In character</span>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={100}
+                                  step={5}
+                                  value={rate}
+                                  onChange={(e) => setExplorationRates(prev => ({ ...prev, [char.name]: Number(e.target.value) }))}
+                                  className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+                                  style={{
+                                    background: `linear-gradient(to right, ${color.hex} ${rate}%, #e8e0d5 ${rate}%)`,
+                                    accentColor: color.hex,
+                                  }}
+                                />
+                                <span className="text-xs text-[#c8b89a] shrink-0">Hidden depths</span>
+                              </div>
+                            </div>
                           )}
                         </div>
-                        {selected && (
-                          <>
-                            <input
-                              type="range"
-                              min={0}
-                              max={100}
-                              step={5}
-                              value={rate}
-                              onChange={(e) => setExplorationRates(prev => ({ ...prev, [char.name]: Number(e.target.value) }))}
-                              className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-                              style={{
-                                background: `linear-gradient(to right, ${color.hex} ${rate}%, #e8e0d5 ${rate}%)`,
-                                accentColor: color.hex,
-                              }}
-                            />
-                            <div className="flex justify-between text-xs text-[#c8b89a] mt-1">
-                              <span>Stays in character</span>
-                              <span>Reveals hidden depths</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                      );
+                    })}
+                  </div>
 
-            {suggestions.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs text-[#a09282] uppercase tracking-widest font-medium">
-                  <span className="w-4 h-px bg-[#e8e0d5]" />
-                  Story suggests
-                  <span className="w-4 h-px bg-[#e8e0d5]" />
+                  {/* Depth explainer */}
+                  <div className="flex items-start gap-3 px-1">
+                    <div className="shrink-0 w-5 h-5 rounded-full bg-[#f0ece5] border border-[#e8e0d5] flex items-center justify-center mt-0.5">
+                      <span className="text-[#a09282] text-xs">?</span>
+                    </div>
+                    <p className="text-xs text-[#a09282] leading-relaxed">
+                      <span className="font-semibold text-[#6b5c4e]">Hidden depth</span> controls how often a character breaks from their expected position and reveals something surprising — a buried fear, a secret loyalty, or an unexpected argument.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-center space-y-2 bg-white rounded-2xl border border-[#e8e0d5]">
+                  <div className="text-3xl">⏳</div>
+                  <p className="text-sm text-[#a09282]">Loading characters…</p>
                 </div>
-                {suggestions.map((s) => (
-                  <button
-                    key={s.event_id}
-                    onClick={() => setDivergence(s.description)}
-                    className={`w-full text-left text-sm px-4 py-3 rounded-xl border transition-all duration-200 ${
-                      divergence === s.description
-                        ? "border-[#c07820] bg-[#fef3e2] text-[#1c1410]"
-                        : "border-[#e8e0d5] bg-white text-[#6b5c4e] hover:border-[#c07820]/40 hover:bg-[#fef3e2]/50"
-                    }`}
-                  >
-                    <span className="text-[#c07820] mr-2 font-bold">→</span>
-                    {s.description}
-                    {s.affected_characters.length > 0 && (
-                      <span className="ml-2 text-[#a09282] text-xs">· {s.affected_characters.join(", ")}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </main>
