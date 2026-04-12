@@ -215,12 +215,25 @@ export default function DebatePage() {
       return;
     }
 
-    // Boru's messages: count speeches but don't create edges
+    // Boru's messages: count speeches + create edge to target character
     if ((last as any).isOrchestrator) {
       const boruNode = graphNodesRef.current.find(n => n.id === "Boru");
       if (boruNode) {
         boruNode.speeches++;
         boruNode.r = Math.min(26 + boruNode.speeches * 0.3, 34);
+      }
+      // Create edge from Boru → target character (when he invites/directs someone)
+      const target = last.target;
+      if (target && target !== "Boru") {
+        ensureNode(target);
+        const existing = graphEdgesRef.current.find(
+          e => e.sourceId === "Boru" && e.targetId === target
+        );
+        if (existing) {
+          existing.count++;
+        } else {
+          graphEdgesRef.current.push({ source: "Boru", target, sourceId: "Boru", targetId: target, count: 1, questions: 0 });
+        }
       }
       setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
       if (d3SimRef.current && (d3SimRef.current as any).update) {
@@ -693,6 +706,7 @@ export default function DebatePage() {
           character: "Boru",
           message: ev.message,
           round: 0,
+          target: ev.target || undefined,
           isOrchestrator: true,
           orchestratorEvent: ev.event,
           phase: ev.phase,
