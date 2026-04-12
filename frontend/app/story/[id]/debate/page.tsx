@@ -210,8 +210,31 @@ export default function DebatePage() {
 
     const last = transcript[transcript.length - 1];
 
-    // Skip non-content entries (reactions, stage directions, observers)
-    if ((last as any).isReaction || (last as any).isStageDirection || (last as any).isObserver) {
+    // Skip non-content entries (reactions, stage directions)
+    if ((last as any).isReaction || (last as any).isStageDirection) {
+      return;
+    }
+
+    // World observers get a node + edge to Boru
+    if ((last as any).isObserver) {
+      const obsNode = ensureNode(last.character);
+      obsNode.speeches++;
+      obsNode.r = Math.min(14 + obsNode.speeches * 0.5, 18);
+      obsNode.shape = "square";
+      obsNode.color = "#64748b"; // slate for observers
+      // Edge from observer → Boru (they speak to the Sabha)
+      const existing = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === "Boru");
+      if (existing) { existing.count++; }
+      else { graphEdgesRef.current.push({ source: last.character, target: "Boru", sourceId: last.character, targetId: "Boru", count: 1, questions: 0 }); }
+      // If observer targeted a character, add that edge too
+      if (last.target && last.target !== last.character && last.target !== "Boru") {
+        ensureNode(last.target);
+        const ex2 = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === last.target);
+        if (ex2) { ex2.count++; ex2.questions++; }
+        else { graphEdgesRef.current.push({ source: last.character, target: last.target, sourceId: last.character, targetId: last.target, count: 1, questions: 1 }); }
+      }
+      setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
+      if (d3SimRef.current && (d3SimRef.current as any).update) { (d3SimRef.current as any).update(); }
       return;
     }
 
@@ -420,18 +443,21 @@ export default function DebatePage() {
 
         const el = d3.select(this);
 
-        // Build multiple thin strands — one per interaction
+        // Build multiple thin strands — each with progressively more curve
+        // 1st line: slight curve, 2nd: more, 3rd: even more (fan out)
         let pathsData = "";
+        const mirrorOff = hasMirror ? 4 : 0;
         for (let si = 0; si < strandCount; si++) {
-          const strandOff = (si - (strandCount - 1) / 2) * spacing;
-          const curve = baseCurve + strandOff * 0.5;
-          const offX = px * strandOff * 0.4, offY = py * strandOff * 0.4;
-          const sxi = src.x + ux * (src.r + 2) + offX + px * (hasMirror ? 4 : 0);
-          const syi = src.y + uy * (src.r + 2) + offY + py * (hasMirror ? 4 : 0);
-          const txi = tgt.x - ux * (tgt.r + 6) + offX + px * (hasMirror ? 4 : 0);
-          const tyi = tgt.y - uy * (tgt.r + 6) + offY + py * (hasMirror ? 4 : 0);
-          const cpXi = (src.x + tgt.x) / 2 + px * curve;
-          const cpYi = (src.y + tgt.y) / 2 + py * curve;
+          // Progressive curve: each strand gets 12px more curve than the last
+          const curveMult = baseCurve + si * 12;
+          // Start/end points stay at the node edges
+          const sxi = src.x + ux * (src.r + 2) + px * mirrorOff;
+          const syi = src.y + uy * (src.r + 2) + py * mirrorOff;
+          const txi = tgt.x - ux * (tgt.r + 6) + px * mirrorOff;
+          const tyi = tgt.y - uy * (tgt.r + 6) + py * mirrorOff;
+          // Control point moves further out with each strand
+          const cpXi = (src.x + tgt.x) / 2 + px * curveMult;
+          const cpYi = (src.y + tgt.y) / 2 + py * curveMult;
           pathsData += `M${sxi},${syi} Q${cpXi},${cpYi} ${txi},${tyi} `;
         }
 
