@@ -16,9 +16,70 @@ import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from app.config import get_analysis_llm
+from app.config import get_analysis_llm, _make_openrouter_llm, get_narrator_fallbacks
 
 logger = logging.getLogger(__name__)
+
+
+def _get_orchestrator_llm():
+    """Get an LLM for Boru — tries Gemini first, falls back to OpenRouter, then Groq/NVIDIA."""
+    # Try Gemini first
+    try:
+        llm = get_analysis_llm()
+        return llm
+    except Exception:
+        pass
+
+    # Try OpenRouter free models
+    for model in ["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free", "nousresearch/hermes-3-llama-3.1-405b:free"]:
+        llm = _make_openrouter_llm(model, temperature=0.3)
+        if llm:
+            return llm
+
+    # Try Groq/NVIDIA narrator fallbacks
+    fallbacks = get_narrator_fallbacks(temperature=0.3)
+    if fallbacks:
+        return fallbacks[0][0]
+
+    raise ValueError("No LLM available for orchestrator")
+
+
+async def _invoke_with_fallback(messages: list) -> str:
+    """Invoke LLM with automatic fallback if primary fails (rate limit etc)."""
+    providers = []
+
+    # 1. Gemini
+    try:
+        providers.append(("gemini", get_analysis_llm()))
+    except Exception:
+        pass
+
+    # 2. OpenRouter free models
+    for model in ["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free"]:
+        llm = _make_openrouter_llm(model, temperature=0.3)
+        if llm:
+            providers.append(("openrouter:" + model, llm))
+
+    # 3. Groq/NVIDIA
+    for llm, label in get_narrator_fallbacks(temperature=0.3):
+        providers.append((label, llm))
+
+    for label, llm in providers:
+        try:
+            response = await llm.ainvoke(messages)
+            raw = response.content
+            if isinstance(raw, list):
+                raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+            return raw.strip()
+        except Exception as e:
+            msg = str(e).lower()
+            if "429" in msg or "rate" in msg or "quota" in msg:
+                logger.info(f"Orchestrator LLM {label} rate-limited, trying next...")
+                continue
+            logger.warning(f"Orchestrator LLM {label} failed: {e}")
+            continue
+
+    return ""
 
 # ── Debate Phases ──────────────────────────────────────────────────────────────
 
@@ -253,11 +314,7 @@ DETECTION RULES:
 Be concise. Return ONLY valid JSON."""
 
     try:
-        llm = get_analysis_llm()
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = response.content
-        if isinstance(raw, list):
-            raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+        raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
         raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
         raw = re.sub(r"\n?```$", "", raw.strip())
         result = json.loads(raw)
@@ -370,11 +427,7 @@ Should the debate advance to "{next_phase}" now? Consider:
 Respond with JSON only: {{"advance": true/false, "reason": "one sentence"}}"""
 
     try:
-        llm = get_analysis_llm()
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = response.content
-        if isinstance(raw, list):
-            raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+        raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
         raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
         raw = re.sub(r"\n?```$", "", raw.strip())
         result = json.loads(raw)
@@ -461,11 +514,7 @@ Respond with JSON only:
 If only 1 speaker needed, set is_parallel to false."""
 
     try:
-        llm = get_analysis_llm()
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = response.content
-        if isinstance(raw, list):
-            raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+        raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
         raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
         raw = re.sub(r"\n?```$", "", raw.strip())
         result = json.loads(raw)
@@ -663,11 +712,7 @@ Rules:
 Write your spoken message (no quotes, no "Boru:" prefix):"""
 
     try:
-        llm = get_analysis_llm()
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = response.content
-        if isinstance(raw, list):
-            raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+        raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
         return raw.strip().strip('"')
     except Exception as e:
         logger.warning(f"Orchestrator message generation failed: {e}")
@@ -844,11 +889,7 @@ Return JSON only:
 {{"reactions": [{{"character": "Name", "reaction": "one-line reaction"}}]}}"""
 
     try:
-        llm = get_analysis_llm()
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = response.content
-        if isinstance(raw, list):
-            raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+        raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
         raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
         raw = re.sub(r"\n?```$", "", raw.strip())
         result = json.loads(raw)
@@ -915,11 +956,7 @@ IMPORTANT: This is a Sabha — an abstract debate assembly. NOT a physical story
 Write the stage direction (no quotes, no prefix):"""
 
     try:
-        llm = get_analysis_llm()
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = response.content
-        if isinstance(raw, list):
-            raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+        raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
         return raw.strip().strip('"')
     except Exception as e:
         logger.warning(f"Stage direction failed: {e}")
