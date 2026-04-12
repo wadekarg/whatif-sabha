@@ -282,11 +282,8 @@ HOW TO ANSWER:
             messages.append(AIMessage(content=turn["content"]))
     messages.append(HumanMessage(content=question))
 
-    llm = get_analysis_llm()
-    response = await llm.ainvoke(messages)
-    content = response.content
-    if isinstance(content, list):
-        answer = " ".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
-    else:
-        answer = str(content)
+    from app.config import invoke_analysis_with_fallback
+    answer = await invoke_analysis_with_fallback(messages)
+    if not answer:
+        answer = "Even an elephant's memory has limits — I couldn't reach my thoughts just now. Try again in a moment."
     return {"answer": answer}

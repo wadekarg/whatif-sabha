@@ -1123,13 +1123,10 @@ HOW TO ANSWER:
             messages.append(AIMessage(content=turn["content"]))
     messages.append(HumanMessage(content=body.question.strip()))
 
-    llm = get_analysis_llm()
-    response = await llm.ainvoke(messages)
-    content = response.content
-    if isinstance(content, list):
-        answer = " ".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
-    else:
-        answer = str(content)
+    from app.config import invoke_analysis_with_fallback
+    answer = await invoke_analysis_with_fallback(messages)
+    if not answer:
+        answer = "This elephant's thoughts are momentarily elsewhere. Try asking again."
     return {"answer": answer}
 
 

@@ -240,6 +240,59 @@ def get_analysis_llm():
     return ChatGoogleGenerativeAI(model=s.ANALYSIS_MODEL, google_api_key=key, temperature=0.2)
 
 
+def get_analysis_fallbacks() -> list:
+    """
+    Gemini primary (1M context), then OpenRouter free models (large context) as fallback.
+    For story analysis, chat, and any task needing deep story understanding.
+    """
+    candidates = []
+
+    # 1. Gemini — primary (1M context, best for full story analysis)
+    try:
+        candidates.append((get_analysis_llm(), "gemini"))
+    except Exception:
+        pass
+
+    # 2. OpenRouter free models with large context windows
+    ANALYSIS_FALLBACKS = [
+        ("google/gemma-4-31b-it:free", 262144),       # 262K context
+        ("nvidia/nemotron-3-super-120b-a12b:free", 262144),
+        ("qwen/qwen3-next-80b-a3b-instruct:free", 262144),
+        ("minimax/minimax-m2.5:free", 196608),          # 196K context
+        ("meta-llama/llama-3.3-70b-instruct:free", 65536),
+        ("google/gemma-3-27b-it:free", 131072),
+    ]
+    for model, _ctx in ANALYSIS_FALLBACKS:
+        llm = _make_openrouter_llm(model, temperature=0.2, max_tokens=4000)
+        if llm:
+            candidates.append((llm, f"or:{model.split('/')[1].split(':')[0]}"))
+
+    return candidates
+
+
+async def invoke_analysis_with_fallback(messages: list) -> str:
+    """Call analysis LLM with automatic fallback across providers."""
+    import re as _re
+    for llm, label in get_analysis_fallbacks():
+        try:
+            response = await llm.ainvoke(messages)
+            raw = response.content
+            if isinstance(raw, list):
+                raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+            raw = raw.strip()
+            # Strip thinking blocks
+            raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
+            if not raw:
+                continue
+            return raw
+        except Exception as e:
+            msg = str(e).lower()
+            if "429" in msg or "rate" in msg or "quota" in msg:
+                continue
+            raise
+    return ""
+
+
 def get_agent_llm(max_tokens: int = 180):
     """Cerebras qwen-3-235b — ultra-fast character agent streaming."""
     s = get_settings()
