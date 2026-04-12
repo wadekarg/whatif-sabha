@@ -16,7 +16,7 @@ import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from app.config import get_analysis_llm, _make_openrouter_llm, get_narrator_fallbacks
+from app.config import get_analysis_llm, _make_openrouter_llm, _make_nvidia_llm, get_narrator_fallbacks
 
 logger = logging.getLogger(__name__)
 
@@ -58,20 +58,32 @@ async def _invoke_with_fallback(messages: list) -> str:
 
     providers = []
 
-    # 1. OpenRouter free models (best quality, unlimited)
+    # 1. OpenRouter free models (fast, clean instruct output)
     for model in BEST_FREE:
         llm = _make_openrouter_llm(model, temperature=0.4)
         if llm:
             short = model.split("/")[-1].split(":")[0]
             providers.append((f"or:{short}", llm))
 
-    # 2. Gemini (may be rate limited)
+    # 2. NVIDIA — 91 models, no daily limit, ~40 RPM
+    NVIDIA_ORCH_MODELS = [
+        "meta/llama-3.3-70b-instruct",
+        "meta/llama-4-maverick-17b-128e-instruct",
+        "mistralai/mistral-small-3.1-24b-instruct-2503",
+        "google/gemma-4-31b-it",
+    ]
+    for model in NVIDIA_ORCH_MODELS:
+        llm = _make_nvidia_llm(model, temperature=0.4)
+        if llm:
+            providers.append((f"nv:{model.split('/')[-1][:25]}", llm))
+
+    # 3. Gemini (may be rate limited)
     try:
         providers.append(("gemini", get_analysis_llm()))
     except Exception:
         pass
 
-    # 3. Groq/NVIDIA as last resort
+    # 4. Groq as last resort
     for llm, label in get_narrator_fallbacks(temperature=0.3):
         providers.append((label, llm))
 

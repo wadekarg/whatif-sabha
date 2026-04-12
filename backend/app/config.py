@@ -204,7 +204,7 @@ def assign_models_to_characters(characters: list[dict], pool: list[dict]) -> dic
 def get_agent_fallbacks(max_tokens: int = 300) -> list:
     """
     Character agent fallback chain:
-    Cerebras (ultra-fast) → OpenRouter free models → Groq
+    Cerebras → NVIDIA (91 models, no daily limit) → OpenRouter → Groq
     """
     candidates = []
 
@@ -214,19 +214,32 @@ def get_agent_fallbacks(max_tokens: int = 300) -> list:
     except Exception:
         pass
 
-    # 2. OpenRouter free models — good for character voice
-    AGENT_MODELS = [
+    # 2. NVIDIA — 91 free models, ~40 RPM, NO daily token limit
+    NVIDIA_AGENT_MODELS = [
+        "meta/llama-3.3-70b-instruct",
+        "meta/llama-4-maverick-17b-128e-instruct",       # Llama 4!
+        "mistralai/mistral-small-3.1-24b-instruct-2503",
+        "google/gemma-4-31b-it",
+        "deepseek-ai/deepseek-v3.2",
+        "meta/llama-3.1-70b-instruct",
+    ]
+    for model in NVIDIA_AGENT_MODELS:
+        llm = _make_nvidia_llm(model, temperature=0.85)
+        if llm:
+            candidates.append((llm, f"nv:{model.split('/')[-1][:30]}"))
+
+    # 3. OpenRouter free models
+    OPENROUTER_AGENT_MODELS = [
         "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemma-4-31b-it:free",
         "google/gemma-3-27b-it:free",
-        "nvidia/nemotron-nano-9b-v2:free",
     ]
-    for model in AGENT_MODELS:
+    for model in OPENROUTER_AGENT_MODELS:
         llm = _make_openrouter_llm(model, temperature=0.85, max_tokens=max_tokens)
         if llm:
             candidates.append((llm, f"or:{model.split('/')[1].split(':')[0]}"))
 
-    # 3. Groq
+    # 4. Groq
     for model in ["llama-3.3-70b-versatile", "gemma2-9b-it", "llama-3.1-8b-instant"]:
         llm = _make_groq_llm(model, temperature=0.8)
         if llm:
@@ -276,7 +289,7 @@ def get_analysis_llm():
 
 def get_analysis_fallbacks() -> list:
     """
-    Gemini primary (1M context), then OpenRouter free models (large context) as fallback.
+    Gemini primary (1M context) → NVIDIA (91 models, no daily limit) → OpenRouter free.
     For story analysis, chat, and any task needing deep story understanding.
     """
     candidates = []
@@ -287,16 +300,27 @@ def get_analysis_fallbacks() -> list:
     except Exception:
         pass
 
-    # 2. OpenRouter free models with large context windows
-    ANALYSIS_FALLBACKS = [
-        ("google/gemma-4-31b-it:free", 262144),       # 262K context
-        ("nvidia/nemotron-3-super-120b-a12b:free", 262144),
-        ("qwen/qwen3-next-80b-a3b-instruct:free", 262144),
-        ("minimax/minimax-m2.5:free", 196608),          # 196K context
-        ("meta-llama/llama-3.3-70b-instruct:free", 65536),
-        ("google/gemma-3-27b-it:free", 131072),
+    # 2. NVIDIA — no daily token limit, ~40 RPM, massive models available
+    NVIDIA_ANALYSIS_MODELS = [
+        "meta/llama-3.1-405b-instruct",                    # 405B — massive
+        "mistralai/mistral-large-3-675b-instruct-2512",     # 675B — largest available
+        "deepseek-ai/deepseek-v3.2",                        # DeepSeek latest
+        "meta/llama-3.3-70b-instruct",                      # 70B — reliable
+        "google/gemma-4-31b-it",                             # 31B — fast
     ]
-    for model, _ctx in ANALYSIS_FALLBACKS:
+    for model in NVIDIA_ANALYSIS_MODELS:
+        llm = _make_nvidia_llm(model, temperature=0.2)
+        if llm:
+            candidates.append((llm, f"nv:{model.split('/')[-1][:30]}"))
+
+    # 3. OpenRouter free models with large context windows
+    OPENROUTER_ANALYSIS = [
+        "google/gemma-4-31b-it:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-3-27b-it:free",
+    ]
+    for model in OPENROUTER_ANALYSIS:
         llm = _make_openrouter_llm(model, temperature=0.2, max_tokens=4000)
         if llm:
             candidates.append((llm, f"or:{model.split('/')[1].split(':')[0]}"))
