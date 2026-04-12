@@ -46,15 +46,15 @@ def _get_orchestrator_llm():
 
 async def _invoke_with_fallback(messages: list) -> str:
     """Invoke LLM with automatic fallback across all free providers."""
-    # Best free models ranked by quality for Boru's orchestration
+    # Best free INSTRUCT models — avoid thinking/reasoning models that leak inner monologue
     BEST_FREE = [
-        "nousresearch/hermes-3-llama-3.1-405b:free",   # 405B — best reasoning
-        "nvidia/nemotron-3-super-120b-a12b:free",        # 120B — strong JSON
-        "openai/gpt-oss-120b:free",                      # 120B — OpenAI quality
-        "qwen/qwen3-next-80b-a3b-instruct:free",         # 80B — multilingual
-        "meta-llama/llama-3.3-70b-instruct:free",         # 70B — proven
-        "google/gemma-4-31b-it:free",                     # 31B — fast
-        "minimax/minimax-m2.5:free",                     # great at dialogue
+        "meta-llama/llama-3.3-70b-instruct:free",         # 70B — clean instruct, no thinking
+        "nvidia/nemotron-3-super-120b-a12b:free",          # 120B — strong, instruct-tuned
+        "openai/gpt-oss-120b:free",                        # 120B — clean output
+        "google/gemma-4-31b-it:free",                      # 31B — fast, clean
+        "google/gemma-3-27b-it:free",                      # 27B — proven
+        "minimax/minimax-m2.5:free",                       # good at dialogue
+        "nousresearch/hermes-3-llama-3.1-405b:free",       # 405B — may think, use as fallback
     ]
 
     providers = []
@@ -82,7 +82,27 @@ async def _invoke_with_fallback(messages: list) -> str:
             raw = response.content
             if isinstance(raw, list):
                 raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
-            return raw.strip()
+            raw = raw.strip()
+            # Strip thinking blocks from reasoning models (e.g. <think>...</think>)
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+            # Strip any "Let me...", "I need to...", "So we can..." planning preamble
+            # Only keep text after the last planning line
+            lines = raw.split("\n")
+            clean_lines = []
+            for line in lines:
+                stripped = line.strip().lower()
+                if stripped.startswith(("let me ", "i need to ", "we need to ", "so we can ", "must ", "sentence ", "let's ")):
+                    clean_lines = []  # reset — everything before was planning
+                    continue
+                if line.strip():
+                    clean_lines.append(line)
+            raw = "\n".join(clean_lines).strip() if clean_lines else raw
+            # Remove quotes wrapping the whole message
+            if raw.startswith('"') and raw.endswith('"'):
+                raw = raw[1:-1].strip()
+            if not raw:
+                continue  # empty after cleanup — try next model
+            return raw
         except Exception as e:
             msg = str(e).lower()
             if "429" in msg or "rate" in msg or "quota" in msg:
