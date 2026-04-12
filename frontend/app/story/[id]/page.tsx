@@ -272,8 +272,9 @@ export default function StoryPage() {
                       <Link key={char.name} href={`/story/${id}/characters/${encodeURIComponent(char.name)}`}
                         className="flex flex-col items-center gap-1.5 shrink-0 group">
                         {char.portrait ? (
-                          <img src={`http://localhost:8001${char.portrait}`} alt={char.name}
-                            className="w-12 h-12 rounded-full object-cover shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200 ring-2 ring-white" />
+                          <img src={`http://localhost:8001${char.portrait}`} alt={char.name} loading="lazy"
+                            className="w-12 h-12 rounded-full object-cover shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200 ring-2 ring-white"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                         ) : (
                           <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200 ring-2 ring-white"
                             style={{ backgroundColor: col }}>
@@ -342,13 +343,20 @@ export default function StoryPage() {
         </div>
 
         {/* ── PAST DEBATES ── */}
-        {pastDebates.length > 0 && (
+        {pastDebates.length > 0 ? (
           <DebateList
             debates={pastDebates}
             storyId={id}
             onDelete={(debateId: string) => setPastDebates(prev => prev.filter((d: any) => d.id !== debateId))}
           />
-        )}
+        ) : overview ? (
+          <div className="px-8 lg:px-14 pb-6">
+            <div className="text-center py-8 bg-white rounded-2xl border border-[#e8e0d5]">
+              <p className="text-sm text-[#a09282]">No debates yet</p>
+              <p className="text-xs text-[#c8b89a] mt-1">Use the "What if..." box above to start your first Sabha</p>
+            </div>
+          </div>
+        ) : null}
 
         {/* ── STORY INTELLIGENCE ── */}
         {overview && (

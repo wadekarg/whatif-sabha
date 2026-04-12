@@ -63,7 +63,18 @@ export default function CharactersPage() {
                   style={{ animationDelay: `${i * 0.05}s`, opacity: 0 }}
                   className={`group block border border-[#e8e0d5] border-l-4 ${s.border} rounded-2xl p-5 transition-all duration-200 hover:scale-[1.01] animate-fade-up bg-white hover:shadow-md hover:border-[#c8b89a]`}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    {/* Portrait */}
+                    {c.portrait ? (
+                      <img src={`http://localhost:8001${c.portrait}`} alt={c.name} loading="lazy"
+                        className="w-11 h-11 rounded-xl object-cover shrink-0 shadow-sm border border-[#e8e0d5] group-hover:scale-105 transition-transform"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    ) : (
+                      <div className={`w-11 h-11 rounded-xl shrink-0 flex items-center justify-center text-white font-bold text-sm`}
+                        style={{ backgroundColor: ({ protagonist: "#c07820", antagonist: "#ef4444", supporting: "#3b82f6", neutral: "#78716c" } as Record<string, string>)[c.role] || "#78716c" }}>
+                        {c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.dot}`} />

@@ -84,7 +84,9 @@ export default function DebatePage() {
   const [leftTab, setLeftTab] = useState<"debate"|"agents"|"chat">("debate");
   const [rightTab, setRightTab] = useState<"graph"|"heatmap"|"emotions">("graph");
   const [splitPct, setSplitPct] = useState(55);
-  const [maximize, setMaximize] = useState<"none"|"left"|"right">("none");
+  const [maximize, setMaximize] = useState<"none"|"left"|"right">(
+    typeof window !== "undefined" && window.innerWidth < 1024 ? "left" : "none"
+  );
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
@@ -1569,8 +1571,9 @@ export default function DebatePage() {
                       const charData = storyCharacters.find((sc: any) => sc.name === entry.character);
                       const portrait = charData?.portrait;
                       return portrait ? (
-                        <img src={`http://localhost:8001${portrait}`} alt={entry.character}
-                          className="w-8 h-8 rounded-full shrink-0 object-cover mt-0.5 shadow-sm" />
+                        <img src={`http://localhost:8001${portrait}`} alt={entry.character} loading="lazy"
+                          className="w-8 h-8 rounded-full shrink-0 object-cover mt-0.5 shadow-sm"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                       ) : (
                         <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 shadow-sm"
                           style={{ backgroundColor: c.hex }}>

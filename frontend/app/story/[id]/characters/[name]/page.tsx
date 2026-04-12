@@ -48,7 +48,10 @@ export default function CharacterDetailPage() {
 
   if (loading) return (
     <main className="flex-1 flex items-center justify-center bg-[#f7f3ed]">
-      <div className="text-[#a09282] animate-breathe text-lg">Loading...</div>
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-[#c07820] border-t-transparent rounded-full animate-spin" />
+        <span className="text-sm text-[#a09282]">Loading character...</span>
+      </div>
     </main>
   );
   if (!character) return (
@@ -106,9 +109,15 @@ export default function CharacterDetailPage() {
             ← Characters
           </Link>
           <div className="w-px h-4 bg-[#e8e0d5]" />
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0" style={{ backgroundColor: color }}>
-            {character.name[0]}
-          </div>
+          {character.portrait ? (
+            <img src={`http://localhost:8001${character.portrait}`} alt={character.name} loading="lazy"
+              className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-sm border border-[#e8e0d5]"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          ) : (
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0" style={{ backgroundColor: color }}>
+              {character.name[0]}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold text-[#1c1410]">{character.name}</h1>
