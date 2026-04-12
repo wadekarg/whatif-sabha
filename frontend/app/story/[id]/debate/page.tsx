@@ -113,9 +113,9 @@ export default function DebatePage() {
   const d3SimRef            = useRef<d3.Simulation<GraphNode, any> | null>(null);
   const [graphStats, setGraphStats] = useState<{id: string; color: string; speeches: number}[]>([]);
   const [ledgerState, setLedgerState] = useState<{
-    open_questions: any[]; claims: any[]; positions: Record<string, string>;
-    progress: string; resolved_count: number;
-  }>({ open_questions: [], claims: [], positions: {}, progress: "", resolved_count: 0 });
+    open_questions: any[]; resolved_questions: any[]; claims: any[];
+    positions: Record<string, string>; progress: string; phase: string;
+  }>({ open_questions: [], resolved_questions: [], claims: [], positions: {}, progress: "", phase: "" });
   const [graphHover, setGraphHover] = useState<{ x: number; y: number; source: string; target: string; count: number; questions: number; snippet: string } | null>(null);
   const transcriptRef = useRef<DebateEntry[]>([]);
 
@@ -702,10 +702,11 @@ export default function DebatePage() {
       } else if (ev.type === "ledger_update") {
         setLedgerState({
           open_questions: ev.open_questions || [],
+          resolved_questions: ev.resolved_questions || [],
           claims: ev.claims || [],
           positions: ev.positions || {},
           progress: ev.progress || "",
-          resolved_count: ev.resolved_count || 0,
+          phase: ev.phase || "",
         });
       } else if (ev.type === "reactions") {
         // Emotional reactions from other characters
@@ -1941,68 +1942,118 @@ export default function DebatePage() {
                 )}
               </div>
             </div>
-            {/* Argument Ledger */}
-            <div className="overflow-y-auto p-4 space-y-4" style={{ position:"absolute", inset:0, opacity: rightTab==="ledger" ? 1 : 0, pointerEvents: rightTab==="ledger" ? "auto" : "none", transition:"opacity 0.15s" }}>
-              {/* Progress */}
+            {/* Argument Ledger — collapsible sections */}
+            <div className="overflow-y-auto p-3 space-y-2" style={{ position:"absolute", inset:0, opacity: rightTab==="ledger" ? 1 : 0, pointerEvents: rightTab==="ledger" ? "auto" : "none", transition:"opacity 0.15s" }}>
+
+              {/* Boru's Progress Notes */}
               {ledgerState.progress && (
-                <div className="bg-[#fef9f0] border border-[#f0c060]/30 rounded-xl px-4 py-3">
-                  <div className="text-[10px] text-[#c07820] uppercase tracking-widest font-medium mb-1">Boru&apos;s Notes</div>
-                  <p className="text-sm text-[#3d2f20] leading-relaxed">{ledgerState.progress}</p>
+                <div className="bg-[#fef9f0] border border-[#f0c060]/30 rounded-xl px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-sm">🐘</span>
+                    <span className="text-[10px] text-[#c07820] uppercase tracking-widest font-semibold">Boru&apos;s Notes</span>
+                    {ledgerState.phase && <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-[#c07820]/10 text-[#c07820] font-medium">{ledgerState.phase.replace(/_/g, " ")}</span>}
+                  </div>
+                  <p className="text-xs text-[#3d2f20] leading-relaxed">{ledgerState.progress}</p>
                 </div>
               )}
 
-              {/* Open Questions */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] text-[#a09282] uppercase tracking-widest font-medium">Open Questions</span>
-                  <span className="text-[10px] text-[#c8b89a]">{ledgerState.open_questions.length} open · {ledgerState.resolved_count} resolved</span>
-                </div>
-                {ledgerState.open_questions.length === 0 ? (
-                  <p className="text-xs text-[#c8b89a] italic py-2">No open questions yet</p>
-                ) : (
-                  <div className="space-y-2">
-                    {ledgerState.open_questions.map((q: any) => (
-                      <div key={q.id} className={`border rounded-xl px-3 py-2.5 ${q.status === "unanswered" ? "border-amber-200 bg-amber-50/50" : "border-[#e8e0d5] bg-white"}`}>
-                        <p className="text-xs text-[#1c1410] leading-relaxed">{q.question}</p>
-                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-[#a09282]">
-                          <span>by {q.asked_by}</span>
-                          <span>→</span>
-                          <span className="font-medium text-[#6b5c4e]">{(q.directed_to || []).join(", ")}</span>
-                          <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium ${q.status === "unanswered" ? "text-amber-700 bg-amber-100" : "text-[#a09282] bg-[#f0ebe4]"}`}>
-                            {q.status}
-                          </span>
-                        </div>
+              {/* Open Questions — with answers threaded below */}
+              <LedgerSection
+                title="Open Questions"
+                count={ledgerState.open_questions.length}
+                badge={<span className="text-amber-600">{ledgerState.open_questions.filter((q: any) => q.status === "unanswered").length} unanswered</span>}
+                defaultOpen={true}
+                empty="No open questions yet"
+              >
+                {ledgerState.open_questions.map((q: any) => (
+                  <div key={q.id} className={`border rounded-lg overflow-hidden ${q.status === "unanswered" ? "border-amber-200" : "border-[#e8e0d5]"}`}>
+                    <div className={`px-3 py-2 ${q.status === "unanswered" ? "bg-amber-50/60" : "bg-white"}`}>
+                      <p className="text-xs text-[#1c1410] leading-relaxed font-medium">{q.question}</p>
+                      <div className="flex items-center gap-1.5 mt-1 text-[10px] text-[#a09282]">
+                        <span>Asked by <span className="font-medium text-[#6b5c4e]">{q.asked_by}</span></span>
+                        <span>→</span>
+                        <span className="font-medium text-[#6b5c4e]">{(q.directed_to || []).join(", ")}</span>
+                        <span className={`ml-auto px-1.5 py-0.5 rounded font-medium ${q.status === "unanswered" ? "text-amber-700 bg-amber-100" : q.status === "resolved" ? "text-emerald-700 bg-emerald-50" : "text-blue-600 bg-blue-50"}`}>{q.status}</span>
                       </div>
-                    ))}
+                    </div>
+                    {/* Answers threaded below the question */}
+                    {q.answers && Object.keys(q.answers).length > 0 && (
+                      <div className="border-t border-[#e8e0d5] bg-[#f7f3ed] px-3 py-2 space-y-1.5">
+                        {Object.entries(q.answers).map(([who, answer]: [string, any]) => (
+                          <div key={who} className="flex gap-2 text-[11px]">
+                            <span className="font-semibold text-[#6b5c4e] shrink-0">{who}:</span>
+                            <span className="text-[#1c1410] leading-relaxed">{String(answer)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                ))}
+              </LedgerSection>
 
-              {/* Active Claims */}
+              {/* Resolved Questions */}
+              {ledgerState.resolved_questions.length > 0 && (
+                <LedgerSection
+                  title="Resolved"
+                  count={ledgerState.resolved_questions.length}
+                  badge={<span className="text-emerald-600">✓</span>}
+                  defaultOpen={false}
+                  empty=""
+                >
+                  {ledgerState.resolved_questions.map((q: any) => (
+                    <div key={q.id} className="border border-emerald-200 rounded-lg overflow-hidden">
+                      <div className="px-3 py-2 bg-emerald-50/40">
+                        <p className="text-xs text-[#6b5c4e] leading-relaxed line-through decoration-emerald-300">{q.question}</p>
+                      </div>
+                      {q.answers && Object.keys(q.answers).length > 0 && (
+                        <div className="border-t border-emerald-100 bg-white px-3 py-2 space-y-1">
+                          {Object.entries(q.answers).map(([who, answer]: [string, any]) => (
+                            <div key={who} className="flex gap-2 text-[11px]">
+                              <span className="font-semibold text-emerald-700 shrink-0">{who}:</span>
+                              <span className="text-[#6b5c4e]">{String(answer)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </LedgerSection>
+              )}
+
+              {/* Claims — active and resolved */}
               {ledgerState.claims.length > 0 && (
-                <div>
-                  <span className="text-[10px] text-[#a09282] uppercase tracking-widest font-medium">Active Claims</span>
-                  <div className="mt-2 space-y-1.5">
-                    {ledgerState.claims.map((c: any, i: number) => (
-                      <div key={i} className="border border-[#e8e0d5] rounded-lg px-3 py-2 bg-white">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold text-[#1c1410]">{c.character}:</span>
-                          <span className="text-xs text-[#6b5c4e] line-clamp-2">&ldquo;{c.claim}&rdquo;</span>
-                        </div>
-                        {c.challenged_by?.length > 0 && (
-                          <p className="text-[10px] text-red-500 mt-1">Challenged by {c.challenged_by.join(", ")}</p>
-                        )}
+                <LedgerSection
+                  title="Claims & Disputes"
+                  count={ledgerState.claims.length}
+                  badge={<span className="text-[#c07820]">{ledgerState.claims.filter((c: any) => c.status === "disputed").length} disputed</span>}
+                  defaultOpen={true}
+                  empty=""
+                >
+                  {ledgerState.claims.map((c: any, i: number) => (
+                    <div key={i} className={`border rounded-lg px-3 py-2 ${c.status === "disputed" ? "border-red-200 bg-red-50/30" : c.status === "resolved" ? "border-emerald-200 bg-emerald-50/20" : "border-[#e8e0d5] bg-white"}`}>
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-xs font-bold text-[#1c1410] shrink-0">{c.character}:</span>
+                        <span className="text-xs text-[#6b5c4e] leading-relaxed">&ldquo;{c.claim}&rdquo;</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      {c.challenged_by?.length > 0 && (
+                        <div className="mt-1.5 pl-2 border-l-2 border-red-200">
+                          <span className="text-[10px] text-red-500 font-medium">Challenged by {c.challenged_by.join(", ")}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-end mt-1">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${c.status === "disputed" ? "text-red-600 bg-red-100" : c.status === "resolved" ? "text-emerald-600 bg-emerald-100" : "text-[#a09282] bg-[#f0ebe4]"}`}>{c.status}</span>
+                      </div>
+                    </div>
+                  ))}
+                </LedgerSection>
               )}
 
+              {/* Empty state */}
               {ledgerState.open_questions.length === 0 && ledgerState.claims.length === 0 && !ledgerState.progress && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <span className="text-2xl mb-2">🐘</span>
                   <p className="text-sm text-[#a09282]">Boru is listening...</p>
-                  <p className="text-xs text-[#c8b89a] mt-1">The ledger will fill as the debate progresses</p>
+                  <p className="text-xs text-[#c8b89a] mt-1">The ledger fills as the debate progresses</p>
                 </div>
               )}
             </div>
@@ -2389,5 +2440,31 @@ export default function DebatePage() {
         </div>
       )}
     </main>
+  );
+}
+
+// Collapsible section for the Ledger panel
+function LedgerSection({ title, count, badge, defaultOpen, empty, children }: {
+  title: string; count: number; badge?: React.ReactNode; defaultOpen: boolean;
+  empty: string; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-[#e8e0d5] rounded-xl overflow-hidden bg-white">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors text-left">
+        <span className="text-[10px] text-[#a09282] uppercase tracking-widest font-semibold">{title}</span>
+        {count > 0 && <span className="text-[10px] bg-[#f0ebe4] text-[#6b5c4e] px-1.5 py-0.5 rounded-full font-medium">{count}</span>}
+        {badge && <span className="text-[10px] ml-auto">{badge}</span>}
+        <span className={`text-[#c8b89a] text-xs transition-transform ${open ? "" : "-rotate-90"}`}>▾</span>
+      </button>
+      {open && (
+        <div className="px-2 pb-2 space-y-1.5">
+          {count === 0 && empty ? (
+            <p className="text-xs text-[#c8b89a] italic py-2 px-1">{empty}</p>
+          ) : children}
+        </div>
+      )}
+    </div>
   );
 }

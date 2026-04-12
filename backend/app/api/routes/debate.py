@@ -416,10 +416,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 # Stream ledger after parallel round completes
                 yield sse("ledger_update", {
                     "open_questions": ledger.open_questions[:10],
-                    "claims": [c for c in ledger.claims if c["status"] != "resolved"][-8:],
+                    "resolved_questions": ledger.resolved_questions[-6:],
+                    "claims": ledger.claims[-12:],
                     "positions": ledger.character_positions,
                     "progress": ledger.progress_summary,
-                    "resolved_count": len(ledger.resolved_questions),
+                    "phase": current_phase,
                 })
 
             else:
@@ -661,10 +662,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 # Stream ledger state to frontend
                 yield sse("ledger_update", {
                     "open_questions": ledger.open_questions[:10],
-                    "claims": [c for c in ledger.claims if c["status"] != "resolved"][-8:],
+                    "resolved_questions": ledger.resolved_questions[-6:],
+                    "claims": ledger.claims[-12:],
                     "positions": ledger.character_positions,
                     "progress": ledger.progress_summary,
-                    "resolved_count": len(ledger.resolved_questions),
+                    "phase": current_phase,
                 })
 
                 # If repetition detected, orchestrator calls it out

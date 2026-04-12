@@ -379,6 +379,7 @@ Respond with JSON only:
   "position_update": "one-sentence summary of this character's current stance",
   "is_repetition": false,
   "progress_note": "brief note on how the debate moved forward (or didn't)",
+  "follow_up_questions": [{{"question": "a NEW question Boru should ask based on what was said", "directed_to": ["CharName"], "reason": "why this matters"}}],
   "wants_observer": false,
   "wanted_observer_reason": "",
   "addresses_boru": false,
@@ -390,6 +391,13 @@ DETECTION RULES:
 - "wanted_observer_reason": which observer and why (e.g. "Wants to hear from the Soviet analyst about propaganda")
 - "addresses_boru": true if the speaker directly addresses Boru/the Speaker/the moderator/the elephant, asks a meta-question about the debate, or challenges the process
 - "boru_question": what they asked Boru (e.g. "Why are you letting Napoleon dodge?")
+
+FOLLOW-UP QUESTIONS:
+- Generate 0-1 follow-up questions that Boru should ask in future rounds
+- These should be NEW angles not yet explored — creative, probing, unexpected
+- Think about: contradictions in what was said, things left unsaid, consequences not considered
+- Only generate a follow-up if the response genuinely opens a new angle
+- Direct it at the character(s) most relevant to answer
 
 Be concise. Return ONLY valid JSON."""
 
@@ -445,6 +453,15 @@ Be concise. Return ONLY valid JSON."""
         if ledger.is_repeating(speaker, claim):
             result["is_repetition"] = True
             break
+
+    # Add Boru's follow-up questions to the ledger
+    for fq in result.get("follow_up_questions", []):
+        if fq.get("question"):
+            ledger.add_question(
+                question=fq["question"],
+                asked_by="Boru",
+                directed_to=fq.get("directed_to", []),
+            )
 
     return result
 
