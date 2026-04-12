@@ -9,9 +9,14 @@ from app.api.routes import upload, story, characters, debate, settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    # Initialize character soul memory (Graphiti + Neo4j) — graceful if not configured
-    from app.core.memory import init_memory
-    await init_memory()
+    # Initialize character soul memory — graceful if not configured or times out
+    try:
+        import asyncio
+        from app.core.memory import init_memory
+        await asyncio.wait_for(init_memory(), timeout=10)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Memory init skipped: {e}")
     yield
 
 
@@ -47,13 +52,3 @@ app.mount("/portraits", StaticFiles(directory="./uploads/portraits"), name="port
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "WhatIfSabha"}
-
-
-@app.get("/api-usage")
-async def api_usage():
-    """Live API usage dashboard — see which providers are healthy."""
-    try:
-        from app.core.usage_tracker import tracker
-        return tracker.get_status()
-    except Exception as e:
-        return {"error": str(e)}
