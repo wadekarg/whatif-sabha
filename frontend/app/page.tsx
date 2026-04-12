@@ -1,15 +1,10 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const API = "http://localhost:8001";
 
-const ROLE_COLORS: Record<string, string> = {
-  protagonist: "#c07820",
-  antagonist:  "#dc2626",
-  supporting:  "#3b82f6",
-  neutral:     "#78716c",
-};
 const ROLE_CHIP: Record<string, string> = {
   protagonist: "bg-amber-50 border-amber-200 text-amber-900",
   antagonist:  "bg-red-50 border-red-200 text-red-900",
@@ -17,6 +12,7 @@ const ROLE_CHIP: Record<string, string> = {
   neutral:     "bg-stone-100 border-stone-200 text-stone-600",
 };
 
+const CHAR_COLORS = ["#c07820","#dc2626","#3b82f6","#16a34a","#7c3aed","#0891b2","#be185d","#d97706"];
 
 const SAMPLE_DEBATE = [
   { char: "Boxer",    col: "#c07820", line: "Napoleon — tell me plainly — did you send me to the knacker's?" },
@@ -24,7 +20,16 @@ const SAMPLE_DEBATE = [
   { char: "Benjamin", col: "#78716c", line: "I saw the van. 'Horse Slaughterer and Glue Boiler.' The lettering was quite clear." },
 ];
 
-type LiveNode = { id: string; name: string; role: string; x: number; y: number; vx: number; vy: number; r: number; color: string; opacity: number; };
+type Story = {
+  id: string;
+  title: string;
+  author?: string;
+  themes?: string[];
+  word_count?: number;
+  created_at?: string;
+  character_count?: number;
+  debate_count?: number;
+};
 
 export default function Home() {
   const router  = useRouter();
@@ -38,14 +43,52 @@ export default function Home() {
   const [activityLog, setActivityLog] = useState<string[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  // Live graph
-  const liveCanvasRef = useRef<HTMLCanvasElement>(null);
-  const liveNodesRef  = useRef<LiveNode[]>([]);
-  const liveAnimRef   = useRef<number>(0);
+  // Library
+  const [library,          setLibrary]          = useState<Story[]>([]);
+  const [libraryLoading,   setLibraryLoading]   = useState(true);
+  const [confirmDeleteId,  setConfirmDeleteId]  = useState<string | null>(null);
+  const [deletingId,       setDeletingId]       = useState<string | null>(null);
+
+  const handleDeleteStory = async (storyId: string) => {
+    setDeletingId(storyId);
+    try {
+      await fetch(`${API}/stories/${storyId}`, { method: "DELETE" });
+      setLibrary(prev => prev.filter(s => s.id !== storyId));
+    } catch {}
+    setDeletingId(null);
+    setConfirmDeleteId(null);
+  };
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activityLog]);
+
+  // Fetch library on mount
+  useEffect(() => {
+    fetch(`${API}/stories`)
+      .then(r => r.json())
+      .then(async (data: Story[]) => {
+        if (!Array.isArray(data)) { setLibraryLoading(false); return; }
+        const enriched = await Promise.all(data.map(async s => {
+          try {
+            const [cr, dr] = await Promise.all([
+              fetch(`${API}/stories/${s.id}/characters`),
+              fetch(`${API}/stories/${s.id}/debates`),
+            ]);
+            const chars   = await cr.json();
+            const debates = await dr.json();
+            return {
+              ...s,
+              character_count: Array.isArray(chars)  ? chars.length   : 0,
+              debate_count:    Array.isArray(debates) ? debates.length : 0,
+            };
+          } catch { return s; }
+        }));
+        setLibrary(enriched);
+        setLibraryLoading(false);
+      })
+      .catch(() => setLibraryLoading(false));
+  }, []);
 
   const isProcessing = status !== "idle" && status !== "ready" && status !== "error";
   const isDone       = status === "ready";
@@ -84,125 +127,11 @@ export default function Home() {
     return () => { pollStoppedRef.current = true; };
   }, [storyId]);
 
-  // Sync characters → live graph nodes
-  useEffect(() => {
-    if (!hasStarted) return;
-    const canvas = liveCanvasRef.current;
-    if (!canvas) return;
-    const W = canvas.width || canvas.offsetWidth;
-    const H = canvas.height || canvas.offsetHeight;
-    const cx = W / 2, cy = H / 2;
-
-    characters.forEach((c: any) => {
-      const exists = liveNodesRef.current.find(n => n.id === c.name);
-      if (!exists) {
-        liveNodesRef.current.push({
-          id: c.name, name: c.name, role: c.role || "neutral",
-          x: cx + (Math.random() - 0.5) * 100,
-          y: cy + (Math.random() - 0.5) * 100,
-          vx: 0, vy: 0,
-          r: Math.round((c.importance || 0.5) * 12) + 5,
-          color: ROLE_COLORS[c.role] || ROLE_COLORS.neutral,
-          opacity: 0,
-        });
-      }
-    });
-  }, [characters, hasStarted]);
-
-  // Live graph physics loop
-  useEffect(() => {
-    if (!hasStarted) return;
-    const canvas = liveCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-
-    const resize = () => {
-      canvas.width  = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    const tick = () => {
-      const nodes = liveNodesRef.current;
-      const W = canvas.width, H = canvas.height;
-      const cx = W / 2, cy = H / 2;
-
-      // Fade in new nodes
-      for (const n of nodes) n.opacity = Math.min(1, n.opacity + 0.02);
-
-      // Repulsion
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
-          const d2 = dx*dx + dy*dy + 1;
-          const f = 900 / d2;
-          nodes[i].vx -= dx*f; nodes[i].vy -= dy*f;
-          nodes[j].vx += dx*f; nodes[j].vy += dy*f;
-        }
-      }
-      // Gravity
-      for (const n of nodes) {
-        n.vx += (cx - n.x) * 0.006;
-        n.vy += (cy - n.y) * 0.006;
-        n.vx *= 0.82; n.vy *= 0.82;
-        n.x += n.vx; n.y += n.vy;
-        n.x = Math.max(n.r + 8, Math.min(W - n.r - 8, n.x));
-        n.y = Math.max(n.r + 8, Math.min(H - n.r - 8, n.y));
-      }
-
-      // Draw
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = "#09090b";
-      ctx.fillRect(0, 0, W, H);
-
-      // Subtle grid
-      ctx.strokeStyle = "rgba(255,255,255,0.03)";
-      ctx.lineWidth = 1;
-      for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-      for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-
-      for (const n of nodes) {
-        ctx.globalAlpha = n.opacity;
-        // Glow
-        const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 2.5);
-        grd.addColorStop(0, n.color + "44");
-        grd.addColorStop(1, "transparent");
-        ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 2.5, 0, 2*Math.PI);
-        ctx.fillStyle = grd; ctx.fill();
-
-        // Circle
-        ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 2*Math.PI);
-        ctx.fillStyle = n.color + "cc"; ctx.fill();
-
-        // Label
-        ctx.font = `600 11px Inter, sans-serif`;
-        ctx.textAlign = "center"; ctx.textBaseline = "top";
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
-        ctx.fillText(n.name, n.x, n.y + n.r + 4);
-      }
-      ctx.globalAlpha = 1;
-
-      // Status overlay if still processing
-      if (isProcessing && nodes.length === 0) {
-        ctx.font = "14px Inter, sans-serif";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(255,255,255,0.25)";
-        ctx.fillText("Discovering characters...", W/2, H/2);
-      }
-
-      liveAnimRef.current = requestAnimationFrame(tick);
-    };
-    liveAnimRef.current = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(liveAnimRef.current); window.removeEventListener("resize", resize); };
-  }, [hasStarted, isProcessing]);
-
   const handleUpload = async (file: File) => {
     if (!file.name.endsWith(".pdf")) { setError("Only PDF files are supported."); return; }
     setError("");
     setStatus("uploading");
     setActivityLog(["Uploading PDF..."]);
-    liveNodesRef.current = [];
     const fd = new FormData();
     fd.append("file", file);
     try {
@@ -217,8 +146,8 @@ export default function Home() {
     <main className="flex-1 flex flex-col">
       <section className="grid md:grid-cols-2" style={{ minHeight: "calc(100vh - 56px)" }}>
 
-        {/* ── LEFT: Upload hero ── */}
-        <div className="relative flex flex-col justify-start px-12 lg:px-16 pt-14 pb-12 border-r border-[#e8e0d5] overflow-hidden">
+        {/* ── LEFT: Upload hero + library ── */}
+        <div className="relative flex flex-col justify-start px-12 lg:px-16 pt-14 pb-12 border-r border-[#e8e0d5] overflow-y-auto overflow-x-hidden">
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-amber-50/40 via-transparent to-transparent" />
           <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-amber-100/15 blur-3xl pointer-events-none" />
 
@@ -319,7 +248,7 @@ export default function Home() {
                 </p>
               )}
 
-              {/* Terminal feed — shown while processing and after completion */}
+              {/* Terminal feed */}
               {(isProcessing || (isDone && activityLog.length > 0)) && (
                 <div className="bg-[#0f0d0a] rounded-xl overflow-hidden border border-[#2a2018]">
                   <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[#2a2018]">
@@ -357,57 +286,135 @@ export default function Home() {
                 </div>
               )}
             </div>
+
+            {/* ── Previously uploaded stories ── */}
+            {!hasStarted && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-[#e8e0d5]" />
+                  <span className="text-xs font-semibold tracking-[0.15em] text-[#a09282] uppercase">or continue a story</span>
+                  <div className="flex-1 h-px bg-[#e8e0d5]" />
+                </div>
+
+                {libraryLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2].map(i => (
+                      <div key={i} className="h-14 rounded-xl bg-[#f0ebe4] animate-pulse" />
+                    ))}
+                  </div>
+                ) : library.length === 0 ? (
+                  <p className="text-center text-xs text-[#c8b89a] py-2">No previous stories yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {library.map((s, i) => {
+                      const accent = CHAR_COLORS[i % CHAR_COLORS.length];
+                      const isConfirming = confirmDeleteId === s.id;
+                      return (
+                        <div key={s.id} className="group relative flex items-center gap-3 bg-white border border-[#e8e0d5] hover:border-[#c8b89a] rounded-xl px-4 py-3 transition-all duration-150 hover:shadow-sm">
+                          <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                            style={{ backgroundColor: accent }}>
+                            {(s.title || "?")[0].toUpperCase()}
+                          </div>
+                          {isConfirming ? (
+                            <div className="flex-1 flex items-center justify-between gap-2">
+                              <p className="text-sm text-[#1c1410]">Remove this story?</p>
+                              <div className="flex gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleDeleteStory(s.id)}
+                                  disabled={deletingId === s.id}
+                                  className="text-xs px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-60"
+                                >
+                                  {deletingId === s.id ? "Removing…" : "Remove"}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-[#e8e0d5] text-[#6b5c4e] hover:bg-[#f7f3ed] transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <Link href={`/story/${s.id}`} className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-[#1c1410] truncate group-hover:text-[#c07820] transition-colors">
+                                  {s.title || "Untitled"}
+                                </p>
+                                <p className="text-xs text-[#a09282] truncate">
+                                  {s.author ? `by ${s.author}` : ""}
+                                  {s.author && (s.character_count || s.debate_count) ? " · " : ""}
+                                  {s.character_count ? `${s.character_count} characters` : ""}
+                                  {s.character_count && s.debate_count ? " · " : ""}
+                                  {s.debate_count ? `${s.debate_count} debate${s.debate_count !== 1 ? "s" : ""}` : ""}
+                                </p>
+                              </Link>
+                              <button
+                                onClick={() => setConfirmDeleteId(s.id)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 rounded-lg bg-[#f7f3ed] hover:bg-red-50 hover:text-red-500 text-[#a09282] flex items-center justify-center text-sm border border-transparent hover:border-red-200 shrink-0"
+                                title="Remove story"
+                              >
+                                ✕
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* ── RIGHT: How it works ── */}
         <div className="overflow-hidden flex flex-col" id="how-it-works">
           <div className="flex-1 bg-white px-10 lg:px-14 py-14 space-y-12 overflow-y-auto">
-              <div>
-                <p className="text-xs font-semibold tracking-[0.2em] text-[#a09282] uppercase mb-2">How it works</p>
-                <h2 className="text-2xl font-bold text-[#1c1410]">From PDF to alternate history</h2>
-              </div>
-              <div className="space-y-8">
-                {[
-                  { icon: "📖", n: "01", title: "Upload any story PDF", body: "Drop in Animal Farm, the Mahabharata, Hamlet — any fiction. The engine reads it, identifies every character, maps the arc of events, and researches them against real-world sources." },
-                  { icon: "🔬", n: "02", title: "Characters come alive", body: "Each character gets a Fair Witness profile — cross-referenced with Wikipedia and web sources, then analysed from 3 independent AI perspectives. You see who they really are." },
-                  { icon: "⚡", n: "03", title: "Pose your 'What if?'", body: "Once ready, describe your divergence point. What if Boxer refused the slaughterhouse? What if Karna joined the Pandavas? The characters take it from there." },
-                  { icon: "🎭", n: "04", title: "Watch the Sabha unfold", body: "Characters debate in real-time, drawing on their own motivations and relationships. They ask each other questions, push back, reveal hidden feelings." },
-                  { icon: "✍️", n: "05", title: "A new ending is written", body: "After the debate concludes, an alternate ending is generated — grounded in the characters' own choices, not a generic rewrite." },
-                ].map(s => (
-                  <div key={s.n} className="flex gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-[#fef3e2] border border-[#f0c060]/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
-                      {s.icon}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-mono font-bold text-[#c07820]">{s.n}</span>
-                        <span className="font-semibold text-[#1c1410] text-sm">{s.title}</span>
-                      </div>
-                      <p className="text-[#6b5c4e] text-sm leading-relaxed">{s.body}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-[#f7f3ed] rounded-2xl border border-[#e8e0d5] p-6 space-y-5">
-                <div>
-                  <p className="text-xs font-semibold tracking-[0.2em] text-[#a09282] uppercase mb-0.5">Live example</p>
-                  <p className="text-xs text-[#a09282] italic">Animal Farm · What if Boxer refused the slaughterhouse?</p>
-                </div>
-                {SAMPLE_DEBATE.map((e, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold mt-0.5" style={{ backgroundColor: e.col }}>
-                      {e.char[0]}
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold mb-0.5" style={{ color: e.col }}>{e.char}</p>
-                      <p className="text-[#6b5c4e] text-sm leading-relaxed">{e.line}</p>
-                    </div>
-                  </div>
-                ))}
-                <p className="text-xs text-[#c8b89a] italic text-center pt-1">...debate continues until a new ending emerges</p>
-              </div>
+            <div>
+              <p className="text-xs font-semibold tracking-[0.2em] text-[#a09282] uppercase mb-2">How it works</p>
+              <h2 className="text-2xl font-bold text-[#1c1410]">From PDF to alternate history</h2>
             </div>
+            <div className="space-y-8">
+              {[
+                { icon: "📖", n: "01", title: "Upload any story PDF", body: "Drop in Animal Farm, the Mahabharata, Hamlet — any fiction. The engine reads it, identifies every character, maps the arc of events, and researches them against real-world sources." },
+                { icon: "🔬", n: "02", title: "Characters come alive", body: "Each character gets a Fair Witness profile — cross-referenced with Wikipedia and web sources, then analysed from 3 independent AI perspectives. You see who they really are." },
+                { icon: "⚡", n: "03", title: "Pose your 'What if?'", body: "Once ready, describe your divergence point. What if Boxer refused the slaughterhouse? What if Karna joined the Pandavas? The characters take it from there." },
+                { icon: "🎭", n: "04", title: "Watch the Sabha unfold", body: "Characters debate in real-time, drawing on their own motivations and relationships. They ask each other questions, push back, reveal hidden feelings." },
+                { icon: "✍️", n: "05", title: "A new ending is written", body: "After the debate concludes, an alternate ending is generated — grounded in the characters' own choices, not a generic rewrite." },
+              ].map(s => (
+                <div key={s.n} className="flex gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-[#fef3e2] border border-[#f0c060]/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
+                    {s.icon}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-mono font-bold text-[#c07820]">{s.n}</span>
+                      <span className="font-semibold text-[#1c1410] text-sm">{s.title}</span>
+                    </div>
+                    <p className="text-[#6b5c4e] text-sm leading-relaxed">{s.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="bg-[#f7f3ed] rounded-2xl border border-[#e8e0d5] p-6 space-y-5">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.2em] text-[#a09282] uppercase mb-0.5">Live example</p>
+                <p className="text-xs text-[#a09282] italic">Animal Farm · What if Boxer refused the slaughterhouse?</p>
+              </div>
+              {SAMPLE_DEBATE.map((e, i) => (
+                <div key={i} className="flex gap-3">
+                  <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold mt-0.5" style={{ backgroundColor: e.col }}>
+                    {e.char[0]}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold mb-0.5" style={{ color: e.col }}>{e.char}</p>
+                    <p className="text-[#6b5c4e] text-sm leading-relaxed">{e.line}</p>
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-[#c8b89a] italic text-center pt-1">...debate continues until a new ending emerges</p>
+            </div>
+          </div>
         </div>
 
       </section>

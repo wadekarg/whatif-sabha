@@ -16,6 +16,60 @@ class ChatRequest(BaseModel):
     history: list[dict] = []
 
 
+@router.get("")
+async def list_stories(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Story).where(Story.status == "ready").order_by(Story.created_at.desc())
+    )
+    stories = result.scalars().all()
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "author": s.author,
+            "summary": s.summary,
+            "themes": s.themes,
+            "word_count": s.word_count,
+            "created_at": s.created_at,
+        }
+        for s in stories
+    ]
+
+
+@router.delete("/{story_id}")
+async def delete_story(story_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Story).where(Story.id == story_id))
+    story = result.scalar_one_or_none()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found.")
+
+    pdf_path = story.pdf_path
+
+    # Delete story + all debates (cascade="all, delete-orphan" handles debates)
+    await db.delete(story)
+    await db.commit()
+
+    # Clean up PDF file
+    if pdf_path:
+        import os
+        try:
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+        except Exception:
+            pass
+
+    # Clean up ChromaDB embeddings
+    try:
+        from app.core.rag.embedder import get_chroma_client
+        client = get_chroma_client()
+        collection_name = f"story_{story_id}"
+        client.delete_collection(collection_name)
+    except Exception:
+        pass
+
+    return {"ok": True}
+
+
 @router.get("/{story_id}")
 async def get_story(story_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Story).where(Story.id == story_id))

@@ -29,6 +29,7 @@ async def list_characters(story_id: str, db: AsyncSession = Depends(get_db)):
             "role": c.get("role"),
             "description": c.get("description"),
             "importance": c.get("importance", 0.5),
+            "portrait": c.get("portrait"),
         }
         for c in characters
     ]
@@ -84,6 +85,7 @@ async def get_relationship_graph(story_id: str, db: AsyncSession = Depends(get_d
             "role": c.get("role", "supporting"),
             "importance": c.get("importance", 0.5),
             "description": c.get("description", ""),
+            "portrait": c.get("portrait"),
         }
         for c in characters
     ]

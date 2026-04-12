@@ -210,84 +210,87 @@ export default function StoryPage() {
       <div className="flex-1 overflow-y-auto">
 
         {/* ── HERO ── */}
-        <div className="bg-white border-b border-[#e8e0d5]">
-          <div className="px-8 lg:px-14 pt-7 pb-8">
-            {/* Back */}
-            <Link href="/" className="inline-flex items-center gap-1.5 text-xs text-[#a09282] hover:text-[#1c1410] transition-colors mb-5 font-medium">
-              ← Library
-            </Link>
-            <div className="flex items-start justify-between gap-8">
-              <div className="flex-1 min-w-0 space-y-3">
-                <h1 className="text-4xl lg:text-5xl font-bold tracking-tight leading-tight text-[#1c1410]">
-                  {story.title}
-                </h1>
+        <div className="px-8 lg:px-14 pt-6 pb-0">
+          <div className="bg-white rounded-2xl border border-[#e8e0d5] overflow-hidden">
+            {/* Info section */}
+            <div className="px-6 pt-6 pb-5 space-y-4">
+              {/* Title */}
+              <h1 className="text-4xl lg:text-5xl font-bold tracking-tight leading-tight text-[#1c1410]">
+                {story.title}
+              </h1>
+
+              {/* Meta row: author + word count + themes */}
+              <div className="flex flex-wrap items-center gap-3">
                 {story.author && (
-                  <p className="text-[#a09282] text-base">
+                  <span className="text-sm text-[#a09282]">
                     by <span className="text-[#6b5c4e] italic">{story.author}</span>
-                  </p>
+                  </span>
                 )}
-                {(story.themes || []).length > 0 && (
-                  <div className="flex gap-2 flex-wrap pt-1">
-                    {(story.themes || []).map((t: string) => (
-                      <span key={t} className="text-xs bg-[#fef3e2] border border-[#f0c060]/50 text-[#c07820] px-3 py-1 rounded-full font-medium">{t}</span>
-                    ))}
-                  </div>
-                )}
-                {story.summary && (
-                  <p className="text-[#6b5c4e] leading-relaxed text-sm pt-1 max-w-2xl">{story.summary}</p>
-                )}
-              </div>
-              {/* Stats + nav */}
-              <div className="shrink-0 flex flex-col items-end gap-4">
+                {story.author && story.word_count && <span className="text-[#d4c4a8]">·</span>}
                 {story.word_count && (
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-[#1c1410]">{Math.round(story.word_count / 1000)}k</div>
-                    <div className="text-xs text-[#a09282] uppercase tracking-widest mt-0.5">words</div>
-                  </div>
+                  <span className="text-sm text-[#a09282]">
+                    <span className="font-semibold text-[#6b5c4e]">{Math.round(story.word_count / 1000)}k</span> words
+                  </span>
                 )}
-                <div className="flex gap-2">
-                  <Link href={`/story/${id}/characters`}
-                    className="text-xs px-3 py-1.5 rounded-full border border-[#e8e0d5] bg-white text-[#6b5c4e] hover:border-[#c8b89a] hover:bg-[#faf7f2] transition-colors font-medium">
-                    {storyCharacters.length > 0 ? `${storyCharacters.length} Characters` : "Characters"}
-                  </Link>
-                  <Link href={`/story/${id}/graph`}
-                    className="text-xs px-3 py-1.5 rounded-full border border-[#e8e0d5] bg-white text-[#6b5c4e] hover:border-[#c8b89a] hover:bg-[#faf7f2] transition-colors font-medium">
-                    Graph
-                  </Link>
+                {((story.author || story.word_count) && (story.themes || []).length > 0) && <span className="text-[#d4c4a8]">·</span>}
+                {(story.themes || []).map((t: string) => (
+                  <span key={t} className="text-xs bg-[#fef3e2] border border-[#f0c060]/50 text-[#c07820] px-3 py-1 rounded-full font-medium">{t}</span>
+                ))}
+              </div>
+
+              {/* Summary */}
+              {story.summary && (
+                <p className="text-[#6b5c4e] leading-relaxed text-sm">{story.summary}</p>
+              )}
+
+              {/* Nav pills */}
+              <div className="flex items-center gap-2">
+                <Link href={`/story/${id}/characters`}
+                  className="text-xs px-3 py-1.5 rounded-full border border-[#e8e0d5] bg-[#f7f3ed] text-[#6b5c4e] hover:border-[#c8b89a] hover:bg-white transition-colors font-medium">
+                  🎭 {storyCharacters.length > 0 ? `${storyCharacters.length} Characters` : "Characters"}
+                </Link>
+                <Link href={`/story/${id}/debate`}
+                  className="text-xs px-3 py-1.5 rounded-full border border-[#e8e0d5] bg-[#f7f3ed] text-[#6b5c4e] hover:border-[#c8b89a] hover:bg-white transition-colors font-medium">
+                  ⚡ Sabha
+                </Link>
+              </div>
+            </div>
+
+            {/* Character cast strip */}
+            {storyCharacters.length > 0 && (
+              <div className="px-6 pb-5 border-t border-[#f0ece5]">
+                <div className="flex items-center gap-2 py-3">
+                  <span className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Cast</span>
+                  <div className="flex-1 h-px bg-[#f0ece5]" />
+                  <Link href={`/story/${id}/characters`} className="text-xs text-[#c07820] hover:underline font-medium">See all →</Link>
+                </div>
+                <div className="flex gap-5 overflow-x-auto pb-1">
+                  {storyCharacters.slice(0, 14).map((char: any, i: number) => {
+                    const col = CHAR_COLORS[i % CHAR_COLORS.length];
+                    const roleColor: Record<string, string> = { protagonist: "#c07820", antagonist: "#ef4444", supporting: "#3b82f6" };
+                    return (
+                      <Link key={char.name} href={`/story/${id}/characters/${encodeURIComponent(char.name)}`}
+                        className="flex flex-col items-center gap-1.5 shrink-0 group">
+                        {char.portrait ? (
+                          <img src={`http://localhost:8001${char.portrait}`} alt={char.name}
+                            className="w-12 h-12 rounded-full object-cover shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200 ring-2 ring-white" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200 ring-2 ring-white"
+                            style={{ backgroundColor: col }}>
+                            {char.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="text-xs font-semibold text-[#6b5c4e] group-hover:text-[#1c1410] transition-colors text-center leading-none">{char.name.split(" ")[0]}</span>
+                        {char.role && (
+                          <span className="text-[10px] font-medium capitalize" style={{ color: roleColor[char.role] || "#a09282" }}>{char.role}</span>
+                        )}
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
+            )}
           </div>
-
-          {/* Character cast strip */}
-          {storyCharacters.length > 0 && (
-            <div className="px-8 lg:px-14 pb-5 border-t border-[#f0ece5]">
-              <div className="flex items-center gap-2 py-3 mb-1">
-                <span className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Cast</span>
-                <div className="flex-1 h-px bg-[#f0ece5]" />
-                <Link href={`/story/${id}/characters`} className="text-xs text-[#c07820] hover:underline font-medium">See all →</Link>
-              </div>
-              <div className="flex gap-5 overflow-x-auto pb-1">
-                {storyCharacters.slice(0, 14).map((char: any, i: number) => {
-                  const col = CHAR_COLORS[i % CHAR_COLORS.length];
-                  const roleColor: Record<string, string> = { protagonist: "#c07820", antagonist: "#ef4444", supporting: "#3b82f6" };
-                  return (
-                    <Link key={char.name} href={`/story/${id}/characters/${encodeURIComponent(char.name)}`}
-                      className="flex flex-col items-center gap-1.5 shrink-0 group">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200 ring-2 ring-white"
-                        style={{ backgroundColor: col }}>
-                        {char.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
-                      </div>
-                      <span className="text-xs font-semibold text-[#6b5c4e] group-hover:text-[#1c1410] transition-colors text-center leading-none">{char.name.split(" ")[0]}</span>
-                      {char.role && (
-                        <span className="text-[10px] font-medium capitalize" style={{ color: roleColor[char.role] || "#a09282" }}>{char.role}</span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ── WHAT IF — primary CTA ── */}
@@ -340,34 +343,11 @@ export default function StoryPage() {
 
         {/* ── PAST DEBATES ── */}
         {pastDebates.length > 0 && (
-          <div className="px-8 lg:px-14 pb-6 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Past Debates</div>
-              <div className="flex-1 h-px bg-[#e8e0d5]" />
-              <span className="text-xs text-[#a09282] bg-[#f0ebe4] border border-[#e8e0d5] px-2 py-0.5 rounded-full">{pastDebates.length}</span>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {pastDebates.map((d: any, i: number) => (
-                <Link key={d.id} href={`/story/${id}/debate/${d.id}`}
-                  className="group bg-white border border-[#e8e0d5] hover:border-[#c8b89a] hover:shadow-sm rounded-xl p-4 transition-all duration-200">
-                  <div className="flex items-start gap-3">
-                    <div className="text-[#c8b89a] text-sm font-mono mt-0.5 w-5 shrink-0">{String(i + 1).padStart(2, "0")}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[#6b5c4e] text-sm leading-relaxed group-hover:text-[#1c1410] transition-colors line-clamp-2">{d.divergence_description}</p>
-                      <div className="flex items-center gap-3 mt-2 text-xs text-[#a09282]">
-                        <span>{d.round_count} rounds</span>
-                        <span>·</span>
-                        <span className="truncate">{(d.participating_characters || []).slice(0, 3).join(", ")}{(d.participating_characters || []).length > 3 ? "…" : ""}</span>
-                      </div>
-                    </div>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full border shrink-0 font-medium ${
-                      d.status === "completed" ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-[#e8e0d5] text-[#a09282] bg-[#f7f3ed]"
-                    }`}>{d.status === "completed" ? "✓ done" : d.status}</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <DebateList
+            debates={pastDebates}
+            storyId={id}
+            onDelete={(debateId: string) => setPastDebates(prev => prev.filter((d: any) => d.id !== debateId))}
+          />
         )}
 
         {/* ── STORY INTELLIGENCE ── */}
@@ -414,32 +394,6 @@ export default function StoryPage() {
                       );
                     })}
                   </div>
-                  {/* All characters arc bars */}
-                  {overview.character_arcs?.length > 1 && (
-                    <div className="bg-white border border-[#e8e0d5] rounded-xl px-5 py-4 space-y-2.5">
-                      <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium mb-3">All characters</div>
-                      {overview.character_arcs.map((arc: any, ai: number) => (
-                        <div key={arc.name} className="flex items-center gap-3">
-                          <div className="w-28 shrink-0">
-                            <span className={`text-xs font-medium ${
-                              arc.role === "protagonist" ? "text-[#c07820]" :
-                              arc.role === "antagonist" ? "text-red-500" : "text-[#6b5c4e]"
-                            }`}>{arc.name}</span>
-                          </div>
-                          <div className="flex-1 flex items-center gap-0.5">
-                            {arc.phases.map((_: any, pi: number) => (
-                              <div key={pi} className={`h-2 flex-1 rounded-sm ${
-                                arc.role === "protagonist" ? "bg-[#c07820]/50" :
-                                arc.role === "antagonist" ? "bg-red-400/40" :
-                                `bg-[${CHAR_COLORS[ai % CHAR_COLORS.length]}]/30`
-                              }`} style={ arc.role !== "protagonist" && arc.role !== "antagonist" ? { backgroundColor: CHAR_COLORS[ai % CHAR_COLORS.length] + "44" } : {} } />
-                            ))}
-                          </div>
-                          <span className="text-xs text-[#a09282] w-14 text-right shrink-0">{arc.phases.length} phases</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })()}
@@ -919,5 +873,94 @@ export default function StoryPage() {
       </div>
 
     </main>
+  );
+}
+
+function DebateList({ debates, storyId, onDelete }: {
+  debates: any[];
+  storyId: string;
+  onDelete: (id: string) => void;
+}) {
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (debateId: string) => {
+    setDeletingId(debateId);
+    try {
+      await fetch(`http://localhost:8001/debates/${debateId}`, { method: "DELETE" });
+      onDelete(debateId);
+    } catch {}
+    setDeletingId(null);
+    setConfirmId(null);
+  };
+
+  return (
+    <div className="px-8 lg:px-14 pb-6 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Past Debates</div>
+        <div className="flex-1 h-px bg-[#e8e0d5]" />
+        <span className="text-xs text-[#a09282] bg-[#f0ebe4] border border-[#e8e0d5] px-2 py-0.5 rounded-full">{debates.length}</span>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {debates.map((d: any, i: number) => (
+          <div key={d.id} className="group relative bg-white border border-[#e8e0d5] hover:border-[#c8b89a] hover:shadow-sm rounded-xl transition-all duration-200 overflow-hidden">
+            {confirmId === d.id ? (
+              /* Inline confirm overlay */
+              <div className="flex items-center justify-between gap-3 px-4 py-4">
+                <p className="text-sm text-[#1c1410]">Remove this debate?</p>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => handleDelete(d.id)}
+                    disabled={deletingId === d.id}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-60"
+                  >
+                    {deletingId === d.id ? "Removing…" : "Remove"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmId(null)}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-[#e8e0d5] text-[#6b5c4e] hover:bg-[#f7f3ed] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Link href={`/story/${storyId}/debate/${d.id}`} className="block p-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-[#c8b89a] text-sm font-mono mt-0.5 w-5 shrink-0">{String(i + 1).padStart(2, "0")}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[#6b5c4e] text-sm leading-relaxed group-hover:text-[#1c1410] transition-colors line-clamp-2">{d.divergence_description}</p>
+                    <div className="flex items-center gap-3 mt-2 text-xs text-[#a09282]">
+                      <span>{d.round_count} rounds</span>
+                      <span>·</span>
+                      <span className="truncate">{(d.participating_characters || []).slice(0, 3).join(", ")}{(d.participating_characters || []).length > 3 ? "…" : ""}</span>
+                    </div>
+                  </div>
+                  {/* Status badge → delete button on hover, same slot */}
+                  <div className="shrink-0 relative flex justify-end items-start">
+                    <span className={`group-hover:opacity-0 transition-opacity text-xs px-2.5 py-0.5 rounded-full border font-medium whitespace-nowrap ${
+                      d.status === "completed"    ? "border-emerald-200 text-emerald-700 bg-emerald-50" :
+                      d.status === "interrupted" || d.status === "running" ? "border-amber-200 text-amber-700 bg-amber-50" :
+                      "border-[#e8e0d5] text-[#a09282] bg-[#f7f3ed]"
+                    }`}>{
+                      d.status === "completed"   ? "✓ done" :
+                      d.status === "interrupted" || d.status === "running" ? "↯ ended" :
+                      d.status
+                    }</span>
+                    <button
+                      onClick={(e) => { e.preventDefault(); setConfirmId(d.id); }}
+                      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 ml-auto rounded-lg bg-[#f7f3ed] hover:bg-red-50 hover:text-red-500 text-[#a09282] text-sm border border-transparent hover:border-red-200"
+                      title="Remove debate"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </Link>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

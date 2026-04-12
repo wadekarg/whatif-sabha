@@ -37,6 +37,13 @@ app.include_router(debate.router)
 app.include_router(settings.router)
 
 
+# Serve character portraits as static files
+from fastapi.staticfiles import StaticFiles
+import os
+os.makedirs("./uploads/portraits", exist_ok=True)
+app.mount("/portraits", StaticFiles(directory="./uploads/portraits"), name="portraits")
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "WhatIfSabha"}

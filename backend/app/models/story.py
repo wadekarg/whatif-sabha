@@ -29,4 +29,4 @@ class Story(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    debates = relationship("Debate", back_populates="story", lazy="select")
+    debates = relationship("Debate", back_populates="story", cascade="all, delete-orphan", lazy="select")

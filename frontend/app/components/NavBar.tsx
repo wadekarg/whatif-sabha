@@ -216,12 +216,11 @@ export default function NavBar() {
               <>
                 {navLink(`/story/${storyId}`, "Story", pathname === `/story/${storyId}`)}
                 {navLink(`/story/${storyId}/characters`, "Characters", pathname.includes("/characters"))}
-                {navLink(`/story/${storyId}/graph`, "Graph", pathname.includes("/graph"))}
                 {navLink(`/story/${storyId}/debate`, "Sabha ⚡", pathname.includes("/debate"))}
                 <div className="w-px h-4 bg-[#e8e0d5] mx-1" />
               </>
             )}
-            {!isHome && navLink("/", "+ New Story")}
+            {!isHome && navLink("/", "Home")}
             <button
               onClick={() => setShowSettings(true)}
               title="AI Settings"

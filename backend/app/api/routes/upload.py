@@ -149,6 +149,7 @@ async def _analyze_story_background(story_id: str, pdf_path: str):
                 word_count=extracted["word_count"],
                 log_fn=char_log,
                 existing_characters=existing_chars,
+                timeline_phases=phases,
             )
 
             char_names = [c["name"] for c in extracted_characters[:6]]
@@ -196,6 +197,25 @@ async def _analyze_story_background(story_id: str, pdf_path: str):
             story.analysis = updated_analysis
             flag_modified(story, "analysis")
             await db.commit()
+
+            # Step 5: Generate character portraits (Pollinations — free, parallel)
+            from app.core.portrait_generator import generate_all_portraits, generate_boru_portrait
+            portraits = await generate_all_portraits(
+                enriched_characters, story_id, story.title or "Unknown",
+                log_fn=char_log, max_concurrent=4,
+            )
+            # Store portrait paths in character data
+            if portraits:
+                for char in enriched_characters:
+                    if char["name"] in portraits:
+                        char["portrait"] = f"/portraits/{os.path.basename(portraits[char['name']])}"
+                updated_analysis["characters"] = enriched_characters
+                story.analysis = updated_analysis
+                flag_modified(story, "analysis")
+                await db.commit()
+
+            # Also generate Boru's portrait (once)
+            asyncio.create_task(generate_boru_portrait(story_id))
 
             _push_log(story, f"✅ Done! {len(enriched_characters)} characters fully profiled")
             story.status = "ready"

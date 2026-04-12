@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import * as d3 from "d3";
 import ReactMarkdown from "react-markdown";
 
 const API = "http://localhost:8001";
@@ -43,8 +44,8 @@ type DebateEntry = { character: string; message: string; round: number; target?:
 type StreamEntry = { character: string; text: string; };
 type DivPoint    = { event_id: string; description: string; affected_characters: string[]; };
 
-type GraphNode = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; };
-type GraphEdge = { source: string; target: string; count: number; questions: number; };
+type GraphNode = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; role: string; shape: string; fx?: number | null; fy?: number | null; };
+type GraphEdge = { source: string | any; target: string | any; sourceId: string; targetId: string; count: number; questions: number; };
 
 export default function DebatePage() {
   const { id } = useParams<{ id: string }>();
@@ -81,37 +82,35 @@ export default function DebatePage() {
   const [pendingChallenge, setPendingChallenge] = useState<{character: string; observerName: string; question: string} | null>(null);
   const [showLegend, setShowLegend] = useState(false);
   const [leftTab, setLeftTab] = useState<"debate"|"agents"|"chat">("debate");
-  const [showGraph, setShowGraph] = useState(true);
-  const [activeTab, setActiveTab] = useState<"graph"|"heatmap"|"emotions">("graph");
+  const [rightTab, setRightTab] = useState<"graph"|"heatmap"|"emotions">("graph");
+  const [splitPct, setSplitPct] = useState(55);
+  const [maximize, setMaximize] = useState<"none"|"left"|"right">("none");
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   const [showStats, setShowStats] = useState(true);
   const [heatmapLegendOpen, setHeatmapLegendOpen] = useState(false);
   const [emotionLegendOpen, setEmotionLegendOpen] = useState(false);
   const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(false);
-  const [graphLegendPos, setGraphLegendPos] = useState({ x: 12, y: -1 }); // -1 y = anchor to bottom
-  const graphLegendDragRef = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0 });
-  const [splitPct, setSplitPct] = useState(42);
   const pendingExplorationRef = useRef<string | null>(null);
-  const splitContainerRef = useRef<HTMLDivElement>(null);
-  const isDraggingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
   const [chatMessages, setChatMessages] = useState<{role:"user"|"assistant";content:string}[]>([]);
+  const [audienceName, setAudienceName] = useState("");
+  const [audienceInput, setAudienceInput] = useState("");
+  const [audienceNameSet, setAudienceNameSet] = useState(false);
   const [chatInput, setChatInput]       = useState("");
   const [chatLoading, setChatLoading]   = useState(false);
   const [debateId, setDebateId]         = useState<string>("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Interaction graph
-  const graphCanvasRef      = useRef<HTMLCanvasElement>(null);
+  // Interaction graph (SVG + D3)
+  const graphSvgRef         = useRef<SVGSVGElement>(null);
   const graphNodesRef       = useRef<GraphNode[]>([]);
   const graphEdgesRef       = useRef<GraphEdge[]>([]);
-  const graphAnimRef        = useRef<number>(0);
-  const activeNodeRef       = useRef<string | null>(null); // currently speaking
-  const zoomRef             = useRef(1);
-  const panRef              = useRef({ x: 0, y: 0 });
-  const graphDragRef        = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0 });
-  const physicsSettledRef   = useRef(false);
+  const activeNodeRef       = useRef<string | null>(null);
+  const d3SimRef            = useRef<d3.Simulation<GraphNode, any> | null>(null);
   const heatmapCanvasRef    = useRef<HTMLCanvasElement>(null);
   const emotionsCanvasRef   = useRef<HTMLCanvasElement>(null);
   const [graphStats, setGraphStats] = useState<{id: string; color: string; speeches: number}[]>([]);
@@ -151,21 +150,17 @@ export default function DebatePage() {
   }, [transcript, streaming]);
 
   // Resizable split drag
-  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!isDraggingRef.current || !splitContainerRef.current) return;
       const rect = splitContainerRef.current.getBoundingClientRect();
       const pct = ((e.clientX - rect.left) / rect.width) * 100;
-      setSplitPct(Math.max(20, Math.min(80, pct)));
+      setSplitPct(Math.max(25, Math.min(75, pct)));
     };
     const onUp = () => { isDraggingRef.current = false; setIsDraggingSplit(false); };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
+    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
   }, []);
 
   const colorOf = (name: string) => CHAR_COLORS[activeCharacters.indexOf(name) % CHAR_COLORS.length] || CHAR_COLORS[0];
@@ -174,15 +169,18 @@ export default function DebatePage() {
   // Sync transcript → graph nodes + edges
   useEffect(() => {
     if (transcript.length === 0) return;
-    const canvas = graphCanvasRef.current;
-    if (!canvas) return;
-    const W = canvas.width || 400, H = canvas.height || 500;
+    const svgEl = graphSvgRef.current;
+    const container = svgEl?.parentElement;
+    const W = container?.clientWidth || 400, H = container?.clientHeight || 500;
 
+    const ROLE_SHAPES: Record<string, string> = { protagonist: "circle", antagonist: "diamond", supporting: "square", neutral: "circle" };
     const ensureNode = (name: string) => {
       let node = graphNodesRef.current.find(n => n.id === name);
       if (!node) {
         const idx = activeCharacters.indexOf(name);
         const hex = (CHAR_COLORS[idx % CHAR_COLORS.length] || CHAR_COLORS[0]).hex;
+        const charData = storyCharacters.find(c => c.name === name);
+        const role = charData?.role || "neutral";
         // Arrange initially in a circle
         const total = activeCharacters.length || 1;
         const angle = (activeCharacters.indexOf(name) / total) * 2 * Math.PI;
@@ -192,6 +190,7 @@ export default function DebatePage() {
           x: W / 2 + Math.cos(angle) * dist + (Math.random() - 0.5) * 30,
           y: H / 2 + Math.sin(angle) * dist + (Math.random() - 0.5) * 30,
           vx: 0, vy: 0, r: 18, color: hex, speeches: 0,
+          role, shape: ROLE_SHAPES[role] || "circle",
         };
         graphNodesRef.current.push(node);
       }
@@ -203,7 +202,10 @@ export default function DebatePage() {
     lastNode.speeches++;
     lastNode.r = Math.min(18 + lastNode.speeches * 1.5, 34);
     activeNodeRef.current = null;
-    physicsSettledRef.current = false; // wake physics for new node
+    // Restart D3 simulation with updated nodes/edges
+    if (d3SimRef.current && (d3SimRef.current as any).update) {
+      (d3SimRef.current as any).update();
+    }
     // Update stats for React render
     setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
 
@@ -213,361 +215,321 @@ export default function DebatePage() {
       ensureNode(targetName);
       const isQuestion = last.message.includes("?");
       const existing = graphEdgesRef.current.find(
-        e => e.source === last.character && e.target === targetName
+        e => e.sourceId === last.character && e.targetId === targetName
       );
       if (existing) {
         existing.count++;
         if (isQuestion) existing.questions++;
       } else {
-        graphEdgesRef.current.push({ source: last.character, target: targetName, count: 1, questions: isQuestion ? 1 : 0 });
+        graphEdgesRef.current.push({ source: last.character, target: targetName, sourceId: last.character, targetId: targetName, count: 1, questions: isQuestion ? 1 : 0 });
       }
     }
-  }, [transcript, activeCharacters]);
+  }, [transcript, activeCharacters, storyCharacters]);
 
   // Track streaming speaker
   useEffect(() => {
     activeNodeRef.current = streaming?.character ?? null;
   }, [streaming]);
 
-  // Graph physics + render loop
+  // Graph — D3 force simulation + SVG rendering (MiroFish approach)
   useEffect(() => {
     if (status !== "running" && status !== "done") return;
-    const canvas = graphCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    let frame = 0;
+    const svgEl = graphSvgRef.current;
+    if (!svgEl) return;
 
-    const resize = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
-    resize();
-    window.addEventListener("resize", resize);
+    const svg = d3.select(svgEl);
+    const container = svgEl.parentElement!;
+    const W = container.clientWidth || 600;
+    const H = container.clientHeight || 400;
+    svg.attr("viewBox", `0 0 ${W} ${H}`);
+    svg.selectAll("*").remove();
 
-    // Zoom on wheel (pivot at mouse)
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-      const factor = e.deltaY > 0 ? 0.85 : 1 / 0.85;
-      const newZoom = Math.max(0.25, Math.min(4, zoomRef.current * factor));
-      panRef.current.x = mx - (mx - panRef.current.x) * (newZoom / zoomRef.current);
-      panRef.current.y = my - (my - panRef.current.y) * (newZoom / zoomRef.current);
-      zoomRef.current = newZoom;
+    // Defs — arrow markers
+    const defs = svg.append("defs");
+    const filter = defs.append("filter").attr("id", "node-shadow").attr("x", "-30%").attr("y", "-30%").attr("width", "160%").attr("height", "160%");
+    filter.append("feDropShadow").attr("dx", 0).attr("dy", 1).attr("stdDeviation", 2).attr("flood-color", "#00000018");
+
+    // Zoom + pan
+    const g = svg.append("g");
+    svg.call(d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.3, 4])
+      .on("zoom", (event) => g.attr("transform", event.transform)));
+
+    // Shape path helper
+    const nodePath = (shape: string, r: number): string => {
+      if (shape === "diamond") { const s = r * 1.3; return `M0,${-s} L${s},0 L0,${s} L${-s},0 Z`; }
+      if (shape === "square") { const s = r * 0.95; return `M${-s},${-s} L${s},${-s} L${s},${s} L${-s},${s} Z`; }
+      return `M${-r},0 A${r},${r} 0 1,1 ${r},0 A${r},${r} 0 1,1 ${-r},0 Z`;
     };
-    // Drag-to-pan
-    const onCanvasDown = (e: MouseEvent) => {
-      graphDragRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: panRef.current.x, py: panRef.current.y };
-      canvas.style.cursor = "grabbing";
-    };
-    const onDragMove = (e: MouseEvent) => {
-      if (!graphDragRef.current.active) return;
-      panRef.current.x = graphDragRef.current.px + (e.clientX - graphDragRef.current.sx);
-      panRef.current.y = graphDragRef.current.py + (e.clientY - graphDragRef.current.sy);
-    };
-    const onDragUp = () => { graphDragRef.current.active = false; canvas.style.cursor = "grab"; };
 
-    // Hover detection — find which edge the mouse is near
-    const onCanvasMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      // Convert screen coords → world coords
-      const mx = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
-      const my = (e.clientY - rect.top  - panRef.current.y) / zoomRef.current;
+    // Create groups
+    const linkGroup = g.append("g").attr("class", "links");
+    const nodeGroup = g.append("g").attr("class", "nodes");
 
+    // Build safe edges for D3
+    const safeEdges = () => {
+      const nodeIds = new Set(graphNodesRef.current.map(n => n.id));
+      return graphEdgesRef.current
+        .filter(e => nodeIds.has(e.sourceId) && nodeIds.has(e.targetId))
+        .map(e => ({ source: e.sourceId, target: e.targetId, sourceId: e.sourceId, targetId: e.targetId, count: e.count, questions: e.questions }));
+    };
+
+    // D3 simulation
+    const simulation = d3.forceSimulation<GraphNode>(graphNodesRef.current)
+      .force("charge", d3.forceManyBody<GraphNode>().strength((d: GraphNode) => -200 - d.r * 12).distanceMax(400))
+      .force("center", d3.forceCenter(W / 2, H / 2))
+      .force("collide", d3.forceCollide<GraphNode>().radius((d: GraphNode) => d.r + 25).strength(0.9).iterations(2))
+      .force("x", d3.forceX<GraphNode>(W / 2).strength(0.035))
+      .force("y", d3.forceY<GraphNode>(H / 2).strength(0.035))
+      .force("link", d3.forceLink<GraphNode, any>(safeEdges())
+        .id((d: any) => d.id)
+        .distance((d: any) => Math.max(80, 200 - (d.count || 1) * 15))
+        .strength((d: any) => Math.min(0.6, 0.15 + (d.count || 1) * 0.05)))
+      .velocityDecay(0.35)
+      .alphaDecay(0.015)
+      .on("tick", render);
+
+    d3SimRef.current = simulation;
+
+    function render() {
       const nodes = graphNodesRef.current;
       const edges = graphEdgesRef.current;
-      let hit: typeof graphHover = null;
+      const activeId = activeNodeRef.current;
 
-      for (const edge of edges) {
-        const src = nodes.find(n => n.id === edge.source);
-        const tgt = nodes.find(n => n.id === edge.target);
-        if (!src || !tgt) continue;
+      // ── Edges (enter/update/exit) ──
+      const edgeData = edges.filter(e => {
+        const s = nodes.find(n => n.id === e.sourceId);
+        const t = nodes.find(n => n.id === e.targetId);
+        return s && t && isFinite(s.x) && isFinite(t.x);
+      });
+
+      const links = linkGroup.selectAll<SVGGElement, GraphEdge>("g.edge")
+        .data(edgeData, (d: GraphEdge) => `${d.sourceId}->${d.targetId}`);
+
+      const linksEnter = links.enter().append("g").attr("class", "edge");
+      linksEnter.append("path")
+        .attr("fill", "none")
+        .attr("stroke-linecap", "round");
+      linksEnter.append("polygon").attr("class", "arrow");
+      linksEnter.append("text")
+        .attr("font-size", 9)
+        .attr("font-weight", "bold")
+        .attr("text-anchor", "middle")
+        .attr("dy", 3)
+        .style("pointer-events", "none");
+
+      links.exit().remove();
+
+      const allLinks = linkGroup.selectAll<SVGGElement, GraphEdge>("g.edge");
+
+      allLinks.each(function(e: GraphEdge) {
+        const src = nodes.find(n => n.id === e.sourceId);
+        const tgt = nodes.find(n => n.id === e.targetId);
+        if (!src || !tgt) return;
 
         const dx = tgt.x - src.x, dy = tgt.y - src.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
         const ux = dx/d, uy = dy/d;
         const px = -uy, py = ux;
-        const hasMirror = edges.some(e2 => e2.source === edge.target && e2.target === edge.source);
-        const baseCurve = hasMirror ? 32 : 18;
-        const cpX = (src.x + tgt.x) / 2 + px * baseCurve;
-        const cpY = (src.y + tgt.y) / 2 + py * baseCurve;
+        const hasMirror = edges.some(e2 => e2.sourceId === e.targetId && e2.targetId === e.sourceId);
+        const curve = hasMirror ? 35 : 20;
+        const lineW = Math.min(1.5 + e.count * 0.8, 6);
 
-        // Sample bezier at 12 points and find min distance to mouse
-        let minDist = Infinity;
-        for (let t = 0; t <= 1; t += 1/12) {
-          const bx = (1-t)*(1-t)*src.x + 2*(1-t)*t*cpX + t*t*tgt.x;
-          const by = (1-t)*(1-t)*src.y + 2*(1-t)*t*cpY + t*t*tgt.y;
-          const dist = Math.sqrt((mx-bx)**2 + (my-by)**2);
-          if (dist < minDist) minDist = dist;
-        }
-
-        if (minDist < 12) {
-          // Find the most recent message in this direction from the current transcript
-          const msgs = transcriptRef.current.filter(
-            e => e.character === edge.source && e.target === edge.target
-          );
-          const last = msgs[msgs.length - 1];
-          const snippet = last ? last.message.slice(0, 120).trimEnd() + (last.message.length > 120 ? "…" : "") : "";
-          hit = {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
-            source: edge.source,
-            target: edge.target,
-            count: edge.count,
-            questions: edge.questions,
-            snippet,
-          };
-          break;
-        }
-      }
-      setGraphHover(hit);
-    };
-    const onCanvasLeave = () => setGraphHover(null);
-
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    canvas.addEventListener("mousedown", onCanvasDown);
-    canvas.addEventListener("mousemove", onCanvasMove);
-    canvas.addEventListener("mouseleave", onCanvasLeave);
-    document.addEventListener("mousemove", onDragMove);
-    document.addEventListener("mouseup", onDragUp);
-
-    const drawArrow = (ctx: CanvasRenderingContext2D, tx: number, ty: number, ux: number, uy: number, size: number) => {
-      const ax = tx - ux*size - uy*(size*0.6);
-      const ay = ty - uy*size + ux*(size*0.6);
-      const bx = tx - ux*size + uy*(size*0.6);
-      const by = ty - uy*size - ux*(size*0.6);
-      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(ax, ay); ctx.lineTo(bx, by); ctx.closePath(); ctx.fill();
-    };
-
-    const tick = () => {
-      frame++;
-      const nodes = graphNodesRef.current;
-      const edges = graphEdgesRef.current;
-      const W = canvas.width, H = canvas.height;
-      const cx = W / 2, cy = H / 2;
-
-      // Physics (skip when settled)
-      if (!physicsSettledRef.current) {
-        // Repulsion
-        for (let i = 0; i < nodes.length; i++) {
-          for (let j = i + 1; j < nodes.length; j++) {
-            const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
-            const d2 = dx*dx + dy*dy + 1;
-            const f = 1800 / d2;
-            nodes[i].vx -= dx*f; nodes[i].vy -= dy*f;
-            nodes[j].vx += dx*f; nodes[j].vy += dy*f;
-          }
-        }
-        // Springs
-        for (const e of edges) {
-          const src = nodes.find(n => n.id === e.source);
-          const tgt = nodes.find(n => n.id === e.target);
-          if (!src || !tgt) continue;
-          const dx = tgt.x - src.x, dy = tgt.y - src.y;
-          const d = Math.sqrt(dx*dx + dy*dy) || 1;
-          const ideal = 110 + src.r + tgt.r;
-          const f = (d - ideal) * 0.025;
-          src.vx += (dx/d)*f; src.vy += (dy/d)*f;
-          tgt.vx -= (dx/d)*f; tgt.vy -= (dy/d)*f;
-        }
-        // Gravity + damping + bounds
-        let maxV = 0;
-        for (const n of nodes) {
-          n.vx += (cx - n.x) * 0.008; n.vy += (cy - n.y) * 0.008;
-          n.vx *= 0.85; n.vy *= 0.85;
-          n.x += n.vx; n.y += n.vy;
-          n.x = Math.max(n.r + 12, Math.min(W - n.r - 12, n.x));
-          n.y = Math.max(n.r + 12, Math.min(H - n.r - 12, n.y));
-          maxV = Math.max(maxV, Math.abs(n.vx), Math.abs(n.vy));
-        }
-        if (frame > 120 && maxV < 0.15) physicsSettledRef.current = true;
-      }
-
-      // ── Draw ──
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = "#f7f3ed"; ctx.fillRect(0, 0, W, H);
-
-      ctx.save();
-      ctx.translate(panRef.current.x, panRef.current.y);
-      ctx.scale(zoomRef.current, zoomRef.current);
-
-      // Edges — draw as a bundle of curved strands (one per interaction)
-      for (const e of edges) {
-        const src = nodes.find(n => n.id === e.source);
-        const tgt = nodes.find(n => n.id === e.target);
-        if (!src || !tgt) continue;
-
-        const dx = tgt.x - src.x, dy = tgt.y - src.y;
-        const d = Math.sqrt(dx*dx + dy*dy) || 1;
-        const ux = dx/d, uy = dy/d;
-        const px = -uy, py = ux; // perp unit vector
+        const sx = src.x + ux * (src.r + 2) + px * (hasMirror ? 4 : 0);
+        const sy = src.y + uy * (src.r + 2) + py * (hasMirror ? 4 : 0);
+        const tx = tgt.x - ux * (tgt.r + 6) + px * (hasMirror ? 4 : 0);
+        const ty = tgt.y - uy * (tgt.r + 6) + py * (hasMirror ? 4 : 0);
+        const cpX = (src.x + tgt.x) / 2 + px * curve;
+        const cpY = (src.y + tgt.y) / 2 + py * curve;
 
         const isQ = e.questions > 0;
         const col = isQ ? "#f0c060" : src.color;
-        const strandCount = e.count;
-        // Keep bundle width ≤ 28px regardless of count
-        const spacing = strandCount > 1 ? Math.min(3.5, 28 / (strandCount - 1)) : 0;
 
-        // Curve only when bidirectional — otherwise straight line
-        const hasMirror = edges.some(e2 => e2.source === e.target && e2.target === e.source);
-        const baseCurve = hasMirror ? 32 : 0;
+        const el = d3.select(this);
+        el.select("path")
+          .attr("d", `M${sx},${sy} Q${cpX},${cpY} ${tx},${ty}`)
+          .attr("stroke", col)
+          .attr("stroke-width", lineW)
+          .attr("opacity", Math.min(0.4 + e.count * 0.08, 0.85));
 
-        for (let si = 0; si < strandCount; si++) {
-          const strandOff = (si - (strandCount - 1) / 2) * spacing;
-          const curveOff = baseCurve + strandOff * 0.6;
-          const offX = px * (strandOff + curveOff), offY = py * (strandOff + curveOff);
-          const cpX = (src.x + tgt.x) / 2 + offX, cpY = (src.y + tgt.y) / 2 + offY;
+        // Arrowhead
+        const t2 = 0.92;
+        const bx = (1-t2)*(1-t2)*sx + 2*(1-t2)*t2*cpX + t2*t2*tx;
+        const by = (1-t2)*(1-t2)*sy + 2*(1-t2)*t2*cpY + t2*t2*ty;
+        const adx = tx - bx, ady = ty - by;
+        const ad = Math.sqrt(adx*adx + ady*ady) || 1;
+        const aSize = Math.min(7 + lineW, 12);
+        const aUx = adx/ad, aUy = ady/ad;
+        const a1x = tx - aUx*aSize - aUy*(aSize*0.6);
+        const a1y = ty - aUy*aSize + aUx*(aSize*0.6);
+        const a2x = tx - aUx*aSize + aUy*(aSize*0.6);
+        const a2y = ty - aUy*aSize - aUx*(aSize*0.6);
+        el.select("polygon.arrow")
+          .attr("points", `${tx},${ty} ${a1x},${a1y} ${a2x},${a2y}`)
+          .attr("fill", col)
+          .attr("opacity", 0.8);
 
-          const sxe = src.x + ux * src.r + px * strandOff * 0.4;
-          const sye = src.y + uy * src.r + py * strandOff * 0.4;
-          const txe = tgt.x - ux * tgt.r + px * strandOff * 0.4;
-          const tye = tgt.y - uy * tgt.r + py * strandOff * 0.4;
+        // Label
+        const labelX = 0.25 * sx + 0.5 * cpX + 0.25 * tx;
+        const labelY = 0.25 * sy + 0.5 * cpY + 0.25 * ty;
+        const labelText = isQ ? (e.questions === 1 ? "?" : `${e.questions}?`) : (e.count > 1 ? `${e.count}×` : "");
+        el.select("text")
+          .attr("x", labelX).attr("y", labelY)
+          .attr("fill", col)
+          .text(labelText);
+      });
 
-          // Centre strand is brightest; outer strands fade
-          const edgeFade = strandCount === 1 ? 1 : 1 - Math.abs(si - (strandCount - 1) / 2) / (strandCount * 0.8);
-          // First interaction is bolder so it's always visible
-          const baseAlpha = strandCount === 1 ? 0.85 : 0.6;
-          const alpha = Math.min(baseAlpha + edgeFade * 0.3, 0.95);
-          // First strand slightly thicker to ensure visibility
-          const lineW = strandCount === 1 ? 1.8 : 1.2;
+      // ── Nodes (enter/update/exit) ──
+      const nodeData = nodes.filter(n => isFinite(n.x) && isFinite(n.y));
+      const nodesSel = nodeGroup.selectAll<SVGGElement, GraphNode>("g.node")
+        .data(nodeData, (d: GraphNode) => d.id);
 
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(sxe, sye);
-          ctx.quadraticCurveTo(cpX, cpY, txe, tye);
-          ctx.strokeStyle = col + Math.round(alpha * 255).toString(16).padStart(2, "0");
-          ctx.lineWidth = lineW;
-          ctx.stroke();
-          ctx.restore();
-        }
+      const nodesEnter = nodesSel.enter().append("g").attr("class", "node")
+        .attr("filter", "url(#node-shadow)")
+        .style("cursor", "pointer")
+        .call(d3.drag<SVGGElement, GraphNode>()
+          .on("start", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x; d.fy = d.y;
+          })
+          .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+          .on("end", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null; d.fy = null;
+          }));
 
-        // Arrowhead on the central strand
-        const cpX0 = (src.x + tgt.x) / 2 + px * baseCurve;
-        const cpY0 = (src.y + tgt.y) / 2 + py * baseCurve;
-        const txe0 = tgt.x - ux * tgt.r;
-        const tye0 = tgt.y - uy * tgt.r;
-        const arrowDx = txe0 - cpX0, arrowDy = tye0 - cpY0;
-        const arrowD = Math.sqrt(arrowDx*arrowDx + arrowDy*arrowDy) || 1;
-        ctx.fillStyle = col + "dd";
-        drawArrow(ctx, txe0, tye0, arrowDx/arrowD, arrowDy/arrowD, 8);
+      nodesEnter.append("path").attr("class", "shape");
+      nodesEnter.append("text").attr("class", "initials")
+        .attr("text-anchor", "middle").attr("dominant-baseline", "central")
+        .attr("fill", "white").attr("font-weight", "bold")
+        .style("pointer-events", "none");
+      nodesEnter.append("text").attr("class", "label")
+        .attr("text-anchor", "middle")
+        .attr("fill", "#6b5c4e").attr("font-weight", "600")
+        .style("pointer-events", "none");
+      // Speaking ring (hidden by default)
+      nodesEnter.append("circle").attr("class", "speaking-ring")
+        .attr("fill", "none").attr("stroke-width", 2).attr("opacity", 0);
+      // Speech count badge
+      nodesEnter.append("circle").attr("class", "badge-bg").attr("r", 7).attr("fill", "white").attr("stroke-width", 1.2);
+      nodesEnter.append("text").attr("class", "badge-text")
+        .attr("text-anchor", "middle").attr("dominant-baseline", "central")
+        .attr("font-size", 7).attr("font-weight", "bold")
+        .style("pointer-events", "none");
 
-        // Edge label at the curve midpoint
-        // Bezier midpoint at t=0.5: B(0.5) = 0.25*start + 0.5*cp + 0.25*end
-        const sxe0 = src.x + ux * src.r;
-        const sye0 = src.y + uy * src.r;
-        const labelX = 0.25 * sxe0 + 0.5 * cpX0 + 0.25 * txe0;
-        const labelY = 0.25 * sye0 + 0.5 * cpY0 + 0.25 * tye0;
-        const labelText = isQ
-          ? (e.questions === 1 ? "asked" : `${e.questions} Qs`)
-          : (e.count === 1 ? "spoke to" : `${e.count}×`);
-        ctx.save();
-        ctx.font = "bold 9px system-ui, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        // Pill background
-        const tw = ctx.measureText(labelText).width;
-        const ph = 10, pw = tw + 8;
-        ctx.fillStyle = "rgba(255,255,255,0.92)";
-        ctx.beginPath();
-        ctx.roundRect(labelX - pw/2, labelY - ph/2, pw, ph, 3);
-        ctx.fill();
-        ctx.strokeStyle = col + "44";
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-        ctx.fillStyle = col + "ee";
-        ctx.fillText(labelText, labelX, labelY);
-        ctx.restore();
-      }
+      nodesSel.exit().remove();
 
-      // Nodes
-      const active = activeNodeRef.current;
-      const pulse = Math.sin(frame * 0.08) * 0.5 + 0.5; // 0..1
+      const allNodes = nodeGroup.selectAll<SVGGElement, GraphNode>("g.node");
 
-      for (const n of nodes) {
-        const isActive = n.id === active;
+      allNodes.attr("transform", (d: GraphNode) => `translate(${d.x},${d.y})`);
 
-        // Glow
-        const glowR = n.r * (isActive ? 2.8 + pulse * 0.8 : 2);
-        const grd = ctx.createRadialGradient(n.x, n.y, n.r * 0.5, n.x, n.y, glowR);
-        grd.addColorStop(0, n.color + (isActive ? "44" : "22"));
-        grd.addColorStop(1, "transparent");
-        ctx.beginPath(); ctx.arc(n.x, n.y, glowR, 0, 2*Math.PI);
-        ctx.fillStyle = grd; ctx.fill();
+      allNodes.each(function(d: GraphNode) {
+        const el = d3.select(this);
+        const isActive = d.id === activeId;
 
-        // Shadow
-        ctx.beginPath(); ctx.arc(n.x + 2, n.y + 3, n.r, 0, 2*Math.PI);
-        ctx.fillStyle = "rgba(0,0,0,0.08)"; ctx.fill();
+        el.select("path.shape")
+          .attr("d", nodePath(d.shape, d.r))
+          .attr("fill", d.color)
+          .attr("stroke", isActive ? d.color : "#fff")
+          .attr("stroke-width", isActive ? 3.5 : 2.5)
+          .attr("opacity", 0.9);
 
-        // Circle
-        ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 2*Math.PI);
-        ctx.fillStyle = n.color; ctx.fill();
+        const fontSize = Math.max(10, Math.min(13, d.r * 0.65));
+        el.select("text.initials")
+          .attr("font-size", fontSize)
+          .text(d.id.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase());
 
-        // Expanding rings for active speaker
-        if (isActive) {
-          // Inner ring
-          ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 3 + pulse * 3, 0, 2*Math.PI);
-          ctx.strokeStyle = n.color + "cc"; ctx.lineWidth = 2; ctx.stroke();
-          // Outer expanding ring
-          const outerR = n.r + 8 + pulse * 10;
-          ctx.beginPath(); ctx.arc(n.x, n.y, outerR, 0, 2*Math.PI);
-          ctx.strokeStyle = n.color + Math.round((1 - pulse) * 100).toString(16).padStart(2,"0");
-          ctx.lineWidth = 1.5; ctx.stroke();
-          // "speaking" label above node
-          ctx.font = "bold 8px Inter, sans-serif";
-          ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-          ctx.fillStyle = n.color + "cc";
-          ctx.fillText("speaking", n.x, n.y - n.r - 8);
-        }
+        el.select("text.label")
+          .attr("y", d.r + 14)
+          .attr("font-size", Math.max(9, Math.min(11, d.r * 0.5)))
+          .attr("fill", isActive ? "#3d2f20" : "#8a7260")
+          .text(d.id.split(" ").slice(0, 2).join(" "));
 
-        // Initials
-        const fontSize = Math.max(10, Math.min(13, n.r * 0.65));
-        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(255,255,255,0.95)";
-        ctx.fillText(n.id.split(" ").map((w:string) => w[0]).join("").slice(0,2).toUpperCase(), n.x, n.y);
+        // Speaking ring animation
+        el.select("circle.speaking-ring")
+          .attr("r", d.r + 6)
+          .attr("stroke", d.color)
+          .attr("opacity", isActive ? 0.6 : 0);
 
-        // Name label below node
-        const name = n.id.split(" ").slice(0, 2).join(" ");
-        ctx.font = `600 ${Math.max(9, Math.min(11, n.r * 0.5))}px Inter, sans-serif`;
-        ctx.textBaseline = "top";
-        ctx.fillStyle = isActive ? "#3d2f20" : "#8a7260";
-        ctx.fillText(name, n.x, n.y + n.r + 4);
+        // Badge
+        const bx = d.r * 0.7, by = -d.r * 0.7;
+        el.select("circle.badge-bg")
+          .attr("cx", bx).attr("cy", by)
+          .attr("stroke", d.color + "88")
+          .attr("opacity", d.speeches > 0 ? 1 : 0);
+        el.select("text.badge-text")
+          .attr("x", bx).attr("y", by)
+          .attr("fill", d.color)
+          .text(d.speeches > 0 ? String(d.speeches) : "");
+      });
+    }
 
-        // Speech count badge
-        if (n.speeches > 0) {
-          const bx = n.x + n.r * 0.7, by = n.y - n.r * 0.7;
-          ctx.beginPath(); ctx.arc(bx, by, 7, 0, 2*Math.PI);
-          ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.fill();
-          ctx.strokeStyle = n.color + "88"; ctx.lineWidth = 1.2; ctx.stroke();
-          ctx.font = "bold 7px Inter, sans-serif";
-          ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillStyle = n.color;
-          ctx.fillText(String(n.speeches), bx, by);
-        }
-      }
-
-      ctx.restore();
-
-      if (nodes.length === 0) {
-        ctx.font = "13px Inter, sans-serif";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillStyle = "#c8b89a";
-        ctx.fillText("Waiting for debate to begin…", W/2, H/2);
-      }
-
-      graphAnimRef.current = requestAnimationFrame(tick);
+    // Update simulation when nodes/edges change (called from transcript sync effect)
+    const updateSim = () => {
+      simulation.nodes(graphNodesRef.current);
+      const linkForce = simulation.force("link") as d3.ForceLink<GraphNode, any>;
+      if (linkForce) linkForce.links(safeEdges());
+      simulation.alpha(0.3).restart();
     };
+    // Expose updater on the ref so transcript sync can call it
+    (d3SimRef as any).current = { sim: simulation, update: updateSim };
 
-    graphAnimRef.current = requestAnimationFrame(tick);
+    // Resize handler
+    const onResize = () => {
+      const nW = container.clientWidth || 600;
+      const nH = container.clientHeight || 400;
+      svg.attr("viewBox", `0 0 ${nW} ${nH}`);
+      simulation.force("center", d3.forceCenter(nW / 2, nH / 2));
+      simulation.force("x", d3.forceX<GraphNode>(nW / 2).strength(0.035));
+      simulation.force("y", d3.forceY<GraphNode>(nH / 2).strength(0.035));
+      simulation.alpha(0.1).restart();
+    };
+    window.addEventListener("resize", onResize);
+
+    // Tooltip on edge hover
+    svg.on("mousemove", (event: MouseEvent) => {
+      // Skip tooltip during drag
+      const [mx, my] = d3.pointer(event, g.node());
+      const nodes = graphNodesRef.current;
+      const edges = graphEdgesRef.current;
+      // Check if hovering a node — no tooltip
+      if (nodes.some(n => Math.sqrt((n.x - mx)**2 + (n.y - my)**2) <= n.r + 6)) { setGraphHover(null); return; }
+      for (const edge of edges) {
+        const src = nodes.find(n => n.id === edge.sourceId);
+        const tgt = nodes.find(n => n.id === edge.targetId);
+        if (!src || !tgt || !isFinite(src.x) || !isFinite(tgt.x)) continue;
+        const dx = tgt.x - src.x, dy = tgt.y - src.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const px = -(tgt.y - src.y)/dist, py = (tgt.x - src.x)/dist;
+        const hasMirror = edges.some(e2 => e2.sourceId === edge.targetId && e2.targetId === edge.sourceId);
+        const curve = hasMirror ? 35 : 20;
+        const cpX = (src.x + tgt.x)/2 + px*curve, cpY = (src.y + tgt.y)/2 + py*curve;
+        let minD = Infinity;
+        for (let t = 0; t <= 1; t += 1/12) {
+          const bx = (1-t)*(1-t)*src.x + 2*(1-t)*t*cpX + t*t*tgt.x;
+          const by = (1-t)*(1-t)*src.y + 2*(1-t)*t*cpY + t*t*tgt.y;
+          minD = Math.min(minD, Math.sqrt((mx-bx)**2 + (my-by)**2));
+        }
+        if (minD < 14) {
+          const msgs = transcriptRef.current.filter(e => e.character === edge.sourceId && e.target === edge.targetId);
+          const last = msgs[msgs.length - 1];
+          const snippet = last ? last.message.slice(0, 120).trimEnd() + (last.message.length > 120 ? "…" : "") : "";
+          setGraphHover({ x: event.offsetX, y: event.offsetY, source: edge.sourceId, target: edge.targetId, count: edge.count, questions: edge.questions, snippet });
+          return;
+        }
+      }
+      setGraphHover(null);
+    });
+    svg.on("mouseleave", () => setGraphHover(null));
+
     return () => {
-      cancelAnimationFrame(graphAnimRef.current);
-      window.removeEventListener("resize", resize);
-      canvas.removeEventListener("wheel", onWheel);
-      canvas.removeEventListener("mousedown", onCanvasDown);
-      canvas.removeEventListener("mousemove", onCanvasMove);
-      canvas.removeEventListener("mouseleave", onCanvasLeave);
-      document.removeEventListener("mousemove", onDragMove);
-      document.removeEventListener("mouseup", onDragUp);
+      simulation.stop();
+      d3SimRef.current = null;
+      window.removeEventListener("resize", onResize);
     };
   }, [status]);
 
+  // (Old canvas graph code removed — now using D3+SVG above)
   // ── Heatmap: redraw whenever transcript or active tab changes ──
   useEffect(() => {
     const canvas = heatmapCanvasRef.current;
@@ -668,7 +630,7 @@ export default function DebatePage() {
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("speaker ↓", 0, 0);
     ctx.restore();
-  }, [transcript, activeCharacters, activeTab]);
+  }, [transcript, activeCharacters, rightTab]);
 
   // ── Emotions arc: redraw whenever transcript or active tab changes ──
   useEffect(() => {
@@ -774,15 +736,16 @@ export default function DebatePage() {
     ctx.textAlign = "center"; ctx.textBaseline = "bottom";
     ctx.fillStyle = "#c8b89a";
     ctx.fillText("turn →", padL + (W - padL - padR) / 2, H - 2);
-  }, [transcript, activeCharacters, activeTab]);
+  }, [transcript, activeCharacters, rightTab]);
 
   const startDebate = async () => {
     if (!divergence.trim()) return;
     setStatus("starting");
     graphNodesRef.current = [];
     graphEdgesRef.current = [];
-    zoomRef.current = 1;
-    panRef.current = { x: 0, y: 0 };
+    if (d3SimRef.current && (d3SimRef.current as any).sim) {
+      (d3SimRef.current as any).sim.stop();
+    }
     const res = await fetch(`${API}/debates`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -827,6 +790,41 @@ export default function DebatePage() {
           isExploration,
         }]);
         setStreaming(null);
+      } else if (ev.type === "reactions") {
+        // Emotional reactions from other characters
+        for (const r of (ev.reactions || [])) {
+          setTranscript(prev => [...prev, {
+            character: r.character,
+            message: r.reaction,
+            round: 0,
+            isReaction: true,
+          }]);
+        }
+      } else if (ev.type === "stage_direction") {
+        setTranscript(prev => [...prev, {
+          character: "Narrator",
+          message: ev.text,
+          round: 0,
+          isStageDirection: true,
+        }]);
+      } else if (ev.type === "audience") {
+        // Audience member's message appears in transcript
+        setTranscript(prev => [...prev, {
+          character: ev.name,
+          message: ev.message,
+          round: 0,
+          isAudience: true,
+        }]);
+      } else if (ev.type === "orchestrator") {
+        // Boru the Elephant speaks
+        setTranscript(prev => [...prev, {
+          character: "Boru",
+          message: ev.message,
+          round: 0,
+          isOrchestrator: true,
+          orchestratorEvent: ev.event,
+          phase: ev.phase,
+        }]);
       } else if (ev.type === "ending_token") {
         setStreamingEnding(prev => prev + ev.text);
       } else if (ev.type === "debate_end") {
@@ -962,6 +960,19 @@ export default function DebatePage() {
       setStoryCharMsgs(prev => [...prev, { role: "assistant", content: "Could not reach this character right now." }]);
       setStoryCharStreaming("");
     } finally { setStoryCharLoading(false); }
+  };
+
+  const sendAudienceMessage = async () => {
+    const msg = audienceInput.trim();
+    if (!msg || !debateId || !audienceNameSet) return;
+    setAudienceInput("");
+    try {
+      await fetch(`${API}/debates/${debateId}/audience`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: audienceName, message: msg }),
+      });
+    } catch {}
   };
 
   const sendDebateChat = async () => {
@@ -1268,61 +1279,60 @@ export default function DebatePage() {
           </div>
         </div>
 
-        {/* Question + controls row */}
-        <div className="px-5 pb-2 flex items-center gap-3">
+        {/* Question row */}
+        <div className="px-5 pb-1.5 flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-[#1c1410] truncate leading-tight">
               <span className="text-[#c07820] mr-1.5 font-bold text-xs">What if…</span>
               {divergence || "—"}
             </p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            {/* Debate stats — only show once debate has started */}
-            {transcript.length > 0 && (() => {
-              const N = Math.max(activeCharacters.length, 1);
-              const lastTurn = transcript[transcript.length - 1]?.round ?? 0;
-              const currentRound = Math.floor(lastTurn / N) + 1;
-              const topSpeaker = [...graphStats].sort((a, b) => b.speeches - a.speeches)[0];
-              return (
-                <div className="flex items-center gap-2 text-xs text-[#a09282]">
-                  <span title="Total exchanges" className="flex items-center gap-0.5">
-                    <span className="font-semibold text-[#6b5c4e]">{transcript.length}</span> turns
-                  </span>
-                  <span className="text-[#e8e0d5]">·</span>
-                  <span title={`Round ${currentRound} — each round everyone speaks once`} className="flex items-center gap-0.5">
-                    round <span className="font-semibold text-[#6b5c4e]">{currentRound}</span>
-                  </span>
-                  {topSpeaker && (
-                    <>
-                      <span className="text-[#e8e0d5]">·</span>
-                      <span title={`Most vocal: ${topSpeaker.id} (${topSpeaker.speeches} turns)`} className="flex items-center gap-1 max-w-[80px] truncate">
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: topSpeaker.color }} />
-                        <span className="truncate font-medium text-[#6b5c4e]">{topSpeaker.id.split(" ")[0]}</span>
-                      </span>
-                    </>
-                  )}
-                </div>
-              );
-            })()}
-            {/* Drama bar */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[#c8b89a]">drama</span>
-              <div className="w-12 h-1 bg-[#e8e0d5] rounded-full overflow-hidden">
-                <div className="h-full bg-[#c07820] rounded-full transition-all duration-700" style={{ width: `${dramaScore * 100}%` }} />
-              </div>
-            </div>
-            <button
-              onClick={() => setShowGraph(v => !v)}
-              title={showGraph ? "Hide visualisation" : "Show visualisation"}
-              className="w-8 h-8 rounded-lg border border-[#e8e0d5] hover:border-[#c8b89a] bg-[#faf7f2] hover:bg-white flex items-center justify-center text-[#a09282] text-sm transition-colors"
-            >
-              {showGraph ? "⊠" : "⊞"}
-            </button>
-          </div>
         </div>
 
-        {/* Avatar + speaking row */}
-        <div className="px-5 pb-2.5 flex items-center gap-2 min-h-[28px]">
+        {/* Stats bar */}
+        {transcript.length > 0 && (() => {
+          const N = Math.max(activeCharacters.length, 1);
+          const lastTurn = transcript[transcript.length - 1]?.round ?? 0;
+          const currentRound = Math.floor(lastTurn / N) + 1;
+          const sorted = [...graphStats].sort((a, b) => b.speeches - a.speeches);
+          const total = sorted.reduce((s, n) => s + n.speeches, 0) || 1;
+          return (
+            <div className="px-5 pb-1.5 flex items-center gap-4">
+              {[
+                { label: "Turns", value: String(transcript.length) },
+                { label: "Round", value: String(currentRound) },
+                { label: "Speakers", value: String(activeCharacters.length) },
+              ].map(s => (
+                <div key={s.label} className="flex items-center gap-1.5 text-xs">
+                  <span className="font-bold text-[#1c1410] text-sm">{s.value}</span>
+                  <span className="text-[#a09282] uppercase tracking-wide text-[10px]">{s.label}</span>
+                </div>
+              ))}
+              {/* Drama bar */}
+              <div className="flex items-center gap-1.5 ml-1">
+                <span className="text-[10px] text-[#a09282] uppercase tracking-wide">Drama</span>
+                <div className="w-16 h-1.5 bg-[#e8e0d5] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#c07820] rounded-full transition-all duration-700" style={{ width: `${dramaScore * 100}%` }} />
+                </div>
+              </div>
+              {/* Mini voice share */}
+              {sorted.length > 0 && (
+                <div className="flex items-center gap-0.5 ml-auto">
+                  {sorted.slice(0, 6).map(n => (
+                    <div key={n.id} title={`${n.id}: ${Math.round((n.speeches / total) * 100)}%`}
+                      className="h-3 rounded-sm min-w-[4px] transition-all duration-500"
+                      style={{ width: `${Math.max(4, (n.speeches / total) * 80)}px`, backgroundColor: n.color }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* View tabs + avatar row */}
+        <div className="px-5 pb-0 flex items-center gap-3">
+          {/* Avatars */}
+          <div className="flex items-center gap-0.5 shrink-0">
           {activeCharacters.length > 0 ? (
             <>
               <div className="flex items-center">
@@ -1355,19 +1365,34 @@ export default function DebatePage() {
           ) : (
             <span className="text-xs text-[#c8b89a]">Waiting for debate to start…</span>
           )}
+          </div>
+
+          {/* Layout controls */}
+          <div className="flex items-center gap-1 ml-auto shrink-0">
+            <button onClick={() => setMaximize(m => m === "left" ? "none" : "left")} title="Maximize debate"
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors ${maximize === "left" ? "bg-[#c07820] text-white" : "text-[#a09282] hover:text-[#6b5c4e] hover:bg-[#f0ece5]"}`}>
+              💬
+            </button>
+            <button onClick={() => setMaximize("none")} title="Split view"
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors ${maximize === "none" ? "bg-[#c07820] text-white" : "text-[#a09282] hover:text-[#6b5c4e] hover:bg-[#f0ece5]"}`}>
+              ⊞
+            </button>
+            <button onClick={() => setMaximize(m => m === "right" ? "none" : "right")} title="Maximize graph"
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors ${maximize === "right" ? "bg-[#c07820] text-white" : "text-[#a09282] hover:text-[#6b5c4e] hover:bg-[#f0ece5]"}`}>
+              ⬡
+            </button>
+          </div>
         </div>
 
       </div>
 
-      {/* Resizable two-panel layout */}
-      <div
-        ref={splitContainerRef}
-        className="flex-1 flex overflow-hidden"
-        style={{ cursor: isDraggingSplit ? "col-resize" : "auto", userSelect: isDraggingSplit ? "none" : "auto" }}
-      >
+      {/* ── Split view ── */}
+      <div ref={splitContainerRef} className="flex-1 flex overflow-hidden"
+        style={{ cursor: isDraggingSplit ? "col-resize" : "auto", userSelect: isDraggingSplit ? "none" : "auto" }}>
 
-        {/* LEFT: Transcript + chat toggle — fills all space when graph is hidden */}
-        <div className="flex flex-col overflow-hidden" style={{ width: showGraph ? `${splitPct}%` : "100%" }}>
+        {/* ══ LEFT: Debate transcript ══ */}
+        <div className="flex flex-col overflow-hidden"
+          style={{ width: maximize === "right" ? "0px" : maximize === "left" ? "100%" : `${splitPct}%`, display: maximize === "right" ? "none" : "flex" }}>
 
           {/* Scrollable transcript */}
           <div
@@ -1414,6 +1439,64 @@ export default function DebatePage() {
               const isTwoChar = activeCharacters.length === 2;
               const charIdx = activeCharacters.indexOf(entry.character);
               const isRight = isTwoChar && charIdx === 1;
+
+              // Emotional reaction — brief body language
+              if ((entry as any).isReaction) return (
+                <div key={i} className="mx-8 my-0.5">
+                  <span className="text-xs italic text-[#a09282]">
+                    <span className="font-medium text-[#6b5c4e]">{entry.character}</span>
+                    {" "}{entry.message}
+                  </span>
+                </div>
+              );
+
+              // Stage direction — atmospheric
+              if ((entry as any).isStageDirection) return (
+                <div key={i} className="mx-4 my-3 text-center">
+                  <span className="text-xs italic text-[#c8b89a] leading-relaxed">
+                    {entry.message}
+                  </span>
+                </div>
+              );
+
+              // Audience member message
+              if ((entry as any).isAudience) return (
+                <div key={i} className="my-3 mx-1">
+                  <div className="rounded-xl px-4 py-3 border border-blue-200 bg-blue-50/60">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm">🙋</span>
+                      <span className="text-xs font-bold text-blue-700">{entry.character}</span>
+                      <span className="text-xs text-blue-400 italic">· audience</span>
+                    </div>
+                    <p className="text-sm text-blue-900 leading-relaxed">{entry.message}</p>
+                  </div>
+                </div>
+              );
+
+              // Boru the Elephant — Speaker of the Sabha
+              if ((entry as any).isOrchestrator) return (
+                <div key={i} className="my-4 mx-1">
+                  <div className="rounded-2xl px-5 py-4 border border-[#c07820]/30 bg-gradient-to-r from-[#fef9f0] to-[#fef3e2]">
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <span className="text-lg">🐘</span>
+                      <span className="text-xs uppercase tracking-widest font-bold text-[#c07820]">Boru</span>
+                      <span className="text-xs text-[#a09282] italic">· Speaker of the Sabha</span>
+                      {(entry as any).phase && (
+                        <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-[#c07820]/10 border border-[#c07820]/20 text-[#c07820] font-medium uppercase tracking-wide">
+                          {(entry as any).phase.replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm leading-relaxed text-[#3d2f20] font-medium">
+                      <ReactMarkdown components={{
+                        p: ({children}) => <p style={{marginBottom:"0.25rem"}}>{children}</p>,
+                        strong: ({children}) => <strong style={{fontWeight:700,color:"#c07820"}}>{children}</strong>,
+                        em: ({children}) => <em style={{fontStyle:"italic",color:"#8a7260"}}>{children}</em>,
+                      }}>{entry.message}</ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              );
 
               // World observer / interrogator entries
               if (entry.isObserver) return (
@@ -1473,10 +1556,19 @@ export default function DebatePage() {
                     </div>
                   )}
                   <div className={`flex gap-3 py-1.5 ${isRight ? "flex-row-reverse" : ""}`}>
-                    <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 shadow-sm"
-                      style={{ backgroundColor: c.hex }}>
-                      {initials(entry.character)}
-                    </div>
+                    {(() => {
+                      const charData = storyCharacters.find((sc: any) => sc.name === entry.character);
+                      const portrait = charData?.portrait;
+                      return portrait ? (
+                        <img src={`http://localhost:8001${portrait}`} alt={entry.character}
+                          className="w-8 h-8 rounded-full shrink-0 object-cover mt-0.5 shadow-sm" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 shadow-sm"
+                          style={{ backgroundColor: c.hex }}>
+                          {initials(entry.character)}
+                        </div>
+                      );
+                    })()}
                     <div className={`flex-1 min-w-0 ${isRight ? "items-end" : ""} flex flex-col`}>
                       <div className={`flex items-center gap-2 mb-1 flex-wrap ${isRight ? "flex-row-reverse" : ""}`}>
                         <span className="text-xs font-semibold" style={{ color: c.hex }}>{entry.character}</span>
@@ -1738,6 +1830,45 @@ export default function DebatePage() {
             </div>
           )}
 
+          {/* Audience participation — during running debate */}
+          {(status === "running" || status === "done") && (
+            <div className="shrink-0 border-t border-[#e8e0d5] bg-white px-4 py-2.5">
+              {!audienceNameSet ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#a09282] shrink-0">🙋 Join the Sabha as:</span>
+                  <input
+                    value={audienceName}
+                    onChange={e => setAudienceName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && audienceName.trim()) setAudienceNameSet(true); }}
+                    placeholder="Your name..."
+                    className="flex-1 bg-[#f7f3ed] border border-[#e8e0d5] focus:border-[#c07820] rounded-lg px-3 py-1.5 text-xs text-[#1c1410] placeholder-[#c8b89a] focus:outline-none transition-colors"
+                  />
+                  <button
+                    onClick={() => { if (audienceName.trim()) setAudienceNameSet(true); }}
+                    disabled={!audienceName.trim()}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-[#c07820] hover:bg-[#a86a18] disabled:bg-[#e8e0d5] disabled:text-[#c8b89a] text-white font-medium transition-colors"
+                  >Join</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#c07820] font-semibold shrink-0">🙋 {audienceName}:</span>
+                  <input
+                    value={audienceInput}
+                    onChange={e => setAudienceInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") sendAudienceMessage(); }}
+                    placeholder="Ask a question or comment on the debate..."
+                    className="flex-1 bg-[#f7f3ed] border border-[#e8e0d5] focus:border-[#c07820] rounded-lg px-3 py-1.5 text-xs text-[#1c1410] placeholder-[#c8b89a] focus:outline-none transition-colors"
+                  />
+                  <button
+                    onClick={sendAudienceMessage}
+                    disabled={!audienceInput.trim()}
+                    className="w-7 h-7 rounded-lg bg-[#c07820] hover:bg-[#a86a18] disabled:bg-[#e8e0d5] disabled:text-[#c8b89a] text-white flex items-center justify-center text-sm transition-colors shrink-0"
+                  >↑</button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Chat panel */}
           {leftTab === "chat" && (
             <div className="shrink-0 flex flex-col bg-white border-t border-[#e8e0d5]" style={{ height: "280px" }}>
@@ -1808,30 +1939,30 @@ export default function DebatePage() {
           )}
         </div>
 
-        {/* Drag handle — always mounted, hidden via display:none when graph closed */}
-        <div
-          className={`w-1.5 shrink-0 transition-colors cursor-col-resize group relative ${isDraggingSplit ? "bg-[#c07820]" : "bg-[#e8e0d5] hover:bg-[#c07820]/60"}`}
-          style={{ display: showGraph ? "block" : "none" }}
-          onMouseDown={() => { isDraggingRef.current = true; setIsDraggingSplit(true); }}
-        >
-          {/* Grip dots */}
-          <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center gap-1 pointer-events-none">
-            <div className={`w-0.5 h-0.5 rounded-full transition-colors ${isDraggingSplit ? "bg-white" : "bg-[#c8b89a] group-hover:bg-[#c07820]"}`} />
-            <div className={`w-0.5 h-0.5 rounded-full transition-colors ${isDraggingSplit ? "bg-white" : "bg-[#c8b89a] group-hover:bg-[#c07820]"}`} />
-            <div className={`w-0.5 h-0.5 rounded-full transition-colors ${isDraggingSplit ? "bg-white" : "bg-[#c8b89a] group-hover:bg-[#c07820]"}`} />
+        {/* ══ Drag handle ══ */}
+        {maximize === "none" && (
+          <div
+            className={`w-1.5 shrink-0 transition-colors cursor-col-resize group relative ${isDraggingSplit ? "bg-[#c07820]" : "bg-[#e8e0d5] hover:bg-[#c07820]/60"}`}
+            onMouseDown={() => { isDraggingRef.current = true; setIsDraggingSplit(true); }}
+          >
+            <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center gap-1 pointer-events-none">
+              <div className={`w-0.5 h-0.5 rounded-full transition-colors ${isDraggingSplit ? "bg-white" : "bg-[#c8b89a] group-hover:bg-[#c07820]"}`} />
+              <div className={`w-0.5 h-0.5 rounded-full transition-colors ${isDraggingSplit ? "bg-white" : "bg-[#c8b89a] group-hover:bg-[#c07820]"}`} />
+              <div className={`w-0.5 h-0.5 rounded-full transition-colors ${isDraggingSplit ? "bg-white" : "bg-[#c8b89a] group-hover:bg-[#c07820]"}`} />
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* RIGHT: Visualization panel — always mounted so canvas/physics survives toggle */}
+        {/* ══ RIGHT: Graph / Heatmap / Emotions ══ */}
         <div className="flex flex-col overflow-hidden bg-[#f7f3ed]"
-          style={{ flex: 1, display: showGraph ? "flex" : "none" }}>
+          style={{ flex: maximize === "left" ? 0 : 1, width: maximize === "left" ? "0px" : maximize === "right" ? "100%" : `${100 - splitPct}%`, display: maximize === "left" ? "none" : "flex" }}>
 
-          {/* Tab bar */}
+          {/* Right panel tabs */}
           <div className="shrink-0 flex border-b border-[#e8e0d5] bg-[#f0ece5]">
             {(["graph", "heatmap", "emotions"] as const).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-5 py-3 text-sm font-medium transition-colors border-b-2 ${
-                  activeTab === tab
+              <button key={tab} onClick={() => setRightTab(tab)}
+                className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
+                  rightTab === tab
                     ? "text-[#3d2f20] border-[#c07820]"
                     : "text-[#a09282] border-transparent hover:text-[#6b5c4e]"
                 }`}>
@@ -1840,13 +1971,11 @@ export default function DebatePage() {
             ))}
           </div>
 
-          {/* Canvas layers — all always mounted so graph physics stays alive */}
+          {/* Canvas layers */}
           <div className="flex-1 relative min-h-0">
-
             {/* Graph */}
-            <div style={{ position:"absolute", inset:0, opacity: activeTab==="graph" ? 1 : 0, pointerEvents: activeTab==="graph" ? "auto" : "none", transition:"opacity 0.15s" }}>
-              <canvas ref={graphCanvasRef} style={{ display:"block", width:"100%", height:"100%", cursor:"grab" }} />
-              {/* Edge hover tooltip */}
+            <div style={{ position:"absolute", inset:0, opacity: rightTab==="graph" ? 1 : 0, pointerEvents: rightTab==="graph" ? "auto" : "none", transition:"opacity 0.15s" }}>
+              <svg ref={graphSvgRef} style={{ display:"block", width:"100%", height:"100%" }} />
               {graphHover && (
                 <div className="absolute pointer-events-none z-10 max-w-[220px]"
                   style={{ left: graphHover.x + 14, top: graphHover.y - 8 }}>
@@ -1866,138 +1995,56 @@ export default function DebatePage() {
                   </div>
                 </div>
               )}
-              <div className="absolute top-3 right-3 flex flex-col gap-1">
-                {[
-                  { label: "+", title: "Zoom in",  action: () => { zoomRef.current = Math.min(4, zoomRef.current * 1.25); } },
-                  { label: "⊡", title: "Fit view",  action: () => {
-                    const nodes = graphNodesRef.current;
-                    const c = graphCanvasRef.current;
-                    if (!nodes.length || !c) { zoomRef.current = 1; panRef.current = { x: 0, y: 0 }; return; }
-                    const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
-                    const minX = Math.min(...xs) - 40, maxX = Math.max(...xs) + 40;
-                    const minY = Math.min(...ys) - 40, maxY = Math.max(...ys) + 40;
-                    const scale = Math.min(c.width / (maxX - minX), c.height / (maxY - minY), 2);
-                    zoomRef.current = scale;
-                    panRef.current = { x: c.width/2 - (minX+maxX)/2 * scale, y: c.height/2 - (minY+maxY)/2 * scale };
-                  }},
-                  { label: "−", title: "Zoom out", action: () => { zoomRef.current = Math.max(0.25, zoomRef.current * 0.8); } },
-                ].map(({ label, title, action }) => (
-                  <button key={label} title={title} onClick={action}
-                    className="w-7 h-7 rounded-lg bg-white/80 hover:bg-white border border-[#d8cfc5] text-[#6b5c4e] hover:text-[#3d2f20] text-sm flex items-center justify-center transition-colors font-mono shadow-sm">
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {/* Graph legend — collapsible + draggable */}
-              <div
-                className="absolute select-none"
-                style={{
-                  left: graphLegendPos.x,
-                  bottom: graphLegendPos.y < 0 ? 12 : undefined,
-                  top: graphLegendPos.y >= 0 ? graphLegendPos.y : undefined,
-                  cursor: "grab",
-                  zIndex: 10,
-                }}
-                onMouseDown={e => {
-                  e.preventDefault();
-                  const el = e.currentTarget.parentElement!;
-                  const rect = el.getBoundingClientRect();
-                  graphLegendDragRef.current = {
-                    active: true,
-                    sx: e.clientX, sy: e.clientY,
-                    ox: graphLegendPos.x,
-                    oy: graphLegendPos.y < 0 ? rect.height - (e.currentTarget.getBoundingClientRect().bottom - rect.top) - 12 : graphLegendPos.y,
-                  };
-                  const onMove = (me: MouseEvent) => {
-                    if (!graphLegendDragRef.current.active) return;
-                    const dx = me.clientX - graphLegendDragRef.current.sx;
-                    const dy = me.clientY - graphLegendDragRef.current.sy;
-                    setGraphLegendPos({
-                      x: Math.max(4, graphLegendDragRef.current.ox + dx),
-                      y: Math.max(4, graphLegendDragRef.current.oy + dy),
-                    });
-                  };
-                  const onUp = () => { graphLegendDragRef.current.active = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-                  window.addEventListener("mousemove", onMove);
-                  window.addEventListener("mouseup", onUp);
-                }}
-              >
-                <div className="bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
-                  <button
-                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#f7f3ed] transition-colors"
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={() => setGraphLegendCollapsed(v => !v)}
-                  >
-                    <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">Legend</span>
-                    <span className="text-[#a09282] text-xs ml-3">{graphLegendCollapsed ? "▸" : "▾"}</span>
-                  </button>
-                  {!graphLegendCollapsed && (
-                    <div className="px-3 pb-2.5 space-y-1.5 border-t border-[#e8e0d5]">
-                      <div className="flex items-center gap-2 pt-1.5"><div className="w-8 h-px bg-[#8a7260]/50" /><span className="text-[#8a7260] text-xs">Replied</span></div>
-                      <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#c07820]/70" /><span className="text-[#c07820]/80 text-xs">Asked question</span></div>
-                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#8a7260]/40 border border-[#8a7260]/40" /><span className="text-[#a09282] text-xs">Node size = speeches</span></div>
-                      <div className="flex items-center gap-2"><span className="text-[#c07820] text-xs">✦</span><span className="text-[#a09282] text-xs">Hidden depth turn</span></div>
-                    </div>
-                  )}
-                </div>
+              {/* Zoom/pan handled by D3 — scroll to zoom, drag to pan, drag node to move */}
+              {/* Legend */}
+              <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
+                <button className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#f7f3ed] transition-colors"
+                  onClick={() => setGraphLegendCollapsed(v => !v)}>
+                  <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">Legend</span>
+                  <span className="text-[#a09282] text-xs ml-3">{graphLegendCollapsed ? "▸" : "▾"}</span>
+                </button>
+                {!graphLegendCollapsed && (
+                  <div className="px-3 pb-2.5 space-y-1.5 border-t border-[#e8e0d5]">
+                    <div className="flex items-center gap-2 pt-1.5"><div className="w-8 h-px bg-[#8a7260]/50" /><span className="text-[#8a7260] text-xs">Replied</span></div>
+                    <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#c07820]/70" /><span className="text-[#c07820]/80 text-xs">Asked question</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#8a7260]/40 border border-[#8a7260]/40" /><span className="text-[#a09282] text-xs">Node size = speeches</span></div>
+                  </div>
+                )}
               </div>
             </div>
-
             {/* Heatmap */}
-            <div style={{ position:"absolute", inset:0, opacity: activeTab==="heatmap" ? 1 : 0, pointerEvents: activeTab==="heatmap" ? "auto" : "none", transition:"opacity 0.15s" }}>
+            <div style={{ position:"absolute", inset:0, opacity: rightTab==="heatmap" ? 1 : 0, pointerEvents: rightTab==="heatmap" ? "auto" : "none", transition:"opacity 0.15s" }}>
               <canvas ref={heatmapCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
-              {/* Heatmap legend */}
               <div className="absolute top-3 right-3">
                 <div className="bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
-                  <button
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors"
-                    onClick={() => setHeatmapLegendOpen(v => !v)}
-                  >
+                  <button className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors" onClick={() => setHeatmapLegendOpen(v => !v)}>
                     <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">How to read</span>
                     <span className="text-[#a09282] text-xs">{heatmapLegendOpen ? "▾" : "▸"}</span>
                   </button>
                   {heatmapLegendOpen && (
                     <div className="px-3 pb-3 space-y-2 border-t border-[#e8e0d5] max-w-[220px]">
-                      <p className="text-xs text-[#6b5c4e] pt-2 leading-relaxed">
-                        Each cell shows how many times the <span className="font-semibold text-[#3d2f20]">row character</span> directly addressed the <span className="font-semibold text-[#3d2f20]">column character</span>.
-                      </p>
-                      <div className="space-y-1.5 pt-0.5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-sm shrink-0" style={{ background: "rgba(192,80,10,0.8)" }} />
-                          <span className="text-xs text-[#6b5c4e]">Many replies (high intensity)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-sm shrink-0" style={{ background: "rgba(230,180,140,0.2)" }} />
-                          <span className="text-xs text-[#6b5c4e]">Few replies (low intensity)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-sm shrink-0 border border-[#c8b89a]/40" style={{ background: "rgba(200,184,154,0.15)" }} />
-                          <span className="text-xs text-[#6b5c4e]">Diagonal — same character</span>
-                        </div>
+                      <p className="text-xs text-[#6b5c4e] pt-2 leading-relaxed">Row = speaker, Column = spoken to. Number = reply count.</p>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded-sm shrink-0" style={{ background: "rgba(192,80,10,0.8)" }} /><span className="text-xs text-[#6b5c4e]">Many</span></div>
+                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded-sm shrink-0" style={{ background: "rgba(230,180,140,0.2)" }} /><span className="text-xs text-[#6b5c4e]">Few</span></div>
                       </div>
-                      <p className="text-xs text-[#a09282] border-t border-[#e8e0d5] pt-2">The number inside = exact reply count.</p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
-
-            {/* Emotions arc */}
-            <div style={{ position:"absolute", inset:0, opacity: activeTab==="emotions" ? 1 : 0, pointerEvents: activeTab==="emotions" ? "auto" : "none", transition:"opacity 0.15s" }}>
+            {/* Emotions */}
+            <div style={{ position:"absolute", inset:0, opacity: rightTab==="emotions" ? 1 : 0, pointerEvents: rightTab==="emotions" ? "auto" : "none", transition:"opacity 0.15s" }}>
               <canvas ref={emotionsCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
-              {/* Emotion legend */}
               <div className="absolute top-3 right-3">
                 <div className="bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
-                  <button
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors"
-                    onClick={() => setEmotionLegendOpen(v => !v)}
-                  >
+                  <button className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors" onClick={() => setEmotionLegendOpen(v => !v)}>
                     <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">Emotions</span>
                     <span className="text-[#a09282] text-xs">{emotionLegendOpen ? "▾" : "▸"}</span>
                   </button>
                   {emotionLegendOpen && (
                     <div className="px-3 pb-3 border-t border-[#e8e0d5] max-w-[200px]">
-                      <p className="text-xs text-[#6b5c4e] pt-2 pb-2 leading-relaxed">Each dot = one speech. Colour = detected emotion at that moment.</p>
+                      <p className="text-xs text-[#6b5c4e] pt-2 pb-2 leading-relaxed">Each dot = one speech. Colour = detected emotion.</p>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
                         {Object.entries(EMOTION_STYLE).filter(([k]) => k !== "neutral").map(([, em]) => (
                           <div key={em.label} className="flex items-center gap-1.5">
@@ -2005,10 +2052,6 @@ export default function DebatePage() {
                             <span className="text-xs text-[#6b5c4e]">{em.label}</span>
                           </div>
                         ))}
-                        <div className="flex items-center gap-1.5 col-span-2 pt-1 border-t border-[#e8e0d5]">
-                          <span className="text-[#c07820] text-xs">✦</span>
-                          <span className="text-xs text-[#6b5c4e]">hidden depth turn</span>
-                        </div>
                       </div>
                     </div>
                   )}
@@ -2017,32 +2060,26 @@ export default function DebatePage() {
             </div>
           </div>
 
-          {/* Stats bar (graph tab only) */}
-          {graphStats.length > 0 && activeTab === "graph" && (() => {
+          {/* Voice share */}
+          {graphStats.length > 0 && rightTab === "graph" && (() => {
             const sorted = [...graphStats].sort((a, b) => b.speeches - a.speeches);
             const maxSpeeches = sorted[0]?.speeches || 1;
             const total = sorted.reduce((s, n) => s + n.speeches, 0) || 1;
             return (
               <div className="shrink-0 border-t border-[#e8e0d5] bg-[#f0ece5]">
-                {/* Collapsible header */}
-                <button
-                  onClick={() => setShowStats(v => !v)}
-                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e8e0d5]/60 transition-colors"
-                >
+                <button onClick={() => setShowStats(v => !v)} className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e8e0d5]/60 transition-colors">
                   <span className="text-xs uppercase tracking-widest text-[#a09282] font-medium">Voice share</span>
                   <span className="text-[#a09282] text-xs">{showStats ? "▾" : "▸"}</span>
                 </button>
-                {showStats && <div className="px-3 pb-2.5 space-y-1.5">
-                {sorted.map(n => (
+                {showStats && <div className="px-3 pb-2.5 space-y-1.5">{sorted.map(n => (
                   <div key={n.id} className="flex items-center gap-2">
-                    <span className="text-xs text-[#8a7260] w-16 shrink-0 truncate">{n.id.split(" ")[0]}</span>
+                    <span className="text-xs text-[#8a7260] w-14 shrink-0 truncate">{n.id.split(" ")[0]}</span>
                     <div className="flex-1 h-1.5 bg-[#d8cfc5] rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(n.speeches / maxSpeeches) * 100}%`, backgroundColor: n.color }} />
                     </div>
-                    <span className="text-xs font-bold w-10 text-right shrink-0" style={{ color: n.color }}>{Math.round((n.speeches / total) * 100)}%</span>
+                    <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: n.color }}>{Math.round((n.speeches / total) * 100)}%</span>
                   </div>
-                ))}
-                </div>}
+                ))}</div>}
               </div>
             );
           })()}

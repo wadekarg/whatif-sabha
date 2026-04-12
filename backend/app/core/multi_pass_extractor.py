@@ -225,10 +225,15 @@ STORY TITLE: {title}
 ROLE: {role}
 ALIASES (other names this character is known by): {aliases}
 
+STORY TIMELINE PHASES:
+{timeline_phases_text}
+
 RELEVANT PASSAGES FROM THE STORY:
 {passages}
 
-Build a complete character profile. Return a JSON object:
+Build a complete character profile. For "phases", create one entry per timeline phase above — using the exact same phase_id. Each phase should capture how this character's emotional state, motivations, and fears evolve through that part of the story. If the character barely appears in a phase, still include it with what can be inferred.
+
+Return a JSON object:
 {{
   "name": "{name}",
   "role": "{role}",
@@ -244,12 +249,12 @@ Build a complete character profile. Return a JSON object:
   ],
   "phases": [
     {{
-      "phase_id": "main",
+      "phase_id": "exact_phase_id_from_timeline",
       "personality_traits": ["trait1", "trait2", "trait3"],
       "knowledge_state": {{}},
-      "motivations": ["motivation1", "motivation2"],
-      "fears": ["fear1"],
-      "emotional_state": "their emotional state through the story",
+      "motivations": ["their driving motivation in this phase"],
+      "fears": ["their fear in this phase"],
+      "emotional_state": "their specific emotional state during this phase of the story",
       "internal_voice": "how they think and speak — their distinctive voice",
       "relationships": {{
         "OtherCharacter": {{
@@ -262,7 +267,7 @@ Build a complete character profile. Return a JSON object:
   ]
 }}
 
-Be specific to what the passages reveal. If passages are sparse, extrapolate from what little we know.
+Be specific to what the passages reveal. Ensure phases reflect genuine change across the story arc, not the same state repeated.
 Return ONLY valid JSON. No markdown."""
 
 
@@ -271,6 +276,7 @@ async def _enrich_character(
     story_id: str,
     title: str,
     llm,
+    timeline_phases: list = None,
     n_chunks: int = 8,
 ) -> dict:
     """
@@ -294,12 +300,24 @@ async def _enrich_character(
         passages = "(retrieval unavailable)"
 
     aliases_json = json.dumps(aliases)
+
+    # Build timeline phases text for the prompt
+    phases = timeline_phases or []
+    if phases:
+        timeline_phases_text = "\n".join(
+            f"- phase_id: \"{p.get('phase_id', f'phase_{i+1}')}\" | {p.get('name', '')} | {p.get('description', '')}"
+            for i, p in enumerate(phases)
+        )
+    else:
+        timeline_phases_text = "No timeline phases available — use a single phase_id: \"main\""
+
     prompt = CHARACTER_ENRICH_PROMPT.format(
         name=name,
         title=title,
         role=char.get("role", "supporting"),
         aliases=", ".join(aliases) if aliases else "none",
         aliases_json=aliases_json,
+        timeline_phases_text=timeline_phases_text,
         passages=passages[:12000],  # cap at ~12K chars
     )
 
@@ -314,15 +332,9 @@ async def _enrich_character(
         return enriched
     except Exception as e:
         logger.warning(f"Enrichment failed for {name}: {e} — using minimal profile")
-        return {
-            "name": name,
-            "role": char.get("role", "supporting"),
-            "description": char.get("brief", f"{name} is a character in {title}."),
-            "importance": 0.3,
-            "aliases": aliases,
-            "hidden_dimensions": [],
-            "phases": [{
-                "phase_id": "main",
+        fallback_phases = [
+            {
+                "phase_id": p.get("phase_id", f"phase_{i+1}"),
                 "personality_traits": [],
                 "knowledge_state": {},
                 "motivations": [],
@@ -330,7 +342,26 @@ async def _enrich_character(
                 "emotional_state": "unknown",
                 "internal_voice": f"Speaks as {name}.",
                 "relationships": {},
-            }],
+            }
+            for i, p in enumerate(timeline_phases or [])
+        ] or [{
+            "phase_id": "main",
+            "personality_traits": [],
+            "knowledge_state": {},
+            "motivations": [],
+            "fears": [],
+            "emotional_state": "unknown",
+            "internal_voice": f"Speaks as {name}.",
+            "relationships": {},
+        }]
+        return {
+            "name": name,
+            "role": char.get("role", "supporting"),
+            "description": char.get("brief", f"{name} is a character in {title}."),
+            "importance": 0.3,
+            "aliases": aliases,
+            "hidden_dimensions": [],
+            "phases": fallback_phases,
         }
 
 
@@ -340,6 +371,7 @@ async def enrich_all_characters(
     title: str,
     llm,
     log_fn: Callable = None,
+    timeline_phases: list = None,
 ) -> list[dict]:
     """
     Final pass: enrich all characters in parallel using RAG retrieval.
@@ -348,7 +380,7 @@ async def enrich_all_characters(
 
     async def bounded_enrich(char):
         async with semaphore:
-            result = await _enrich_character(char, story_id, title, llm)
+            result = await _enrich_character(char, story_id, title, llm, timeline_phases=timeline_phases)
             if log_fn:
                 await log_fn(f"✅ Enriched: {char['name']}")
             return result
@@ -373,6 +405,7 @@ async def multi_pass_extract(
     word_count: int,
     log_fn: Callable = None,
     existing_characters: list[dict] | None = None,
+    timeline_phases: list | None = None,
 ) -> list[dict]:
     """
     Main entry point. Determines strategy based on word count and runs the
@@ -446,6 +479,6 @@ async def multi_pass_extract(
     if enrich_llm is None:
         enrich_llm = get_analysis_llm()
 
-    enriched = await enrich_all_characters(raw_characters, story_id, title, enrich_llm, log_fn)
+    enriched = await enrich_all_characters(raw_characters, story_id, title, enrich_llm, log_fn, timeline_phases=timeline_phases)
 
     return enriched

@@ -14,6 +14,7 @@ def update_runtime_keys(
     groq_key: str = None,
     cerebras_key: str = None,
     nvidia_key: str = None,
+    openrouter_key: str = None,
 ):
     if gemini_key:
         _runtime_keys["GEMINI_API_KEY"] = gemini_key
@@ -23,6 +24,8 @@ def update_runtime_keys(
         _runtime_keys["CEREBRAS_API_KEY"] = cerebras_key
     if nvidia_key:
         _runtime_keys["NVIDIA_API_KEY"] = nvidia_key
+    if openrouter_key:
+        _runtime_keys["OPENROUTER_API_KEY"] = openrouter_key
 
 
 def get_runtime_keys() -> dict:
@@ -34,6 +37,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
     CEREBRAS_API_KEY: Optional[str] = None
     NVIDIA_API_KEY: Optional[str] = None
+    OPENROUTER_API_KEY: Optional[str] = None
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./whatif_sabha.db"
     REDIS_URL: str = "redis://localhost:6379"
@@ -91,6 +95,110 @@ def _make_nvidia_llm(model: str, temperature: float = 0.1):
         base_url="https://integrate.api.nvidia.com/v1",
         temperature=temperature,
     )
+
+
+def _make_openrouter_llm(model: str, temperature: float = 0.7, max_tokens: int = 300):
+    """OpenRouter — 27+ free models via OpenAI-compatible API."""
+    from langchain_openai import ChatOpenAI
+    key = _key("OPENROUTER_API_KEY")
+    if not key:
+        return None
+    return ChatOpenAI(
+        model=model,
+        api_key=key,
+        base_url="https://openrouter.ai/api/v1",
+        temperature=temperature,
+        max_tokens=max_tokens,
+        default_headers={"HTTP-Referer": "https://whatif-sabha.local", "X-Title": "WhatIfSabha"},
+    )
+
+
+# Free models on OpenRouter (diverse for character variety)
+# Free models on OpenRouter — sorted by capability (best first)
+# Total available: 27. We use the best text-generation ones.
+OPENROUTER_FREE_MODELS = [
+    # Tier 1: Large, high quality
+    "nousresearch/hermes-3-llama-3.1-405b:free",     # 405B — strongest free model
+    "meta-llama/llama-3.3-70b-instruct:free",         # 70B — excellent prose
+    "nvidia/nemotron-3-super-120b-a12b:free",          # 120B MoE — strong reasoning
+    "openai/gpt-oss-120b:free",                        # 120B — OpenAI open-source
+    "qwen/qwen3-next-80b-a3b-instruct:free",           # 80B MoE — multilingual
+    "minimax/minimax-m2.5:free",                       # large context, good quality
+    # Tier 2: Medium, reliable
+    "google/gemma-4-31b-it:free",                      # 31B — Google latest
+    "google/gemma-4-26b-a4b-it:free",                  # 26B MoE — efficient
+    "google/gemma-3-27b-it:free",                      # 27B — proven quality
+    "nvidia/nemotron-3-nano-30b-a3b:free",             # 30B MoE — fast
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",  # 24B — uncensored
+    "openai/gpt-oss-20b:free",                         # 20B
+    "z-ai/glm-4.5-air:free",                          # GLM — good at dialogue
+    "google/gemma-3-12b-it:free",                      # 12B — fast
+    "arcee-ai/trinity-large-preview:free",             # preview — varied
+    # Tier 3: Small, very fast
+    "nvidia/nemotron-nano-9b-v2:free",                 # 9B — snappy
+    "google/gemma-3-4b-it:free",                       # 4B — ultra-fast for minor chars
+    "meta-llama/llama-3.2-3b-instruct:free",           # 3B — quick reactions
+]
+
+
+def get_model_pool() -> list[dict]:
+    """
+    Build a pool of available LLM instances from all configured providers.
+    Each entry: {provider, model, llm, tier}
+    tier: "fast" (cerebras/groq), "smart" (gemini/nvidia), "free" (openrouter)
+    """
+    pool = []
+    s = get_settings()
+
+    # Cerebras — ultra-fast, primary for characters
+    cerebras = None
+    try:
+        cerebras = get_agent_llm(max_tokens=300)
+        pool.append({"provider": "cerebras", "model": s.CHARACTER_AGENT_MODEL, "llm": cerebras, "tier": "fast"})
+    except Exception:
+        pass
+
+    # Groq — fast fallback
+    for model in [s.JUDGE_MODEL, "gemma2-9b-it", "llama-3.1-8b-instant"]:
+        llm = _make_groq_llm(model, temperature=0.75)
+        if llm:
+            pool.append({"provider": "groq", "model": model, "llm": llm, "tier": "fast"})
+
+    # NVIDIA — smart, good for complex reasoning
+    for model in [s.NVIDIA_JUDGE_MODEL, s.NVIDIA_NARRATOR_MODEL]:
+        llm = _make_nvidia_llm(model, temperature=0.7)
+        if llm:
+            pool.append({"provider": "nvidia", "model": model, "llm": llm, "tier": "smart"})
+
+    # OpenRouter — free models, great for parallel overflow
+    for model in OPENROUTER_FREE_MODELS:
+        llm = _make_openrouter_llm(model, temperature=0.8)
+        if llm:
+            pool.append({"provider": "openrouter", "model": model, "llm": llm, "tier": "free"})
+
+    return pool
+
+
+def assign_models_to_characters(characters: list[dict], pool: list[dict]) -> dict:
+    """
+    Assign a model to each character from the pool. Spreads across providers
+    so parallel calls go to different APIs (avoiding rate limits on one provider).
+
+    Returns: {character_name: {provider, model, llm}}
+    """
+    assignments = {}
+    if not pool:
+        return assignments
+
+    # Sort pool: fast first, then smart, then free
+    tier_order = {"fast": 0, "smart": 1, "free": 2}
+    sorted_pool = sorted(pool, key=lambda p: tier_order.get(p["tier"], 9))
+
+    for i, char in enumerate(characters):
+        entry = sorted_pool[i % len(sorted_pool)]
+        assignments[char["name"]] = entry
+
+    return assignments
 
 
 def get_judge_fallbacks() -> list:
