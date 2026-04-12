@@ -392,16 +392,23 @@ def get_analysis_fallbacks() -> list:
 
 
 async def invoke_analysis_with_fallback(messages: list) -> str:
-    """Call analysis LLM with automatic fallback across providers."""
+    """Call analysis LLM with proactive rate limit checking + fallback."""
     import re as _re
+    from app.core.usage_tracker import tracker
+
     for llm, label in get_analysis_fallbacks():
+        # Proactive check — skip if provider is maxed
+        provider_key = label.split(":")[0] if ":" in label else label
+        if not tracker.can_use(provider_key):
+            continue
+
         try:
             response = await llm.ainvoke(messages)
+            tracker.record(provider_key)
             raw = response.content
             if isinstance(raw, list):
                 raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
             raw = raw.strip()
-            # Strip thinking blocks
             raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
             if not raw:
                 continue

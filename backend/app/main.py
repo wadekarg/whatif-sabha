@@ -47,3 +47,10 @@ app.mount("/portraits", StaticFiles(directory="./uploads/portraits"), name="port
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "WhatIfSabha"}
+
+
+@app.get("/api-usage")
+async def api_usage():
+    """Live API usage dashboard — see which providers are healthy."""
+    from app.core.usage_tracker import tracker
+    return tracker.get_status()

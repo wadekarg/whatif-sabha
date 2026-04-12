@@ -17,6 +17,7 @@ from typing import Optional
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.config import get_analysis_llm, _make_openrouter_llm, _make_nvidia_llm, _make_github_models_llm, _make_cloudflare_llm, get_narrator_fallbacks
+from app.core.usage_tracker import tracker
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +99,15 @@ async def _invoke_with_fallback(messages: list) -> str:
         providers.append((label, llm))
 
     for label, llm in providers:
+        # Proactive rate limit check — skip if provider is maxed out
+        provider_key = label.split(":")[0] if ":" in label else label
+        if not tracker.can_use(provider_key):
+            logger.info(f"Skipping {label} — rate limit reached (proactive)")
+            continue
+
         try:
             response = await llm.ainvoke(messages)
+            tracker.record(provider_key)  # count successful call
             raw = response.content
             if isinstance(raw, list):
                 raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
