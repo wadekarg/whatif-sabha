@@ -45,22 +45,34 @@ def _get_orchestrator_llm():
 
 
 async def _invoke_with_fallback(messages: list) -> str:
-    """Invoke LLM with automatic fallback if primary fails (rate limit etc)."""
+    """Invoke LLM with automatic fallback across all free providers."""
+    # Best free models ranked by quality for Boru's orchestration
+    BEST_FREE = [
+        "nousresearch/hermes-3-llama-3.1-405b:free",   # 405B — best reasoning
+        "nvidia/nemotron-3-super-120b-a12b:free",        # 120B — strong JSON
+        "openai/gpt-oss-120b:free",                      # 120B — OpenAI quality
+        "qwen/qwen3-next-80b-a3b-instruct:free",         # 80B — multilingual
+        "meta-llama/llama-3.3-70b-instruct:free",         # 70B — proven
+        "google/gemma-4-31b-it:free",                     # 31B — fast
+        "minimax/minimax-m2.5:free",                     # great at dialogue
+    ]
+
     providers = []
 
-    # 1. Gemini
+    # 1. OpenRouter free models (best quality, unlimited)
+    for model in BEST_FREE:
+        llm = _make_openrouter_llm(model, temperature=0.4)
+        if llm:
+            short = model.split("/")[-1].split(":")[0]
+            providers.append((f"or:{short}", llm))
+
+    # 2. Gemini (may be rate limited)
     try:
         providers.append(("gemini", get_analysis_llm()))
     except Exception:
         pass
 
-    # 2. OpenRouter free models
-    for model in ["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free"]:
-        llm = _make_openrouter_llm(model, temperature=0.3)
-        if llm:
-            providers.append(("openrouter:" + model, llm))
-
-    # 3. Groq/NVIDIA
+    # 3. Groq/NVIDIA as last resort
     for llm, label in get_narrator_fallbacks(temperature=0.3):
         providers.append((label, llm))
 
