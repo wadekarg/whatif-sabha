@@ -46,15 +46,14 @@ def _get_orchestrator_llm():
 
 async def _invoke_with_fallback(messages: list) -> str:
     """Invoke LLM with automatic fallback across all free providers."""
-    # Best free INSTRUCT models — avoid thinking/reasoning models that leak inner monologue
+    # Prioritize FAST + CLEAN instruct models. Avoid slow or thinking models.
     BEST_FREE = [
-        "meta-llama/llama-3.3-70b-instruct:free",         # 70B — clean instruct, no thinking
-        "nvidia/nemotron-3-super-120b-a12b:free",          # 120B — strong, instruct-tuned
-        "openai/gpt-oss-120b:free",                        # 120B — clean output
-        "google/gemma-4-31b-it:free",                      # 31B — fast, clean
-        "google/gemma-3-27b-it:free",                      # 27B — proven
-        "minimax/minimax-m2.5:free",                       # good at dialogue
-        "nousresearch/hermes-3-llama-3.1-405b:free",       # 405B — may think, use as fallback
+        "google/gemma-4-31b-it:free",                      # 31B — fast, clean, no thinking
+        "google/gemma-3-27b-it:free",                      # 27B — proven, fast
+        "meta-llama/llama-3.3-70b-instruct:free",          # 70B — clean instruct
+        "nvidia/nemotron-nano-9b-v2:free",                 # 9B — ultra fast
+        "google/gemma-3-12b-it:free",                      # 12B — fast
+        "openai/gpt-oss-20b:free",                         # 20B — clean
     ]
 
     providers = []
@@ -83,25 +82,40 @@ async def _invoke_with_fallback(messages: list) -> str:
             if isinstance(raw, list):
                 raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
             raw = raw.strip()
-            # Strip thinking blocks from reasoning models (e.g. <think>...</think>)
+            # Strip thinking blocks
             raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-            # Strip any "Let me...", "I need to...", "So we can..." planning preamble
-            # Only keep text after the last planning line
+            raw = re.sub(r"<reasoning>.*?</reasoning>", "", raw, flags=re.DOTALL).strip()
+            # Strip planning/meta lines — aggressive cleanup
             lines = raw.split("\n")
             clean_lines = []
+            JUNK_STARTS = (
+                "let me ", "i need to ", "we need to ", "so we can ", "must ",
+                "sentence ", "let's ", "we should ", "could ", "that's ",
+                "as boru", "okay", "here's ", "here is ", "now ", "first ",
+                "the rule", "does that", "possibly", "ensure ", "we can ",
+                "not given", "we haven't", "could add", "the prompt",
+            )
             for line in lines:
                 stripped = line.strip().lower()
-                if stripped.startswith(("let me ", "i need to ", "we need to ", "so we can ", "must ", "sentence ", "let's ")):
-                    clean_lines = []  # reset — everything before was planning
+                if not stripped:
                     continue
-                if line.strip():
-                    clean_lines.append(line)
+                if stripped.startswith(JUNK_STARTS):
+                    clean_lines = []  # everything before was planning
+                    continue
+                # Skip lines that look like meta-instructions
+                if any(w in stripped for w in ["we need", "we must", "let's craft", "format the", "1-2 sentences", "2-3 sentences"]):
+                    clean_lines = []
+                    continue
+                clean_lines.append(line)
             raw = "\n".join(clean_lines).strip() if clean_lines else raw
             # Remove quotes wrapping the whole message
             if raw.startswith('"') and raw.endswith('"'):
                 raw = raw[1:-1].strip()
-            if not raw:
-                continue  # empty after cleanup — try next model
+            if raw.startswith("'") and raw.endswith("'") and len(raw) > 2:
+                raw = raw[1:-1].strip()
+            if not raw or len(raw) < 10:
+                logger.info(f"Orchestrator LLM {label} returned empty/short after cleanup, trying next...")
+                continue
             return raw
         except Exception as e:
             msg = str(e).lower()
@@ -619,11 +633,13 @@ async def generate_orchestrator_message(
         "invite_speaker": (
             f"You are inviting {context.get('speaker', 'the next character')} to speak. "
             f"Context: {context.get('directive', 'share their view')}. "
-            f"Be direct, use their name. If they have unanswered questions, call them out — "
-            f"'You've been dodging this, haven't you?' or 'Benjamin asked you something. An elephant noticed.' "
-            f"If they haven't spoken yet, tease them gently — 'You've been awfully quiet. Even for you.' "
-            f"If someone else just made a bombshell claim, goad them — 'Did you hear what they just said about you?' "
-            f"1-2 sentences. Be witty. Taunt gently."
+            f"Be direct, use their name. "
+            f"IMPORTANT: Check the transcript — if NO characters have spoken yet (debate just started), "
+            f"do NOT say 'you've been quiet' or 'you've been dodging'. Instead, simply invite them: "
+            f"'{context.get('speaker', 'Friend')}, you have the floor. Tell us where you stand.' "
+            f"If the debate IS underway and they have unanswered questions, call them out. "
+            f"If someone attacked them, reference the specific claim. "
+            f"1-2 sentences. Be direct and natural."
         ),
         "redirect": (
             f"The debate is going off-track or stalling. Call it out with your signature dry humor. "
@@ -741,7 +757,7 @@ Rules:
 - NEVER make up what characters said — only reference what's in the transcript
 - If calling out repetition, be specific about what was repeated
 
-Write your spoken message (no quotes, no "Boru:" prefix):"""
+CRITICAL: Output ONLY Boru's spoken words. No planning, no reasoning, no "Let me think", no meta-commentary. Just the words Boru says out loud. No quotes around it. No "Boru:" prefix."""
 
     try:
         raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
