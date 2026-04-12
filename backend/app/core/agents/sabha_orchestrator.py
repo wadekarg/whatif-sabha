@@ -118,6 +118,7 @@ class ArgumentLedger:
             "directed_to": directed_to,
             "status": "unanswered",
             "answers": {},
+            "_asked_at": 0,  # will be set to round_number when tracked in debate loop
         })
         return qid
 
