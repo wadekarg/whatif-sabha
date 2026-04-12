@@ -247,15 +247,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             )
             speakers_list = round_decision["speakers"]
             is_parallel = round_decision.get("is_parallel", False) and len(speakers_list) > 1
-            boru_intro = round_decision.get("boru_intro", "")
-
-            # Boru's round introduction
-            if boru_intro:
-                yield sse("orchestrator", {"message": boru_intro, "phase": current_phase, "event": "round_intro"})
-                transcript.append({
-                    "character": "Boru", "message": boru_intro,
-                    "round": round_number, "phase": current_phase, "isOrchestrator": True,
-                })
+            # (No separate boru_intro — per-speaker invite is the only Boru message)
 
             # ── Helper: generate one character's response ──
             async def _run_one_speaker(speaker_info: dict) -> dict | None:
@@ -375,15 +367,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     name = res["character"]
                     # Boru introduces each (brief, since boru_intro already set the scene)
                     directive = res.get("directive", "")
+                    # Use directive directly as Boru's intro (no extra LLM call for parallel)
                     if directive:
-                        invite_msg = await generate_orchestrator_message(
-                            ledger, current_phase, transcript, characters, story.title or "",
-                            event_type="invite_speaker",
-                            context={"speaker": name, "directive": directive},
-                        )
-                        if invite_msg:
-                            yield sse("orchestrator", {"message": invite_msg, "phase": current_phase, "event": "invite_speaker", "target": name})
-                            transcript.append({"character": "Boru", "message": invite_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True})
+                        yield sse("orchestrator", {"message": directive, "phase": current_phase, "event": "invite_speaker", "target": name})
+                        transcript.append({"character": "Boru", "message": directive, "round": round_number, "phase": current_phase, "isOrchestrator": True, "target": name})
 
                     # Stream the pre-generated response token by token (fast, ~50ms)
                     yield sse("character_start", {"character": name, "round": round_number, "phase": current_phase, "drama_score": orch_drama_score(transcript)})
@@ -431,16 +418,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 if not character:
                     break
 
-                # Boru introduces — skip if boru_intro already named this speaker
-                if not boru_intro:
-                    invite_msg = await generate_orchestrator_message(
-                        ledger, current_phase, transcript, characters, story.title or "",
-                        event_type="invite_speaker",
-                        context={"speaker": next_speaker_name, "directive": directive},
-                    )
-                    if invite_msg:
-                        yield sse("orchestrator", {"message": invite_msg, "phase": current_phase, "event": "invite_speaker", "target": next_speaker_name})
-                        transcript.append({"character": "Boru", "message": invite_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True})
+                # Boru introduces the speaker — ONE message only
+                invite_msg = await generate_orchestrator_message(
+                    ledger, current_phase, transcript, characters, story.title or "",
+                    event_type="invite_speaker",
+                    context={"speaker": next_speaker_name, "directive": directive},
+                )
+                if invite_msg:
+                    yield sse("orchestrator", {"message": invite_msg, "phase": current_phase, "event": "invite_speaker", "target": next_speaker_name})
+                    transcript.append({"character": "Boru", "message": invite_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True})
 
             if not is_parallel:
                 phases = character.get("phases", [])
