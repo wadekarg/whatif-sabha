@@ -392,18 +392,18 @@ def get_analysis_fallbacks() -> list:
 
 
 async def invoke_analysis_with_fallback(messages: list) -> str:
-    """Call analysis LLM with proactive rate limit checking + fallback."""
+    """Call analysis LLM with proactive rate limit checking + fallback + timeout."""
     import re as _re
+    import asyncio as _aio
     from app.core.usage_tracker import tracker
 
     for llm, label in get_analysis_fallbacks():
-        # Proactive check — skip if provider is maxed
         provider_key = label.split(":")[0] if ":" in label else label
         if not tracker.can_use(provider_key):
             continue
 
         try:
-            response = await llm.ainvoke(messages)
+            response = await _aio.wait_for(llm.ainvoke(messages), timeout=25)
             tracker.record(provider_key)
             raw = response.content
             if isinstance(raw, list):
@@ -413,9 +413,11 @@ async def invoke_analysis_with_fallback(messages: list) -> str:
             if not raw:
                 continue
             return raw
+        except _aio.TimeoutError:
+            continue
         except Exception as e:
             msg = str(e).lower()
-            if "429" in msg or "rate" in msg or "quota" in msg:
+            if "429" in msg or "rate" in msg or "quota" in msg or "402" in msg:
                 continue
             raise
     return ""

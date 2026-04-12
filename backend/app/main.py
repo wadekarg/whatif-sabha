@@ -52,5 +52,8 @@ async def health():
 @app.get("/api-usage")
 async def api_usage():
     """Live API usage dashboard — see which providers are healthy."""
-    from app.core.usage_tracker import tracker
-    return tracker.get_status()
+    try:
+        from app.core.usage_tracker import tracker
+        return tracker.get_status()
+    except Exception as e:
+        return {"error": str(e)}

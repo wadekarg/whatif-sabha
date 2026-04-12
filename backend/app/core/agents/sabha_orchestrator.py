@@ -10,6 +10,7 @@ An intelligent debate host that:
 - Knows when the debate has reached its natural end
 """
 
+import asyncio
 import json
 import re
 import logging
@@ -106,7 +107,7 @@ async def _invoke_with_fallback(messages: list) -> str:
             continue
 
         try:
-            response = await llm.ainvoke(messages)
+            response = await asyncio.wait_for(llm.ainvoke(messages), timeout=20)
             tracker.record(provider_key)  # count successful call
             raw = response.content
             if isinstance(raw, list):
@@ -147,10 +148,13 @@ async def _invoke_with_fallback(messages: list) -> str:
                 logger.info(f"Orchestrator LLM {label} returned empty/short after cleanup, trying next...")
                 continue
             return raw
+        except asyncio.TimeoutError:
+            logger.info(f"Orchestrator LLM {label} timed out (20s), trying next...")
+            continue
         except Exception as e:
             msg = str(e).lower()
-            if "429" in msg or "rate" in msg or "quota" in msg:
-                logger.info(f"Orchestrator LLM {label} rate-limited, trying next...")
+            if "429" in msg or "rate" in msg or "quota" in msg or "402" in msg or "spend" in msg:
+                logger.info(f"Orchestrator LLM {label} rate-limited/billing, trying next...")
                 continue
             logger.warning(f"Orchestrator LLM {label} failed: {e}")
             continue
