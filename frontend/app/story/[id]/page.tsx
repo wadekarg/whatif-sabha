@@ -942,6 +942,12 @@ function DebateList({ debates, storyId, onDelete }: {
                       <span>{d.round_count} rounds</span>
                       <span>·</span>
                       <span className="truncate">{(d.participating_characters || []).slice(0, 3).join(", ")}{(d.participating_characters || []).length > 3 ? "…" : ""}</span>
+                      {d.created_at && (
+                        <>
+                          <span>·</span>
+                          <span>{new Date(d.created_at).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   {/* Status badge → delete button on hover, same slot */}
