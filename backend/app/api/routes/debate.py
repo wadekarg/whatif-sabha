@@ -38,6 +38,15 @@ from app.core.agents.character_evolution import (
     evolve_characters_after_debate,
     get_objective_hint,
 )
+from app.core.agents.sabha_orchestrator import (
+    ArgumentLedger, generate_orchestrator_message, update_ledger,
+    decide_phase_transition, pick_next_speakers, should_end_debate,
+    compute_drama_score as orch_drama_score, PHASES, PHASE_CONFIG,
+    generate_reactions, generate_stage_direction,
+    should_generate_reactions, should_add_stage_direction,
+)
+from app.config import get_model_pool, assign_models_to_characters, _is_rate_limit
+from app.db.database import get_session_maker
 
 router = APIRouter(prefix="/debates", tags=["debates"])
 
@@ -142,19 +151,8 @@ async def stream_debate(debate_id: str, db: AsyncSession = Depends(get_db)):
 
 
 async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
-    """Core debate loop — streams SSE events to the frontend."""
-    from app.db.database import get_session_maker
-
+    """Core debate loop — orchestrator-driven, streams SSE events to the frontend."""
     session_maker = get_session_maker()
-
-    from app.core.agents.sabha_orchestrator import (
-        ArgumentLedger, generate_orchestrator_message, update_ledger,
-        decide_phase_transition, pick_next_speakers, should_end_debate,
-        compute_drama_score as orch_drama_score, PHASES, PHASE_CONFIG,
-        generate_reactions, generate_stage_direction,
-        should_generate_reactions, should_add_stage_direction,
-    )
-    from app.config import get_model_pool, assign_models_to_characters
 
     all_characters = story.analysis.get("characters", [])
     participating = set(debate.participating_characters)
@@ -334,10 +332,24 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     except Exception:
                         judge_result = {"score": 7, "in_character": True, "feedback": "", "issue": None, "needs_continuation": False, "dominant_emotion": "neutral"}
                 except Exception as e:
-                    from app.config import _is_rate_limit
                     if _is_rate_limit(e):
-                        await asyncio.sleep(5)
-                    return None
+                        # Retry once after backoff
+                        await asyncio.sleep(8)
+                        try:
+                            full_response = ""
+                            async for token in character_respond_stream(
+                                character=character, phase=phase_state,
+                                divergence=debate.divergence_description,
+                                debate_history=transcript, story_title=story.title or "",
+                                correction_hint=None, exploration_hint=exploration_hint,
+                                memory_context=memory_context, observer_challenge=observer_challenge,
+                            ):
+                                full_response += token
+                        except Exception:
+                            return None
+                    else:
+                        logger.warning(f"Parallel speaker {next_speaker_name} failed: {e}")
+                        return None
 
                 if not full_response:
                     return None
@@ -542,7 +554,6 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             yield sse("token", {"character": next_speaker_name, "text": token})
 
                 except Exception as e:
-                    from app.config import _is_rate_limit
                     if _is_rate_limit(e):
                         yield sse("turn_error", {"character": next_speaker_name, "reason": "rate limited — retrying..."})
                         await asyncio.sleep(8)
@@ -750,8 +761,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             # World observer — every 5 character turns
             if active_observers and should_invite_observer(transcript, last_observer_at, observer_interval=5):
-                import random as _rnd
-                observer = _rnd.choice(active_observers)
+                observer = random.choice(active_observers)
                 # Orchestrator introduces observer
                 obs_intro = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",

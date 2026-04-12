@@ -871,6 +871,15 @@ export default function DebatePage() {
     es.onerror = () => {
       es.close();
       setStreaming(null);
+      // Add error entry to transcript so user knows what happened
+      setTranscript(prev => [...prev, {
+        character: "Boru",
+        message: "The Sabha's connection was interrupted. The debate may have ended, or there was a network issue. You can review what was said above.",
+        round: 0,
+        isOrchestrator: true,
+        orchestratorEvent: "error",
+        phase: "interrupted",
+      } as any]);
       setStatus(prev => prev === "running" ? "done" : prev);
     };
   };
