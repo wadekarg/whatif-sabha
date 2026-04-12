@@ -199,11 +199,34 @@ export default function DebatePage() {
       return node;
     };
 
+    // Ensure Boru exists as center node (created once)
+    if (!graphNodesRef.current.find(n => n.id === "Boru")) {
+      graphNodesRef.current.push({
+        id: "Boru", x: W / 2, y: H / 2, vx: 0, vy: 0,
+        r: 26, color: "#c07820", speeches: 0,
+        role: "speaker", shape: "circle",
+      });
+    }
+
     const last = transcript[transcript.length - 1];
 
-    // Skip non-character entries (orchestrator, observers, reactions, stage directions, audience)
-    if ((last as any).isOrchestrator || (last as any).isObserver || (last as any).isReaction || (last as any).isStageDirection) {
-      return; // don't add to graph
+    // Skip non-content entries (reactions, stage directions, observers)
+    if ((last as any).isReaction || (last as any).isStageDirection || (last as any).isObserver) {
+      return;
+    }
+
+    // Boru's messages: count speeches but don't create edges
+    if ((last as any).isOrchestrator) {
+      const boruNode = graphNodesRef.current.find(n => n.id === "Boru");
+      if (boruNode) {
+        boruNode.speeches++;
+        boruNode.r = Math.min(26 + boruNode.speeches * 0.3, 34);
+      }
+      setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
+      if (d3SimRef.current && (d3SimRef.current as any).update) {
+        (d3SimRef.current as any).update();
+      }
+      return;
     }
 
     // Audience members get a small node but don't count as main speakers
