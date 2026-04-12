@@ -202,52 +202,71 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
     consecutive_errors = 0
 
-    try:
-        # (No separate opening — Boru's first round_intro serves as the opening)
+    is_first_round = True
 
+    try:
         # ── Main debate loop — orchestrator-driven ──
         while round_number < max_rounds:
-            # Check if debate should end
             if await should_end_debate(ledger, current_phase, transcript, characters):
                 break
 
-            # Check phase transition
-            new_phase = await decide_phase_transition(ledger, current_phase, transcript, characters)
-            if new_phase:
-                transition_msg = await generate_orchestrator_message(
-                    ledger, new_phase, transcript, characters, story.title or "",
-                    event_type="phase_transition",
-                    context={"from_phase": current_phase, "to_phase": new_phase},
-                )
-                if transition_msg:
-                    yield sse("orchestrator", {"message": transition_msg, "phase": new_phase, "event": "phase_transition"})
-                    transcript.append({
-                        "character": "Boru",
-                        "message": transition_msg,
-                        "round": round_number,
-                        "phase": new_phase,
-                        "isOrchestrator": True,
-                    })
-                current_phase = new_phase
+            # Phase transition check (not on first round)
+            if not is_first_round:
+                new_phase = await decide_phase_transition(ledger, current_phase, transcript, characters)
+                if new_phase:
+                    transition_msg = await generate_orchestrator_message(
+                        ledger, new_phase, transcript, characters, story.title or "",
+                        event_type="phase_transition",
+                        context={"from_phase": current_phase, "to_phase": new_phase},
+                    )
+                    if transition_msg:
+                        yield sse("orchestrator", {"message": transition_msg, "phase": new_phase, "event": "phase_transition"})
+                        transcript.append({"character": "Boru", "message": transition_msg, "round": round_number, "phase": new_phase, "isOrchestrator": True})
+                    current_phase = new_phase
+                    if current_phase == "closing" and await should_end_debate(ledger, current_phase, transcript, characters):
+                        break
 
-                # If we've entered closing and all have spoken, break after this round
-                if current_phase == "closing" and await should_end_debate(ledger, current_phase, transcript, characters):
-                    break
-
-            # ── Orchestrator picks who speaks next and why ──
+            # ── Boru decides who speaks ──
             last_speaker = ""
             for e in reversed(transcript):
                 if not e.get("isOrchestrator") and not e.get("isObserver"):
                     last_speaker = e["character"]
                     break
 
-            # ── Boru decides who speaks (1 or many) ──
             round_decision = await pick_next_speakers(
                 ledger, current_phase, transcript, characters, last_speaker,
             )
             speakers_list = round_decision["speakers"]
             is_parallel = round_decision.get("is_parallel", False) and len(speakers_list) > 1
-            # (No separate boru_intro — per-speaker invite is the only Boru message)
+            speaker_names = [s["speaker"] for s in speakers_list]
+
+            # ── Boru's message — opening or invite ──
+            if is_first_round:
+                # Grand opening: introduce himself, the topic, AND name who speaks first
+                boru_msg = await generate_orchestrator_message(
+                    ledger, current_phase, transcript, characters, story.title or "",
+                    event_type="opening_with_invite",
+                    context={"speakers": speaker_names, "divergence": debate.divergence_description},
+                )
+                is_first_round = False
+            elif len(speakers_list) == 1:
+                # Single speaker invite
+                boru_msg = await generate_orchestrator_message(
+                    ledger, current_phase, transcript, characters, story.title or "",
+                    event_type="invite_speaker",
+                    context={"speaker": speakers_list[0]["speaker"], "directive": speakers_list[0].get("directive", "")},
+                )
+            else:
+                # Multiple speakers — one message naming all of them
+                boru_msg = await generate_orchestrator_message(
+                    ledger, current_phase, transcript, characters, story.title or "",
+                    event_type="invite_multiple",
+                    context={"speakers": speaker_names, "directives": [s.get("directive", "") for s in speakers_list]},
+                )
+
+            if boru_msg:
+                yield sse("orchestrator", {"message": boru_msg, "phase": current_phase, "event": "invite_speaker", "target": speaker_names[0] if speaker_names else ""})
+                transcript.append({"character": "Boru", "message": boru_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "target": speaker_names[0] if speaker_names else ""})
 
             # ── Helper: generate one character's response ──
             async def _run_one_speaker(speaker_info: dict) -> dict | None:
@@ -365,12 +384,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     if isinstance(res, Exception) or res is None:
                         continue
                     name = res["character"]
-                    # Boru introduces each (brief, since boru_intro already set the scene)
-                    directive = res.get("directive", "")
-                    # Use directive directly as Boru's intro (no extra LLM call for parallel)
-                    if directive:
-                        yield sse("orchestrator", {"message": directive, "phase": current_phase, "event": "invite_speaker", "target": name})
-                        transcript.append({"character": "Boru", "message": directive, "round": round_number, "phase": current_phase, "isOrchestrator": True, "target": name})
+                    # No extra Boru message — invite_multiple already named everyone
 
                     # Stream the pre-generated response token by token (fast, ~50ms)
                     yield sse("character_start", {"character": name, "round": round_number, "phase": current_phase, "drama_score": orch_drama_score(transcript)})

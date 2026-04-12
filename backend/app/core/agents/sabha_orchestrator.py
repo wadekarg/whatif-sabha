@@ -660,11 +660,22 @@ async def generate_orchestrator_message(
 
     event_instructions = {
         "phase_intro": (
-            f"You are opening the '{current_phase}' phase. "
-            f"Keep it SHORT — 1 sentence max. Just set the tone. "
-            f"Do NOT name any specific character. Do NOT invite anyone to speak (that comes next). "
-            f"Example: 'The Sabha is convened. Today we ask: {ledger.divergence[:80]}' "
-            f"1 sentence ONLY."
+            f"Opening the '{current_phase}' phase. 1 sentence setting the tone. No character names."
+        ),
+        "opening_with_invite": (
+            f"This is the GRAND OPENING of the Sabha. You are Boru the Elephant, Speaker of the Sabha. "
+            f"Do THREE things in this message: "
+            f"1. Introduce yourself briefly — who you are, your role (2 sentences max) "
+            f"2. State the topic: \"{context.get('divergence', ledger.divergence)}\" "
+            f"3. Call the first speaker(s) by name: {', '.join(context.get('speakers', []))} — invite them to share their position "
+            f"Be grand but not endless. Show personality. Be the wise elephant everyone respects. "
+            f"4-6 sentences total. This is your moment."
+        ),
+        "invite_multiple": (
+            f"You are inviting MULTIPLE characters to speak in this round: {', '.join(context.get('speakers', []))}. "
+            f"Address each by name. Tell each one specifically what you want them to address. "
+            f"Be pointed — 'Napoleon, explain. Benjamin, what did you see? Squealer, we've heard enough spin.' "
+            f"2-3 sentences max."
         ),
         "invite_speaker": (
             f"You are inviting {context.get('speaker', 'the next character')} to speak. "
