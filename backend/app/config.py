@@ -201,6 +201,40 @@ def assign_models_to_characters(characters: list[dict], pool: list[dict]) -> dic
     return assignments
 
 
+def get_agent_fallbacks(max_tokens: int = 300) -> list:
+    """
+    Character agent fallback chain:
+    Cerebras (ultra-fast) → OpenRouter free models → Groq
+    """
+    candidates = []
+
+    # 1. Cerebras — primary, fastest
+    try:
+        candidates.append((get_agent_llm(max_tokens=max_tokens), "cerebras"))
+    except Exception:
+        pass
+
+    # 2. OpenRouter free models — good for character voice
+    AGENT_MODELS = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-3-27b-it:free",
+        "nvidia/nemotron-nano-9b-v2:free",
+    ]
+    for model in AGENT_MODELS:
+        llm = _make_openrouter_llm(model, temperature=0.85, max_tokens=max_tokens)
+        if llm:
+            candidates.append((llm, f"or:{model.split('/')[1].split(':')[0]}"))
+
+    # 3. Groq
+    for model in ["llama-3.3-70b-versatile", "gemma2-9b-it", "llama-3.1-8b-instant"]:
+        llm = _make_groq_llm(model, temperature=0.8)
+        if llm:
+            candidates.append((llm, f"groq:{model}"))
+
+    return candidates
+
+
 def get_judge_fallbacks() -> list:
     """
     NVIDIA first (no daily limit, ~40 RPM) → Groq fallbacks (daily limit but fast).

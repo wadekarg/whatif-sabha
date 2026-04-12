@@ -1,5 +1,5 @@
 from langchain_core.messages import SystemMessage, HumanMessage
-from app.config import get_agent_llm
+from app.config import get_agent_llm, get_agent_fallbacks
 from app.core.agents.base_agent import build_character_system_prompt
 
 
@@ -155,22 +155,14 @@ async def character_respond_stream(
             f"{exploration_hint}"
         )))
 
-    # Try Cerebras first (fastest), fall back to NVIDIA/Groq on rate limit
-    from app.config import _make_nvidia_llm, _make_groq_llm, _is_rate_limit
-    from app.config import get_settings as _get_settings
-    _s = _get_settings()
+    # Try Cerebras → OpenRouter → Groq (full fallback chain)
+    from app.config import _is_rate_limit
 
     token_limit = 300 if is_direct else 180
-    llm_candidates = [get_agent_llm(max_tokens=token_limit)]
-    nvidia = _make_nvidia_llm("meta/llama-3.3-70b-instruct", temperature=0.85)
-    if nvidia:
-        llm_candidates.append(nvidia)
-    groq = _make_groq_llm(_s.NARRATOR_MODEL, temperature=0.85)
-    if groq:
-        llm_candidates.append(groq)
+    fallbacks = get_agent_fallbacks(max_tokens=token_limit)
 
     last_exc = None
-    for llm in llm_candidates:
+    for llm, _label in fallbacks:
         try:
             async for chunk in llm.astream(messages):
                 if chunk.content:
