@@ -16,7 +16,7 @@ import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from app.config import get_analysis_llm, _make_openrouter_llm, _make_nvidia_llm, get_narrator_fallbacks
+from app.config import get_analysis_llm, _make_openrouter_llm, _make_nvidia_llm, _make_github_models_llm, _make_cloudflare_llm, get_narrator_fallbacks
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +70,30 @@ async def _invoke_with_fallback(messages: list) -> str:
         if llm:
             providers.append((f"nv:{model.split('/')[-1][:25]}", llm))
 
-    # 3. Gemini (may be rate limited)
+    # 3. GitHub Models — GPT-4o-mini is fast and clean
+    for model in ["gpt-4o-mini", "Phi-4-mini-instruct"]:
+        llm = _make_github_models_llm(model, temperature=0.4)
+        if llm:
+            providers.append((f"gh:{model[:15]}", llm))
+
+    # 4. Cloudflare Workers AI
+    llm = _make_cloudflare_llm("@cf/meta/llama-3.1-8b-instruct", temperature=0.4)
+    if llm:
+        providers.append(("cf:llama-3.1-8b", llm))
+
+    # 5. Gemini (may be rate limited)
     try:
         providers.append(("gemini", get_analysis_llm()))
     except Exception:
         pass
 
-    # 4. Groq as last resort
+    # 6. OpenRouter (50/day — last resort)
+    for model in BEST_FREE[:2]:
+        llm = _make_openrouter_llm(model, temperature=0.4)
+        if llm:
+            providers.append((f"or:{model.split('/')[-1].split(':')[0]}", llm))
+
+    # 7. Groq as absolute last resort
     for llm, label in get_narrator_fallbacks(temperature=0.3):
         providers.append((label, llm))
 

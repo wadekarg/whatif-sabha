@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     CEREBRAS_API_KEY: Optional[str] = None
     NVIDIA_API_KEY: Optional[str] = None
     OPENROUTER_API_KEY: Optional[str] = None
+    GITHUB_MODELS_TOKEN: Optional[str] = None
+    CLOUDFLARE_ACCOUNT_ID: Optional[str] = None
+    CLOUDFLARE_API_TOKEN: Optional[str] = None
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./whatif_sabha.db"
     REDIS_URL: str = "redis://localhost:6379"
@@ -94,6 +97,37 @@ def _make_nvidia_llm(model: str, temperature: float = 0.1):
         api_key=key,
         base_url="https://integrate.api.nvidia.com/v1",
         temperature=temperature,
+    )
+
+
+def _make_github_models_llm(model: str, temperature: float = 0.7, max_tokens: int = 300):
+    """GitHub Models — GPT-4o, Llama, DeepSeek, Mistral via OpenAI-compatible API."""
+    from langchain_openai import ChatOpenAI
+    key = _key("GITHUB_MODELS_TOKEN")
+    if not key:
+        return None
+    return ChatOpenAI(
+        model=model,
+        api_key=key,
+        base_url="https://models.inference.ai.azure.com",
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def _make_cloudflare_llm(model: str, temperature: float = 0.7, max_tokens: int = 300):
+    """Cloudflare Workers AI — 10K neurons/day free, Llama/Mistral/Qwen."""
+    from langchain_openai import ChatOpenAI
+    account_id = _key("CLOUDFLARE_ACCOUNT_ID")
+    token = _key("CLOUDFLARE_API_TOKEN")
+    if not account_id or not token:
+        return None
+    return ChatOpenAI(
+        model=model,
+        api_key=token,
+        base_url=f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+        temperature=temperature,
+        max_tokens=max_tokens,
     )
 
 
@@ -228,18 +262,38 @@ def get_agent_fallbacks(max_tokens: int = 300) -> list:
         if llm:
             candidates.append((llm, f"nv:{model.split('/')[-1][:30]}"))
 
-    # 3. OpenRouter free models
+    # 3. GitHub Models — GPT-4o-mini, Llama, etc.
+    GITHUB_AGENT_MODELS = [
+        "gpt-4o-mini",
+        "meta-llama-3.1-70b-instruct",
+        "Phi-4-mini-instruct",
+    ]
+    for model in GITHUB_AGENT_MODELS:
+        llm = _make_github_models_llm(model, temperature=0.85, max_tokens=max_tokens)
+        if llm:
+            candidates.append((llm, f"gh:{model[:20]}"))
+
+    # 4. Cloudflare Workers AI
+    CF_AGENT_MODELS = [
+        "@cf/meta/llama-3.1-8b-instruct",
+        "@cf/mistral/mistral-7b-instruct-v0.2",
+    ]
+    for model in CF_AGENT_MODELS:
+        llm = _make_cloudflare_llm(model, temperature=0.85, max_tokens=max_tokens)
+        if llm:
+            candidates.append((llm, f"cf:{model.split('/')[-1][:20]}"))
+
+    # 5. OpenRouter free models (50/day limit — last resort)
     OPENROUTER_AGENT_MODELS = [
         "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemma-4-31b-it:free",
-        "google/gemma-3-27b-it:free",
     ]
     for model in OPENROUTER_AGENT_MODELS:
         llm = _make_openrouter_llm(model, temperature=0.85, max_tokens=max_tokens)
         if llm:
             candidates.append((llm, f"or:{model.split('/')[1].split(':')[0]}"))
 
-    # 4. Groq
+    # 6. Groq
     for model in ["llama-3.3-70b-versatile", "gemma2-9b-it", "llama-3.1-8b-instant"]:
         llm = _make_groq_llm(model, temperature=0.8)
         if llm:
@@ -313,14 +367,23 @@ def get_analysis_fallbacks() -> list:
         if llm:
             candidates.append((llm, f"nv:{model.split('/')[-1][:30]}"))
 
-    # 3. OpenRouter free models with large context windows
-    OPENROUTER_ANALYSIS = [
-        "google/gemma-4-31b-it:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-3-27b-it:free",
+    # 3. GitHub Models — GPT-4o for analysis
+    GITHUB_ANALYSIS_MODELS = [
+        "gpt-4o-mini",
+        "meta-llama-3.1-70b-instruct",
     ]
-    for model in OPENROUTER_ANALYSIS:
+    for model in GITHUB_ANALYSIS_MODELS:
+        llm = _make_github_models_llm(model, temperature=0.2, max_tokens=4000)
+        if llm:
+            candidates.append((llm, f"gh:{model[:20]}"))
+
+    # 4. Cloudflare
+    llm = _make_cloudflare_llm("@cf/meta/llama-3.1-8b-instruct", temperature=0.2, max_tokens=4000)
+    if llm:
+        candidates.append((llm, "cf:llama-3.1-8b"))
+
+    # 5. OpenRouter (50/day — last resort)
+    for model in ["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free"]:
         llm = _make_openrouter_llm(model, temperature=0.2, max_tokens=4000)
         if llm:
             candidates.append((llm, f"or:{model.split('/')[1].split(':')[0]}"))
