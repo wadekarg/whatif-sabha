@@ -215,24 +215,19 @@ export default function DebatePage() {
       return;
     }
 
-    // World observers get a node + edge to Boru
+    // World observers get a node + edge to their target (or Boru if no target)
     if ((last as any).isObserver) {
       const obsNode = ensureNode(last.character);
       obsNode.speeches++;
       obsNode.r = Math.min(14 + obsNode.speeches * 0.5, 18);
       obsNode.shape = "square";
       obsNode.color = "#64748b"; // slate for observers
-      // Edge from observer → Boru (they speak to the Sabha)
-      const existing = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === "Boru");
-      if (existing) { existing.count++; }
-      else { graphEdgesRef.current.push({ source: last.character, target: "Boru", sourceId: last.character, targetId: "Boru", count: 1, questions: 0 }); }
-      // If observer targeted a character, add that edge too
-      if (last.target && last.target !== last.character && last.target !== "Boru") {
-        ensureNode(last.target);
-        const ex2 = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === last.target);
-        if (ex2) { ex2.count++; ex2.questions++; }
-        else { graphEdgesRef.current.push({ source: last.character, target: last.target, sourceId: last.character, targetId: last.target, count: 1, questions: 1 }); }
-      }
+      // Primary edge: observer → target character (if they asked someone a question)
+      const primaryTarget = last.target && last.target !== last.character ? last.target : "Boru";
+      ensureNode(primaryTarget);
+      const existing = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === primaryTarget);
+      if (existing) { existing.count++; if (primaryTarget !== "Boru") existing.questions++; }
+      else { graphEdgesRef.current.push({ source: last.character, target: primaryTarget, sourceId: last.character, targetId: primaryTarget, count: 1, questions: primaryTarget !== "Boru" ? 1 : 0 }); }
       setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
       if (d3SimRef.current && (d3SimRef.current as any).update) { (d3SimRef.current as any).update(); }
       return;
@@ -782,6 +777,7 @@ export default function DebatePage() {
           character: ev.observer_name,
           message: ev.message,
           round: 0,
+          target: ev.question_target || undefined,
           isObserver: true,
           observerEra: ev.era || "",
         }]);
