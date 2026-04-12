@@ -58,19 +58,12 @@ async def _invoke_with_fallback(messages: list) -> str:
 
     providers = []
 
-    # 1. OpenRouter free models (fast, clean instruct output)
-    for model in BEST_FREE:
-        llm = _make_openrouter_llm(model, temperature=0.4)
-        if llm:
-            short = model.split("/")[-1].split(":")[0]
-            providers.append((f"or:{short}", llm))
-
-    # 2. NVIDIA — 91 models, no daily limit, ~40 RPM
+    # 1. NVIDIA — most reliable, no daily limit, ~40 RPM, clean instruct output
     NVIDIA_ORCH_MODELS = [
-        "meta/llama-3.3-70b-instruct",
-        "meta/llama-4-maverick-17b-128e-instruct",
-        "mistralai/mistral-small-3.1-24b-instruct-2503",
-        "google/gemma-4-31b-it",
+        "meta/llama-3.3-70b-instruct",                      # 70B — proven, clean
+        "google/gemma-4-31b-it",                             # 31B — fast
+        "mistralai/mistral-small-3.1-24b-instruct-2503",    # 24B — clean
+        "meta/llama-4-maverick-17b-128e-instruct",           # Llama 4
     ]
     for model in NVIDIA_ORCH_MODELS:
         llm = _make_nvidia_llm(model, temperature=0.4)
