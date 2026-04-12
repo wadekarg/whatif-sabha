@@ -418,8 +418,8 @@ export default function DebatePage() {
           .attr("opacity", 0.7);
 
         // Label
-        const labelX = 0.25 * sx + 0.5 * cpX + 0.25 * tx;
-        const labelY = 0.25 * sy + 0.5 * cpY + 0.25 * ty;
+        const labelX = 0.25 * sx0 + 0.5 * cpX0 + 0.25 * tx0;
+        const labelY = 0.25 * sy0 + 0.5 * cpY0 + 0.25 * ty0;
         const labelText = isQ ? (e.questions === 1 ? "?" : `${e.questions}?`) : (e.count > 1 ? `${e.count}×` : "");
         el.select("text")
           .attr("x", labelX).attr("y", labelY)
