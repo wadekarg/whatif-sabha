@@ -203,20 +203,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     consecutive_errors = 0
 
     try:
-        # ── Orchestrator opening ──
-        opening_msg = await generate_orchestrator_message(
-            ledger, current_phase, transcript, characters, story.title or "",
-            event_type="phase_intro",
-        )
-        if opening_msg:
-            yield sse("orchestrator", {"message": opening_msg, "phase": current_phase, "event": "phase_intro"})
-            transcript.append({
-                "character": "Boru",
-                "message": opening_msg,
-                "round": round_number,
-                "phase": current_phase,
-                "isOrchestrator": True,
-            })
+        # (No separate opening — Boru's first round_intro serves as the opening)
 
         # ── Main debate loop — orchestrator-driven ──
         while round_number < max_rounds:
@@ -444,15 +431,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 if not character:
                     break
 
-                # Boru introduces
-                invite_msg = await generate_orchestrator_message(
-                    ledger, current_phase, transcript, characters, story.title or "",
-                    event_type="invite_speaker",
-                    context={"speaker": next_speaker_name, "directive": directive},
-                )
-                if invite_msg:
-                    yield sse("orchestrator", {"message": invite_msg, "phase": current_phase, "event": "invite_speaker", "target": next_speaker_name})
-                    transcript.append({"character": "Boru", "message": invite_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True})
+                # Boru introduces — skip if boru_intro already named this speaker
+                if not boru_intro:
+                    invite_msg = await generate_orchestrator_message(
+                        ledger, current_phase, transcript, characters, story.title or "",
+                        event_type="invite_speaker",
+                        context={"speaker": next_speaker_name, "directive": directive},
+                    )
+                    if invite_msg:
+                        yield sse("orchestrator", {"message": invite_msg, "phase": current_phase, "event": "invite_speaker", "target": next_speaker_name})
+                        transcript.append({"character": "Boru", "message": invite_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True})
 
             if not is_parallel:
                 phases = character.get("phases", [])

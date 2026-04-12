@@ -587,7 +587,7 @@ Respond with JSON only:
     {{"speaker": "Name", "directive": "what Boru says to them", "reason": "why", "mode": "main"}},
     {{"speaker": "Name2", "directive": "...", "reason": "...", "mode": "main"}}
   ],
-  "boru_intro": "What Boru says BEFORE all of them speak — sets up the round. 1-2 sentences.",
+  "boru_intro": "ONE sentence from Boru introducing this round. Keep it SHORT. Name the speaker(s). Example: 'Napoleon, your turn — Benjamin just called you a liar.' Do NOT repeat the scenario description.",
   "is_parallel": true
 }}
 
@@ -660,9 +660,11 @@ async def generate_orchestrator_message(
 
     event_instructions = {
         "phase_intro": (
-            f"You are opening the '{current_phase}' phase of the debate about \"{ledger.divergence}\". "
-            f"Set the tone, explain what this phase is about, and invite the first speaker. "
-            f"Be dramatic and engaging. 2-3 sentences."
+            f"You are opening the '{current_phase}' phase. "
+            f"Keep it SHORT — 1 sentence max. Just set the tone. "
+            f"Do NOT name any specific character. Do NOT invite anyone to speak (that comes next). "
+            f"Example: 'The Sabha is convened. Today we ask: {ledger.divergence[:80]}' "
+            f"1 sentence ONLY."
         ),
         "invite_speaker": (
             f"You are inviting {context.get('speaker', 'the next character')} to speak. "
@@ -791,7 +793,11 @@ Rules:
 - NEVER make up what characters said — only reference what's in the transcript
 - If calling out repetition, be specific about what was repeated
 
-CRITICAL: Output ONLY Boru's spoken words. No planning, no reasoning, no "Let me think", no meta-commentary. Just the words Boru says out loud. No quotes around it. No "Boru:" prefix."""
+CRITICAL RULES:
+1. Output ONLY Boru's spoken words. No planning, reasoning, or meta-commentary.
+2. KEEP IT SHORT — 1 sentence is ideal, 2 max. Never 3. Boru is punchy, not verbose.
+3. Do NOT repeat the scenario/divergence description — everyone already knows it.
+4. No quotes around output. No "Boru:" prefix."""
 
     try:
         raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
