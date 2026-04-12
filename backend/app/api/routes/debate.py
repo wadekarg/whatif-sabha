@@ -175,6 +175,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     round_number = len(transcript)
     max_rounds = max(len(characters) * 6, 35)
 
+    # Pre-initialize synthesis variables (used in finally block even if debate ends early)
+    alternate_ending = ""
+    alternate_timeline = []
+    alternate_world_state = {}
+
     # ── Initialize the Sutradhar (orchestrator) ──
     ledger = ArgumentLedger(debate.divergence_description, char_names)
     current_phase = "opening"
@@ -195,7 +200,6 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         db_debate.status = "running"
         await db.commit()
 
-    alternate_ending = ""
     consecutive_errors = 0
 
     try:
@@ -608,13 +612,19 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 ))
 
             # ── Emotional reactions from other characters ──
+            # Get last speaker from transcript (works for both parallel and sequential)
+            last_char_entry = None
+            for _e in reversed(transcript):
+                if not _e.get("isOrchestrator") and not _e.get("isObserver") and not _e.get("isReaction") and not _e.get("isStageDirection") and not _e.get("isAudience"):
+                    last_char_entry = _e
+                    break
             drama = orch_drama_score(transcript)
-            if should_generate_reactions(transcript, drama):
+            if last_char_entry and should_generate_reactions(transcript, drama):
                 reactions = await generate_reactions(
-                    next_speaker_name, full_response, characters, transcript, ledger,
+                    last_char_entry["character"], last_char_entry["message"], characters, transcript, ledger,
                 )
                 if reactions:
-                    yield sse("reactions", {"reactions": reactions, "after": next_speaker_name})
+                    yield sse("reactions", {"reactions": reactions, "after": last_char_entry["character"]})
                     # Add to transcript as atmospheric entries
                     for r in reactions:
                         transcript.append({
