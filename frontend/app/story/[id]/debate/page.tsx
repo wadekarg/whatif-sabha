@@ -262,13 +262,24 @@ export default function DebatePage() {
     setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
 
     // Edge: use explicit target if available
-    // For audience: find who Boru directed them to (next orchestrator message mentions a character)
     let targetName = last.target;
-    // Fallback: previous character speaker (not orchestrator/observer)
+    // Fallback: check if Boru just invited this character (previous entry is orchestrator targeting them)
     if (!targetName) {
       for (let j = transcript.length - 2; j >= 0; j--) {
         const prev = transcript[j];
-        if (!(prev as any).isOrchestrator && !(prev as any).isObserver && !(prev as any).isReaction && !(prev as any).isStageDirection && !(prev as any).isAudience && prev.character !== last.character) {
+        // Skip reactions/stage directions — they're not speakers
+        if ((prev as any).isReaction || (prev as any).isStageDirection) continue;
+        // If Boru just invited this character → edge goes back to Boru
+        if ((prev as any).isOrchestrator && prev.target === last.character) {
+          targetName = "Boru";
+          break;
+        }
+        // If Boru spoke but didn't target this character → skip to find real previous speaker
+        if ((prev as any).isOrchestrator) continue;
+        // Skip observers/audience
+        if ((prev as any).isObserver || (prev as any).isAudience) continue;
+        // Found a real character who spoke before
+        if (prev.character !== last.character) {
           targetName = prev.character;
           break;
         }
