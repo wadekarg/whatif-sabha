@@ -76,13 +76,13 @@ export default function DebatePage() {
   const [status, setStatus] = useState<"idle" | "starting" | "running" | "done">("idle");
   const [dramaScore, setDramaScore] = useState(0.5);
   const [activeCharacters, setActiveCharacters] = useState<string[]>([]);
-  const [storyCharacters, setStoryCharacters] = useState<{name:string;role?:string;importance:number}[]>([]);
+  const [storyCharacters, setStoryCharacters] = useState<{name:string;role?:string;importance:number;portrait?:string}[]>([]);
   const [selectedCharacters, setSelectedCharacters] = useState<Set<string>>(new Set());
   const [explorationRates, setExplorationRates] = useState<Record<string,number>>({});
   const [pendingChallenge, setPendingChallenge] = useState<{character: string; observerName: string; question: string} | null>(null);
   const [showLegend, setShowLegend] = useState(false);
   const [leftTab, setLeftTab] = useState<"debate"|"agents"|"chat">("debate");
-  const [rightTab, setRightTab] = useState<"graph"|"heatmap"|"emotions">("graph");
+  const [rightTab, setRightTab] = useState<"graph"|"ledger"|"positions">("graph");
   const [splitPct, setSplitPct] = useState(55);
   const [maximize, setMaximize] = useState<"none"|"left"|"right">(
     typeof window !== "undefined" && window.innerWidth < 1024 ? "left" : "none"
@@ -91,8 +91,6 @@ export default function DebatePage() {
   const isDraggingRef = useRef(false);
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   const [showStats, setShowStats] = useState(true);
-  const [heatmapLegendOpen, setHeatmapLegendOpen] = useState(false);
-  const [emotionLegendOpen, setEmotionLegendOpen] = useState(false);
   const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(false);
   const pendingExplorationRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -113,9 +111,11 @@ export default function DebatePage() {
   const graphEdgesRef       = useRef<GraphEdge[]>([]);
   const activeNodeRef       = useRef<string | null>(null);
   const d3SimRef            = useRef<d3.Simulation<GraphNode, any> | null>(null);
-  const heatmapCanvasRef    = useRef<HTMLCanvasElement>(null);
-  const emotionsCanvasRef   = useRef<HTMLCanvasElement>(null);
   const [graphStats, setGraphStats] = useState<{id: string; color: string; speeches: number}[]>([]);
+  const [ledgerState, setLedgerState] = useState<{
+    open_questions: any[]; claims: any[]; positions: Record<string, string>;
+    progress: string; resolved_count: number;
+  }>({ open_questions: [], claims: [], positions: {}, progress: "", resolved_count: 0 });
   const [graphHover, setGraphHover] = useState<{ x: number; y: number; source: string; target: string; count: number; questions: number; snippet: string } | null>(null);
   const transcriptRef = useRef<DebateEntry[]>([]);
 
@@ -200,10 +200,24 @@ export default function DebatePage() {
     };
 
     const last = transcript[transcript.length - 1];
+
+    // Skip non-character entries (orchestrator, observers, reactions, stage directions, audience)
+    if ((last as any).isOrchestrator || (last as any).isObserver || (last as any).isReaction || (last as any).isStageDirection) {
+      return; // don't add to graph
+    }
+
+    // Audience members get a small node but don't count as main speakers
+    const isAudience = (last as any).isAudience;
+
     const lastNode = ensureNode(last.character);
-    lastNode.speeches++;
-    lastNode.r = Math.min(18 + lastNode.speeches * 1.5, 34);
+    if (!isAudience) {
+      lastNode.speeches++;
+      lastNode.r = Math.min(18 + lastNode.speeches * 1.5, 34);
+    } else {
+      lastNode.r = 12; // small node for audience
+    }
     activeNodeRef.current = null;
+
     // Restart D3 simulation with updated nodes/edges
     if (d3SimRef.current && (d3SimRef.current as any).update) {
       (d3SimRef.current as any).update();
@@ -211,8 +225,19 @@ export default function DebatePage() {
     // Update stats for React render
     setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
 
-    // Use target_character from backend if available, else previous speaker
-    const targetName = last.target || (transcript.length >= 2 ? transcript[transcript.length - 2].character : null);
+    // Edge: use explicit target if available
+    // For audience: find who Boru directed them to (next orchestrator message mentions a character)
+    let targetName = last.target;
+    // Fallback: previous character speaker (not orchestrator/observer)
+    if (!targetName) {
+      for (let j = transcript.length - 2; j >= 0; j--) {
+        const prev = transcript[j];
+        if (!(prev as any).isOrchestrator && !(prev as any).isObserver && !(prev as any).isReaction && !(prev as any).isStageDirection && !(prev as any).isAudience && prev.character !== last.character) {
+          targetName = prev.character;
+          break;
+        }
+      }
+    }
     if (targetName && targetName !== last.character) {
       ensureNode(targetName);
       const isQuestion = last.message.includes("?");
@@ -276,19 +301,24 @@ export default function DebatePage() {
         .map(e => ({ source: e.sourceId, target: e.targetId, sourceId: e.sourceId, targetId: e.targetId, count: e.count, questions: e.questions }));
     };
 
-    // D3 simulation
+    // D3 simulation — Boru at center, characters orbit around
     const simulation = d3.forceSimulation<GraphNode>(graphNodesRef.current)
-      .force("charge", d3.forceManyBody<GraphNode>().strength((d: GraphNode) => -200 - d.r * 12).distanceMax(400))
+      .force("charge", d3.forceManyBody<GraphNode>().strength((d: GraphNode) => -350 - d.r * 15).distanceMax(500))
       .force("center", d3.forceCenter(W / 2, H / 2))
-      .force("collide", d3.forceCollide<GraphNode>().radius((d: GraphNode) => d.r + 25).strength(0.9).iterations(2))
-      .force("x", d3.forceX<GraphNode>(W / 2).strength(0.035))
-      .force("y", d3.forceY<GraphNode>(H / 2).strength(0.035))
+      .force("collide", d3.forceCollide<GraphNode>().radius((d: GraphNode) => d.r + 40).strength(0.9).iterations(3))
+      // Boru gets pulled strongly to center, others orbit around
+      .force("x", d3.forceX<GraphNode>(W / 2).strength((d: GraphNode) => d.id === "Boru" ? 0.3 : 0.02))
+      .force("y", d3.forceY<GraphNode>(H / 2).strength((d: GraphNode) => d.id === "Boru" ? 0.3 : 0.02))
+      // Radial force pushes non-Boru characters outward into a ring
+      .force("radial", d3.forceRadial<GraphNode>(
+        Math.min(W, H) * 0.3, W / 2, H / 2
+      ).strength((d: GraphNode) => d.id === "Boru" ? 0 : 0.06))
       .force("link", d3.forceLink<GraphNode, any>(safeEdges())
         .id((d: any) => d.id)
-        .distance((d: any) => Math.max(80, 200 - (d.count || 1) * 15))
-        .strength((d: any) => Math.min(0.6, 0.15 + (d.count || 1) * 0.05)))
-      .velocityDecay(0.35)
-      .alphaDecay(0.015)
+        .distance(180)
+        .strength((d: any) => Math.min(0.3, 0.08 + (d.count || 1) * 0.02)))
+      .velocityDecay(0.4)
+      .alphaDecay(0.012)
       .on("tick", render);
 
     d3SimRef.current = simulation;
@@ -334,42 +364,58 @@ export default function DebatePage() {
         const ux = dx/d, uy = dy/d;
         const px = -uy, py = ux;
         const hasMirror = edges.some(e2 => e2.sourceId === e.targetId && e2.targetId === e.sourceId);
-        const curve = hasMirror ? 35 : 20;
-        const lineW = Math.min(1.5 + e.count * 0.8, 6);
-
-        const sx = src.x + ux * (src.r + 2) + px * (hasMirror ? 4 : 0);
-        const sy = src.y + uy * (src.r + 2) + py * (hasMirror ? 4 : 0);
-        const tx = tgt.x - ux * (tgt.r + 6) + px * (hasMirror ? 4 : 0);
-        const ty = tgt.y - uy * (tgt.r + 6) + py * (hasMirror ? 4 : 0);
-        const cpX = (src.x + tgt.x) / 2 + px * curve;
-        const cpY = (src.y + tgt.y) / 2 + py * curve;
+        const baseCurve = hasMirror ? 35 : 20;
 
         const isQ = e.questions > 0;
         const col = isQ ? "#f0c060" : src.color;
+        const strandCount = Math.min(e.count, 8); // one thin line per interaction, max 8
+        const spacing = strandCount > 1 ? Math.min(3.5, 24 / (strandCount - 1)) : 0;
 
         const el = d3.select(this);
-        el.select("path")
-          .attr("d", `M${sx},${sy} Q${cpX},${cpY} ${tx},${ty}`)
-          .attr("stroke", col)
-          .attr("stroke-width", lineW)
-          .attr("opacity", Math.min(0.4 + e.count * 0.08, 0.85));
 
-        // Arrowhead
+        // Build multiple thin strands — one per interaction
+        let pathsData = "";
+        for (let si = 0; si < strandCount; si++) {
+          const strandOff = (si - (strandCount - 1) / 2) * spacing;
+          const curve = baseCurve + strandOff * 0.5;
+          const offX = px * strandOff * 0.4, offY = py * strandOff * 0.4;
+          const sxi = src.x + ux * (src.r + 2) + offX + px * (hasMirror ? 4 : 0);
+          const syi = src.y + uy * (src.r + 2) + offY + py * (hasMirror ? 4 : 0);
+          const txi = tgt.x - ux * (tgt.r + 6) + offX + px * (hasMirror ? 4 : 0);
+          const tyi = tgt.y - uy * (tgt.r + 6) + offY + py * (hasMirror ? 4 : 0);
+          const cpXi = (src.x + tgt.x) / 2 + px * curve;
+          const cpYi = (src.y + tgt.y) / 2 + py * curve;
+          pathsData += `M${sxi},${syi} Q${cpXi},${cpYi} ${txi},${tyi} `;
+        }
+
+        el.select("path")
+          .attr("d", pathsData.trim())
+          .attr("stroke", col)
+          .attr("stroke-width", 1.2)
+          .attr("opacity", Math.min(0.35 + strandCount * 0.06, 0.75));
+
+        // Arrowhead on the central strand
+        const sx0 = src.x + ux * (src.r + 2) + px * (hasMirror ? 4 : 0);
+        const sy0 = src.y + uy * (src.r + 2) + py * (hasMirror ? 4 : 0);
+        const tx0 = tgt.x - ux * (tgt.r + 6) + px * (hasMirror ? 4 : 0);
+        const ty0 = tgt.y - uy * (tgt.r + 6) + py * (hasMirror ? 4 : 0);
+        const cpX0 = (src.x + tgt.x) / 2 + px * baseCurve;
+        const cpY0 = (src.y + tgt.y) / 2 + py * baseCurve;
         const t2 = 0.92;
-        const bx = (1-t2)*(1-t2)*sx + 2*(1-t2)*t2*cpX + t2*t2*tx;
-        const by = (1-t2)*(1-t2)*sy + 2*(1-t2)*t2*cpY + t2*t2*ty;
-        const adx = tx - bx, ady = ty - by;
+        const bx = (1-t2)*(1-t2)*sx0 + 2*(1-t2)*t2*cpX0 + t2*t2*tx0;
+        const by = (1-t2)*(1-t2)*sy0 + 2*(1-t2)*t2*cpY0 + t2*t2*ty0;
+        const adx = tx0 - bx, ady = ty0 - by;
         const ad = Math.sqrt(adx*adx + ady*ady) || 1;
-        const aSize = Math.min(7 + lineW, 12);
+        const aSize = 8;
         const aUx = adx/ad, aUy = ady/ad;
-        const a1x = tx - aUx*aSize - aUy*(aSize*0.6);
-        const a1y = ty - aUy*aSize + aUx*(aSize*0.6);
-        const a2x = tx - aUx*aSize + aUy*(aSize*0.6);
-        const a2y = ty - aUy*aSize - aUx*(aSize*0.6);
+        const a1x = tx0 - aUx*aSize - aUy*(aSize*0.6);
+        const a1y = ty0 - aUy*aSize + aUx*(aSize*0.6);
+        const a2x = tx0 - aUx*aSize + aUy*(aSize*0.6);
+        const a2y = ty0 - aUy*aSize - aUx*(aSize*0.6);
         el.select("polygon.arrow")
-          .attr("points", `${tx},${ty} ${a1x},${a1y} ${a2x},${a2y}`)
+          .attr("points", `${tx0},${ty0} ${a1x},${a1y} ${a2x},${a2y}`)
           .attr("fill", col)
-          .attr("opacity", 0.8);
+          .attr("opacity", 0.7);
 
         // Label
         const labelX = 0.25 * sx + 0.5 * cpX + 0.25 * tx;
@@ -531,214 +577,7 @@ export default function DebatePage() {
     };
   }, [status]);
 
-  // (Old canvas graph code removed — now using D3+SVG above)
-  // ── Heatmap: redraw whenever transcript or active tab changes ──
-  useEffect(() => {
-    const canvas = heatmapCanvasRef.current;
-    if (!canvas || activeCharacters.length === 0) return;
-    canvas.width = canvas.offsetWidth || 400;
-    canvas.height = canvas.offsetHeight || 400;
-    const ctx = canvas.getContext("2d")!;
-    const chars = activeCharacters;
-    const N = chars.length;
-    const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = "#f7f3ed"; ctx.fillRect(0, 0, W, H);
-    if (transcript.length === 0) {
-      ctx.font = "13px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "#c8b89a";
-      ctx.fillText("Waiting for debate to begin…", W/2, H/2);
-      return;
-    }
-
-    const counts: number[][] = Array.from({length: N}, () => Array(N).fill(0));
-    let maxCount = 0;
-    for (const entry of transcript) {
-      const i = chars.indexOf(entry.character);
-      const j = entry.target ? chars.indexOf(entry.target) : -1;
-      if (i >= 0 && j >= 0 && i !== j) { counts[i][j]++; maxCount = Math.max(maxCount, counts[i][j]); }
-    }
-
-    // Compute a centered square grid with equal visual margins
-    const labelW = Math.min(W * 0.18, 72);   // left: row-label space
-    const labelH = Math.min(H * 0.18, 60);   // top: rotated col-label space
-    const padR = 16, padB = 16;
-    const availW = W - labelW - padR;
-    const availH = H - labelH - padB;
-    const cellSize = Math.min(availW / N, availH / N, 76);
-    const gridW = cellSize * N, gridH = cellSize * N;
-    const gridLeft = labelW + (availW - gridW) / 2;
-    const gridTop  = labelH + (availH - gridH) / 2;
-
-    const fontSize = Math.min(12, Math.max(9, cellSize * 0.36));
-
-    for (let i = 0; i < N; i++) {
-      for (let j = 0; j < N; j++) {
-        const x = gridLeft + j * cellSize, y = gridTop + i * cellSize;
-        const intensity = maxCount > 0 ? counts[i][j] / maxCount : 0;
-        if (i === j) {
-          ctx.fillStyle = "rgba(200,184,154,0.15)";
-          ctx.fillRect(x + 1, y + 1, cellSize - 3, cellSize - 3);
-          // Diagonal marker
-          ctx.strokeStyle = "rgba(200,184,154,0.3)"; ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.moveTo(x+4, y+4); ctx.lineTo(x+cellSize-5, y+cellSize-5); ctx.stroke();
-        } else {
-          ctx.fillStyle = `rgba(${Math.round(192*intensity+230*(1-intensity))},${Math.round(80*intensity+180*(1-intensity))},${Math.round(10*intensity+140*(1-intensity))},${0.12 + intensity * 0.75})`;
-          ctx.fillRect(x + 1, y + 1, cellSize - 3, cellSize - 3);
-          if (counts[i][j] > 0) {
-            ctx.font = `bold ${Math.max(9, cellSize * 0.32)}px Inter, sans-serif`;
-            ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillStyle = intensity > 0.5 ? "#ffffff" : "#3d2f20";
-            ctx.fillText(String(counts[i][j]), x + cellSize/2, y + cellSize/2);
-          }
-        }
-      }
-    }
-
-    // Grid lines
-    ctx.strokeStyle = "rgba(200,184,154,0.5)"; ctx.lineWidth = 0.5;
-    for (let i = 0; i <= N; i++) {
-      ctx.beginPath(); ctx.moveTo(gridLeft + i * cellSize, gridTop); ctx.lineTo(gridLeft + i * cellSize, gridTop + gridH); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(gridLeft, gridTop + i * cellSize); ctx.lineTo(gridLeft + gridW, gridTop + i * cellSize); ctx.stroke();
-    }
-
-    // Row labels (speaker = who said it)
-    for (let i = 0; i < N; i++) {
-      ctx.font = `600 ${fontSize}px Inter, sans-serif`;
-      ctx.textAlign = "right"; ctx.textBaseline = "middle";
-      ctx.fillStyle = (CHAR_COLORS[i % CHAR_COLORS.length]).hex;
-      ctx.fillText(chars[i].split(" ")[0], gridLeft - 8, gridTop + i * cellSize + cellSize/2);
-    }
-    // Column labels (target = spoken to), rotated
-    for (let j = 0; j < N; j++) {
-      ctx.save();
-      ctx.translate(gridLeft + j * cellSize + cellSize/2, gridTop - 8);
-      ctx.rotate(-Math.PI / 4);
-      ctx.font = `600 ${fontSize}px Inter, sans-serif`;
-      ctx.textAlign = "right"; ctx.textBaseline = "middle";
-      ctx.fillStyle = (CHAR_COLORS[j % CHAR_COLORS.length]).hex;
-      ctx.fillText(chars[j].split(" ")[0], 0, 0);
-      ctx.restore();
-    }
-
-    // Axis header labels
-    ctx.font = `500 ${fontSize - 1}px Inter, sans-serif`;
-    ctx.fillStyle = "#a09282";
-    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-    ctx.fillText("spoken to →", gridLeft + gridW / 2, gridTop - labelH * 0.05);
-    ctx.save();
-    ctx.translate(gridLeft - labelW * 0.55, gridTop + gridH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("speaker ↓", 0, 0);
-    ctx.restore();
-  }, [transcript, activeCharacters, rightTab]);
-
-  // ── Emotions arc: redraw whenever transcript or active tab changes ──
-  useEffect(() => {
-    const canvas = emotionsCanvasRef.current;
-    if (!canvas || activeCharacters.length === 0) return;
-    canvas.width = canvas.offsetWidth || 400;
-    canvas.height = canvas.offsetHeight || 400;
-    const ctx = canvas.getContext("2d")!;
-    const chars = activeCharacters;
-    const W = canvas.width, H = canvas.height;
-
-    ctx.fillStyle = "#f7f3ed"; ctx.fillRect(0, 0, W, H);
-    if (transcript.length === 0) {
-      ctx.font = "13px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "#c8b89a";
-      ctx.fillText("Waiting for debate to begin…", W/2, H/2);
-      return;
-    }
-
-    const padL = 76, padR = 16, padT = 20, padB = 28;
-    const rowH = (H - padT - padB) / chars.length;
-    const totalTurns = transcript.length;
-    const xOf = (idx: number) => padL + (totalTurns <= 1 ? 0.5 : idx / (totalTurns - 1)) * (W - padL - padR);
-
-    for (let ci = 0; ci < chars.length; ci++) {
-      const charName = chars[ci];
-      const color = CHAR_COLORS[ci % CHAR_COLORS.length].hex;
-      const y = padT + ci * rowH + rowH / 2;
-
-      // Lane background (alternating subtle stripe)
-      if (ci % 2 === 0) {
-        ctx.fillStyle = "rgba(200,184,154,0.08)";
-        ctx.fillRect(padL, padT + ci * rowH, W - padL - padR, rowH);
-      }
-
-      // Lane separator
-      ctx.strokeStyle = "rgba(200,184,154,0.3)"; ctx.lineWidth = 0.5;
-      ctx.beginPath(); ctx.moveTo(padL, padT + ci * rowH); ctx.lineTo(W - padR, padT + ci * rowH); ctx.stroke();
-
-      // Character label
-      ctx.font = `600 11px Inter, sans-serif`;
-      ctx.textAlign = "right"; ctx.textBaseline = "middle";
-      ctx.fillStyle = color;
-      ctx.fillText(charName.split(" ")[0], padL - 8, y);
-
-      const turns = transcript.map((e, idx) => ({ ...e, idx })).filter(e => e.character === charName);
-      if (turns.length === 0) continue;
-
-      // Connecting line — solid, subtle
-      ctx.strokeStyle = color + "40"; ctx.lineWidth = 1.5;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      turns.forEach((t, ti) => { const x = xOf(t.idx); ti === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
-      ctx.stroke();
-
-      // Dots
-      for (const turn of turns) {
-        const x = xOf(turn.idx);
-        const em = EMOTION_STYLE[turn.emotion || "neutral"] || EMOTION_STYLE.neutral;
-        // Soft glow on light background
-        const grd = ctx.createRadialGradient(x, y, 1, x, y, 9);
-        grd.addColorStop(0, em.dot + "55"); grd.addColorStop(1, "transparent");
-        ctx.beginPath(); ctx.arc(x, y, 9, 0, 2*Math.PI); ctx.fillStyle = grd; ctx.fill();
-        // Dot (exploration turns get a diamond shape)
-        if (turn.isExploration) {
-          ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/4);
-          ctx.fillStyle = em.dot;
-          ctx.fillRect(-5, -5, 10, 10);
-          ctx.restore();
-          ctx.font = "9px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-          ctx.fillStyle = "#c07820cc";
-          ctx.fillText("✦", x, y - 7);
-        } else {
-          ctx.beginPath(); ctx.arc(x, y, 5, 0, 2*Math.PI);
-          ctx.fillStyle = em.dot; ctx.fill();
-          // White ring for visibility on light bg
-          ctx.beginPath(); ctx.arc(x, y, 5, 0, 2*Math.PI);
-          ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 1.5; ctx.stroke();
-        }
-        // Emotion label if space allows
-        if (em.label && W / Math.max(totalTurns, 1) > 36) {
-          ctx.font = "8px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-          ctx.fillStyle = em.dot + "bb";
-          ctx.fillText(em.label, x, y + 8);
-        }
-      }
-    }
-
-    // Bottom lane border
-    ctx.strokeStyle = "rgba(200,184,154,0.3)"; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(padL, padT + chars.length * rowH); ctx.lineTo(W - padR, padT + chars.length * rowH); ctx.stroke();
-
-    // Turn axis tick marks + numbers
-    ctx.font = "9px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-    ctx.fillStyle = "#a09282";
-    const step = Math.max(1, Math.floor(totalTurns / 8));
-    for (let i = 0; i < totalTurns; i += step) {
-      const tx = xOf(i);
-      ctx.strokeStyle = "rgba(200,184,154,0.4)"; ctx.lineWidth = 0.5;
-      ctx.beginPath(); ctx.moveTo(tx, padT); ctx.lineTo(tx, padT + chars.length * rowH); ctx.stroke();
-      ctx.fillText(String(i + 1), tx, padT + chars.length * rowH + 4);
-    }
-    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-    ctx.fillStyle = "#c8b89a";
-    ctx.fillText("turn →", padL + (W - padL - padR) / 2, H - 2);
-  }, [transcript, activeCharacters, rightTab]);
 
   const startDebate = async () => {
     if (!divergence.trim()) return;
@@ -792,6 +631,14 @@ export default function DebatePage() {
           isExploration,
         }]);
         setStreaming(null);
+      } else if (ev.type === "ledger_update") {
+        setLedgerState({
+          open_questions: ev.open_questions || [],
+          claims: ev.claims || [],
+          positions: ev.positions || {},
+          progress: ev.progress || "",
+          resolved_count: ev.resolved_count || 0,
+        });
       } else if (ev.type === "reactions") {
         // Emotional reactions from other characters
         for (const r of (ev.reactions || [])) {
@@ -1971,14 +1818,14 @@ export default function DebatePage() {
 
           {/* Right panel tabs */}
           <div className="shrink-0 flex border-b border-[#e8e0d5] bg-[#f0ece5]">
-            {(["graph", "heatmap", "emotions"] as const).map(tab => (
+            {(["graph", "ledger", "positions"] as const).map(tab => (
               <button key={tab} onClick={() => setRightTab(tab)}
                 className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
                   rightTab === tab
                     ? "text-[#3d2f20] border-[#c07820]"
                     : "text-[#a09282] border-transparent hover:text-[#6b5c4e]"
                 }`}>
-                {tab === "graph" ? "⬡ Graph" : tab === "heatmap" ? "▦ Heatmap" : "◉ Emotions"}
+                {tab === "graph" ? "⬡ Graph" : tab === "ledger" ? "📋 Ledger" : "🎭 Positions"}
               </button>
             ))}
           </div>
@@ -2024,51 +1871,114 @@ export default function DebatePage() {
                 )}
               </div>
             </div>
-            {/* Heatmap */}
-            <div style={{ position:"absolute", inset:0, opacity: rightTab==="heatmap" ? 1 : 0, pointerEvents: rightTab==="heatmap" ? "auto" : "none", transition:"opacity 0.15s" }}>
-              <canvas ref={heatmapCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
-              <div className="absolute top-3 right-3">
-                <div className="bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
-                  <button className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors" onClick={() => setHeatmapLegendOpen(v => !v)}>
-                    <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">How to read</span>
-                    <span className="text-[#a09282] text-xs">{heatmapLegendOpen ? "▾" : "▸"}</span>
-                  </button>
-                  {heatmapLegendOpen && (
-                    <div className="px-3 pb-3 space-y-2 border-t border-[#e8e0d5] max-w-[220px]">
-                      <p className="text-xs text-[#6b5c4e] pt-2 leading-relaxed">Row = speaker, Column = spoken to. Number = reply count.</p>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded-sm shrink-0" style={{ background: "rgba(192,80,10,0.8)" }} /><span className="text-xs text-[#6b5c4e]">Many</span></div>
-                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded-sm shrink-0" style={{ background: "rgba(230,180,140,0.2)" }} /><span className="text-xs text-[#6b5c4e]">Few</span></div>
-                      </div>
-                    </div>
-                  )}
+            {/* Argument Ledger */}
+            <div className="overflow-y-auto p-4 space-y-4" style={{ position:"absolute", inset:0, opacity: rightTab==="ledger" ? 1 : 0, pointerEvents: rightTab==="ledger" ? "auto" : "none", transition:"opacity 0.15s" }}>
+              {/* Progress */}
+              {ledgerState.progress && (
+                <div className="bg-[#fef9f0] border border-[#f0c060]/30 rounded-xl px-4 py-3">
+                  <div className="text-[10px] text-[#c07820] uppercase tracking-widest font-medium mb-1">Boru&apos;s Notes</div>
+                  <p className="text-sm text-[#3d2f20] leading-relaxed">{ledgerState.progress}</p>
                 </div>
+              )}
+
+              {/* Open Questions */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] text-[#a09282] uppercase tracking-widest font-medium">Open Questions</span>
+                  <span className="text-[10px] text-[#c8b89a]">{ledgerState.open_questions.length} open · {ledgerState.resolved_count} resolved</span>
+                </div>
+                {ledgerState.open_questions.length === 0 ? (
+                  <p className="text-xs text-[#c8b89a] italic py-2">No open questions yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {ledgerState.open_questions.map((q: any) => (
+                      <div key={q.id} className={`border rounded-xl px-3 py-2.5 ${q.status === "unanswered" ? "border-amber-200 bg-amber-50/50" : "border-[#e8e0d5] bg-white"}`}>
+                        <p className="text-xs text-[#1c1410] leading-relaxed">{q.question}</p>
+                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-[#a09282]">
+                          <span>by {q.asked_by}</span>
+                          <span>→</span>
+                          <span className="font-medium text-[#6b5c4e]">{(q.directed_to || []).join(", ")}</span>
+                          <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium ${q.status === "unanswered" ? "text-amber-700 bg-amber-100" : "text-[#a09282] bg-[#f0ebe4]"}`}>
+                            {q.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* Active Claims */}
+              {ledgerState.claims.length > 0 && (
+                <div>
+                  <span className="text-[10px] text-[#a09282] uppercase tracking-widest font-medium">Active Claims</span>
+                  <div className="mt-2 space-y-1.5">
+                    {ledgerState.claims.map((c: any, i: number) => (
+                      <div key={i} className="border border-[#e8e0d5] rounded-lg px-3 py-2 bg-white">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-[#1c1410]">{c.character}:</span>
+                          <span className="text-xs text-[#6b5c4e] line-clamp-2">&ldquo;{c.claim}&rdquo;</span>
+                        </div>
+                        {c.challenged_by?.length > 0 && (
+                          <p className="text-[10px] text-red-500 mt-1">Challenged by {c.challenged_by.join(", ")}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {ledgerState.open_questions.length === 0 && ledgerState.claims.length === 0 && !ledgerState.progress && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <span className="text-2xl mb-2">🐘</span>
+                  <p className="text-sm text-[#a09282]">Boru is listening...</p>
+                  <p className="text-xs text-[#c8b89a] mt-1">The ledger will fill as the debate progresses</p>
+                </div>
+              )}
             </div>
-            {/* Emotions */}
-            <div style={{ position:"absolute", inset:0, opacity: rightTab==="emotions" ? 1 : 0, pointerEvents: rightTab==="emotions" ? "auto" : "none", transition:"opacity 0.15s" }}>
-              <canvas ref={emotionsCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
-              <div className="absolute top-3 right-3">
-                <div className="bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
-                  <button className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors" onClick={() => setEmotionLegendOpen(v => !v)}>
-                    <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">Emotions</span>
-                    <span className="text-[#a09282] text-xs">{emotionLegendOpen ? "▾" : "▸"}</span>
-                  </button>
-                  {emotionLegendOpen && (
-                    <div className="px-3 pb-3 border-t border-[#e8e0d5] max-w-[200px]">
-                      <p className="text-xs text-[#6b5c4e] pt-2 pb-2 leading-relaxed">Each dot = one speech. Colour = detected emotion.</p>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                        {Object.entries(EMOTION_STYLE).filter(([k]) => k !== "neutral").map(([, em]) => (
-                          <div key={em.label} className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
-                            <span className="text-xs text-[#6b5c4e]">{em.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+
+            {/* Character Positions */}
+            <div className="overflow-y-auto p-4 space-y-3" style={{ position:"absolute", inset:0, opacity: rightTab==="positions" ? 1 : 0, pointerEvents: rightTab==="positions" ? "auto" : "none", transition:"opacity 0.15s" }}>
+              {Object.keys(ledgerState.positions).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <span className="text-2xl mb-2">🎭</span>
+                  <p className="text-sm text-[#a09282]">Waiting for characters to speak</p>
+                  <p className="text-xs text-[#c8b89a] mt-1">Each character&apos;s stance will appear here</p>
                 </div>
-              </div>
+              ) : (
+                activeCharacters.map((name, i) => {
+                  const pos = ledgerState.positions[name];
+                  const stats = graphStats.find(g => g.id === name);
+                  const charData = storyCharacters.find(c => c.name === name);
+                  const col = CHAR_COLORS[i % CHAR_COLORS.length];
+                  if (!pos) return null;
+                  return (
+                    <div key={name} className="bg-white border border-[#e8e0d5] rounded-xl p-3.5">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        {charData?.portrait ? (
+                          <img src={`http://localhost:8001${charData.portrait}`} alt={name} loading="lazy"
+                            className="w-8 h-8 rounded-full object-cover shrink-0 shadow-sm" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs"
+                            style={{ backgroundColor: col.hex }}>
+                            {name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-[#1c1410]">{name}</span>
+                          {charData?.role && (
+                            <span className="text-[10px] text-[#a09282] ml-1.5 capitalize">{charData.role}</span>
+                          )}
+                        </div>
+                        {stats && (
+                          <span className="text-[10px] text-[#c8b89a] shrink-0">{stats.speeches} turns</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#6b5c4e] leading-relaxed">{pos}</p>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 

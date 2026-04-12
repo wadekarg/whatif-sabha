@@ -107,6 +107,7 @@ async def observer_respond_stream(
     divergence: str,
     debate_history: list,
     characters: list[str] | None = None,
+    already_asked: list[str] | None = None,
 ):
     """
     Stream a world observer's reaction to the current state of the debate.
@@ -127,11 +128,22 @@ async def observer_respond_stream(
         text = entry["message"]
         messages.append(HumanMessage(content=f"{speaker}: {text}"))
 
+    # Prevent repeating questions already asked in this debate
+    avoid_text = ""
+    if already_asked:
+        avoid_text = (
+            f"\n\nIMPORTANT — These questions have ALREADY been asked in this debate. "
+            f"Do NOT repeat or rephrase them:\n"
+            + "\n".join(f"- {q}" for q in already_asked[-8:])
+            + "\nAsk something DIFFERENT and NEW."
+        )
+
     messages.append(HumanMessage(content=(
         f"You have heard these arguments. React with your historical perspective. "
         f"Then END by directing a sharp question at ONE of these characters: {', '.join(char_list)}. "
         f"Format the final line as: → [CharacterName]: Your question?\n"
-        f"2-4 sentences of commentary, then the directed question. Be specific."
+        f"2-4 sentences of commentary, then the directed question. Be specific and original."
+        f"{avoid_text}"
     )))
 
     # Use narrator LLM (Groq/NVIDIA) — fast and varied

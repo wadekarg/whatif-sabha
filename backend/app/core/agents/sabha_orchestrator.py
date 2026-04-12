@@ -681,23 +681,63 @@ async def should_end_debate(
     characters: list[dict],
 ) -> bool:
     """
-    The orchestrator decides if the debate has reached its natural conclusion.
-    Not a formula — an LLM judgment call.
+    Boru decides if the debate has reached its natural conclusion.
+    Multiple signals considered — not just round count.
     """
-    if current_phase != "closing":
+    char_names = set(c["name"] for c in characters)
+    char_turns = [e for e in transcript if e["character"] in char_names and not e.get("isOrchestrator")]
+    total_turns = len(char_turns)
+
+    # Hard minimum: at least 2 turns per character
+    if total_turns < len(characters) * 2:
         return False
 
-    # In closing phase, check if all characters have given final statements
-    char_names = set(c["name"] for c in characters)
-    closing_speakers = set()
-    in_closing = False
-    for e in transcript:
-        if e.get("phase") == "closing":
-            in_closing = True
-        if in_closing and e["character"] in char_names:
-            closing_speakers.add(e["character"])
+    # Hard maximum: never exceed 6x characters
+    if total_turns >= len(characters) * 6:
+        return True
 
-    return closing_speakers >= char_names  # all characters have spoken in closing
+    # In closing phase: end when all characters have given final word
+    if current_phase == "closing":
+        closing_speakers = set()
+        in_closing = False
+        for e in transcript:
+            if e.get("phase") == "closing":
+                in_closing = True
+            if in_closing and e["character"] in char_names:
+                closing_speakers.add(e["character"])
+        return closing_speakers >= char_names
+
+    # Natural end signals (any 3 = end):
+    signals = 0
+
+    # 1. Most questions resolved
+    total_qs = len(ledger.open_questions) + len(ledger.resolved_questions)
+    if total_qs > 0 and len(ledger.resolved_questions) / total_qs >= 0.6:
+        signals += 1
+
+    # 2. All characters have spoken at least 3 times
+    spoken_counts = {}
+    for e in char_turns:
+        spoken_counts[e["character"]] = spoken_counts.get(e["character"], 0) + 1
+    if all(spoken_counts.get(n, 0) >= 3 for n in char_names):
+        signals += 1
+
+    # 3. Drama score declining (debate winding down)
+    drama = compute_drama_score(transcript)
+    if drama < 0.4:
+        signals += 1
+
+    # 4. Last 4 turns had no new claims
+    recent_claims = [c for c in ledger.claims if c.get("_turn", 0) >= total_turns - 4]
+    if len(recent_claims) == 0 and total_turns > len(characters) * 3:
+        signals += 1
+
+    # 5. Repetition happening frequently
+    repeat_count = sum(1 for name in char_names for _ in ledger.repetition_log.get(name, []) if len(ledger.repetition_log.get(name, [])) > 2)
+    if repeat_count >= 2:
+        signals += 1
+
+    return signals >= 3
 
 
 def compute_drama_score(debate_history: list) -> float:

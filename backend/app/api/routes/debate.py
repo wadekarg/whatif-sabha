@@ -425,6 +425,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     obs_names = [o["name"] for o in active_observers] if active_observers else []
                     await update_ledger(ledger, name, res["message"], transcript, observer_names=obs_names)
 
+                # Stream ledger after parallel round completes
+                yield sse("ledger_update", {
+                    "open_questions": ledger.open_questions[:10],
+                    "claims": [c for c in ledger.claims if c["status"] != "resolved"][-8:],
+                    "positions": ledger.character_positions,
+                    "progress": ledger.progress_summary,
+                    "resolved_count": len(ledger.resolved_questions),
+                })
+
             else:
                 # Sequential — single speaker with live streaming
                 speaker_info = speakers_list[0]
@@ -661,6 +670,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 obs_names = [o["name"] for o in active_observers] if active_observers else []
                 ledger_update = await update_ledger(ledger, next_speaker_name, full_response, transcript, observer_names=obs_names)
 
+                # Stream ledger state to frontend
+                yield sse("ledger_update", {
+                    "open_questions": ledger.open_questions[:10],
+                    "claims": [c for c in ledger.claims if c["status"] != "resolved"][-8:],
+                    "positions": ledger.character_positions,
+                    "progress": ledger.progress_summary,
+                    "resolved_count": len(ledger.resolved_questions),
+                })
+
                 # If repetition detected, orchestrator calls it out
                 if ledger_update.get("is_repetition"):
                     callout_msg = await generate_orchestrator_message(
@@ -716,10 +734,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             "observer_id": observer["id"], "observer_name": observer["name"],
                             "era": observer.get("era", ""),
                         })
+                        _asked_qs = [q["question"] for q in ledger.open_questions] + [q["question"] for q in ledger.resolved_questions]
                         async for token in observer_respond_stream(
                             observer=observer, story_title=story.title or "",
                             divergence=debate.divergence_description,
                             debate_history=transcript, characters=char_names,
+                            already_asked=_asked_qs,
                         ):
                             obs_response += token
                             yield sse("observer_token", {"observer_id": observer["id"], "observer_name": observer["name"], "text": token})
