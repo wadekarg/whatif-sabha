@@ -14,6 +14,7 @@ from typing import Optional
 
 # Shared audience message queues per debate — {debate_id: asyncio.Queue}
 _audience_queues: dict[str, asyncio.Queue] = {}
+_stop_signals: dict[str, bool] = {}  # {debate_id: True} to signal debate should stop
 
 from app.db.database import get_db
 from app.models.story import Story
@@ -129,6 +130,13 @@ async def audience_interjection(debate_id: str, body: AudienceMessage):
     return {"ok": True, "queued": True}
 
 
+@router.post("/{debate_id}/stop")
+async def stop_debate(debate_id: str):
+    """Signal a running debate to stop after the current turn."""
+    _stop_signals[debate_id] = True
+    return {"ok": True, "message": "Debate will stop after current turn"}
+
+
 @router.get("/{debate_id}/stream")
 async def stream_debate(debate_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Debate).where(Debate.id == debate_id))
@@ -207,6 +215,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     try:
         # ── Main debate loop — orchestrator-driven ──
         while round_number < max_rounds:
+            # Check for user-initiated stop
+            if _stop_signals.pop(debate_id, False):
+                yield sse("orchestrator", {"message": "The Sabha has been called to order. By request, we conclude early. Let me summarize what we've heard.", "phase": current_phase, "event": "user_stop"})
+                break
+
             if await should_end_debate(ledger, current_phase, transcript, characters):
                 break
 
@@ -313,12 +326,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 full_response = ""
                 judge_result = {"score": 7, "issue": None, "dominant_emotion": "neutral"}
                 try:
+                    # Get pending questions for this character from ledger
+                    _pqs = [q for q in ledger.open_questions if next_speaker_name in q.get("directed_to", [])]
                     async for token in character_respond_stream(
                         character=character, phase=phase_state,
                         divergence=debate.divergence_description,
                         debate_history=transcript, story_title=story.title or "",
                         correction_hint=None, exploration_hint=exploration_hint,
                         memory_context=memory_context, observer_challenge=observer_challenge,
+                        pending_questions=_pqs,
                     ):
                         full_response += token
 
@@ -505,6 +521,8 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 try:
                     while attempt < max_attempts:
                         full_response = ""
+                        # Get pending questions for this character from ledger
+                        _pqs_seq = [q for q in ledger.open_questions if next_speaker_name in q.get("directed_to", [])]
                         async for token in character_respond_stream(
                             character=character,
                             phase=phase_state,
@@ -515,6 +533,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             exploration_hint=exploration_hint,
                             memory_context=memory_context,
                             observer_challenge=observer_challenge,
+                            pending_questions=_pqs_seq,
                         ):
                             full_response += token
                             yield sse("token", {"character": next_speaker_name, "text": token})

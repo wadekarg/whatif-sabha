@@ -484,24 +484,30 @@ async def decide_phase_transition(
     config = PHASE_CONFIG[current_phase]
     char_names = [c["name"] for c in characters]
 
-    # Count turns per character in current phase
-    phase_turns = {}
-    in_phase = False
-    for e in transcript:
-        if e.get("phase") == current_phase:
-            in_phase = True
-        if in_phase:
-            name = e["character"]
-            if name in char_names:
-                phase_turns[name] = phase_turns.get(name, 0) + 1
+    # Count ACTUAL character dialogue turns (not Boru, observers, reactions)
+    char_turns = [
+        e for e in transcript
+        if e["character"] in char_names
+        and not e.get("isOrchestrator")
+        and not e.get("isObserver")
+        and not e.get("isReaction")
+        and not e.get("isStageDirection")
+        and not e.get("isAudience")
+    ]
+    total_char_turns = len(char_turns)
+    unique_speakers = len(set(e["character"] for e in char_turns))
 
-    min_met = all(
-        phase_turns.get(n, 0) >= config["min_turns_per_char"]
-        for n in char_names
-    )
+    # Phase advance: enough characters have spoken, not waiting for ALL of them
+    # Opening: at least 3 characters spoke OR total turns > len(characters)
+    # Other phases: total turns in phase > len(characters) * min_turns_per_char
+    min_turns = config["min_turns_per_char"]
+    if current_phase == "opening":
+        min_met = unique_speakers >= min(3, len(char_names)) or total_char_turns >= len(char_names)
+    else:
+        min_met = total_char_turns >= len(char_names) * min_turns
 
     if not min_met:
-        return None  # haven't met minimum turns for this phase
+        return None
 
     # Ask LLM if transition makes sense
     prompt = f"""You are Boru, the Speaker of this Sabha. The debate is in the "{current_phase}" phase.
@@ -569,6 +575,10 @@ async def pick_next_speakers(
             + (f", HAS {len(pending_qs)} UNANSWERED Q" if pending_qs else "")
         )
 
+    # Build list of what Boru already asked (to prevent repetition)
+    boru_prev = [e["message"][:120] for e in transcript if e.get("isOrchestrator")][-6:]
+    boru_prev_text = "\n".join(f"  - {m}" for m in boru_prev) if boru_prev else "  (none yet)"
+
     prompt = f"""You are Boru the Elephant — Speaker of this Sabha.
 
 PHASE: {current_phase} — {PHASE_CONFIG.get(current_phase, {}).get('description', '')}
@@ -578,6 +588,9 @@ CHARACTERS:
 
 LEDGER:
 {ledger.to_context()}
+
+YOUR PREVIOUS INVITATIONS (DO NOT REPEAT THESE — ask something NEW):
+{boru_prev_text}
 
 Last speaker was: {last_speaker}
 

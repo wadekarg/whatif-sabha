@@ -1195,10 +1195,23 @@ export default function DebatePage() {
           <span className="text-xs text-[#6b5c4e] font-medium">Sabha</span>
           <div className="flex items-center gap-1.5 ml-auto shrink-0">
             {status === "running" && (
-              <span className="flex gap-0.5 items-center">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#c07820] animate-pulse" />
-                <span className="text-xs text-[#c07820] font-semibold uppercase tracking-wide">Live</span>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="flex gap-0.5 items-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#c07820] animate-pulse" />
+                  <span className="text-xs text-[#c07820] font-semibold uppercase tracking-wide">Live</span>
+                </span>
+                <button
+                  onClick={async () => {
+                    if (debateId) {
+                      await fetch(`${API}/debates/${debateId}/stop`, { method: "POST" });
+                    }
+                  }}
+                  className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors font-medium"
+                  title="End the debate early"
+                >
+                  Stop
+                </button>
+              </div>
             )}
             {status === "done" && (
               <span className="text-xs text-emerald-600 font-semibold uppercase tracking-wide flex items-center gap-1">

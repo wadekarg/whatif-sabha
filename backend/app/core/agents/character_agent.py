@@ -7,6 +7,7 @@ def _build_turn_prompt(
     character_name: str,
     debate_history: list,
     correction_hint: str = None,
+    pending_questions: list = None,
 ) -> tuple[str, bool]:
     """
     Build a context-aware turn prompt.
@@ -55,6 +56,15 @@ def _build_turn_prompt(
 
     if correction_hint:
         prompt += f"\n\nIMPORTANT: Your last response was flagged. Correction needed: {correction_hint}"
+
+    # Inject pending questions directed at this character
+    if pending_questions:
+        qs = "\n".join(f"  - \"{q['question']}\" (asked by {q.get('asked_by', 'someone')})" for q in pending_questions[:3])
+        prompt += (
+            f"\n\nUNANSWERED QUESTIONS DIRECTED AT YOU — you MUST address at least one:\n{qs}\n"
+            f"Work your answer naturally into your response. Don't just list answers — weave them in."
+        )
+        is_direct = True  # treat as direct response for higher token limit
 
     return prompt, is_direct
 
@@ -120,6 +130,7 @@ async def character_respond_stream(
     exploration_hint: str = None,
     memory_context: list[str] = None,
     observer_challenge: dict | None = None,
+    pending_questions: list = None,
 ):
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
@@ -128,7 +139,10 @@ async def character_respond_stream(
 
     _inject_memories(messages, memory_context or [])
 
+    # Filter out reactions/stage directions — characters only see real dialogue
     for entry in debate_history[-12:]:
+        if entry.get("isReaction") or entry.get("isStageDirection"):
+            continue
         speaker = entry["character"]
         text = entry["message"]
         if speaker == character["name"]:
@@ -136,7 +150,7 @@ async def character_respond_stream(
         else:
             messages.append(HumanMessage(content=f"{speaker}: {text}"))
 
-    turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history, correction_hint)
+    turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history, correction_hint, pending_questions)
     messages.append(HumanMessage(content=turn_prompt))
 
     if observer_challenge:

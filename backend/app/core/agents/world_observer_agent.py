@@ -119,23 +119,26 @@ async def observer_respond_stream(
     system_prompt = _build_observer_system_prompt(observer, story_title, divergence)
     messages = [SystemMessage(content=system_prompt)]
 
-    # Observers only see the last 6 turns — they react to the current moment
-    recent = debate_history[-6:] if len(debate_history) > 6 else debate_history
-    char_list = characters or list({e["character"] for e in debate_history if not e.get("isObserver")})
+    # Observers see the last 6 dialogue turns (not reactions/stage directions)
+    recent = [e for e in debate_history if not e.get("isReaction") and not e.get("isStageDirection")][-6:]
+    char_list = characters or list({e["character"] for e in debate_history if not e.get("isObserver") and not e.get("isOrchestrator")})
 
     for entry in recent:
         speaker = entry["character"]
         text = entry["message"]
         messages.append(HumanMessage(content=f"{speaker}: {text}"))
 
-    # Prevent repeating questions already asked in this debate
+    # Collect this observer's own previous statements + all asked questions
+    own_prev = [e["message"][:150] for e in debate_history if e.get("isObserver") and e["character"] == observer.get("name", "")]
+    all_avoid = list(already_asked or []) + own_prev
     avoid_text = ""
-    if already_asked:
+    if all_avoid:
         avoid_text = (
-            f"\n\nIMPORTANT — These questions have ALREADY been asked in this debate. "
-            f"Do NOT repeat or rephrase them:\n"
-            + "\n".join(f"- {q}" for q in already_asked[-8:])
-            + "\nAsk something DIFFERENT and NEW."
+            f"\n\nCRITICAL — These have ALREADY been said in this debate. "
+            f"Do NOT repeat, rephrase, or echo any of them:\n"
+            + "\n".join(f"- {q}" for q in all_avoid[-10:])
+            + "\nYour commentary and question MUST be completely NEW and DIFFERENT. "
+            f"Find a FRESH angle that nobody has raised yet."
         )
 
     messages.append(HumanMessage(content=(
