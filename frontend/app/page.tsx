@@ -347,7 +347,7 @@ export default function Home() {
                                   {s.character_count && s.debate_count ? " · " : ""}
                                   {s.debate_count ? `${s.debate_count} debate${s.debate_count !== 1 ? "s" : ""}` : ""}
                                   {s.created_at && (
-                                    <> · {new Date(s.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</>
+                                    <> · {new Date(s.created_at + (s.created_at?.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</>
                                   )}
                                 </p>
                               </Link>

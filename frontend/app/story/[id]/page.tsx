@@ -945,7 +945,7 @@ function DebateList({ debates, storyId, onDelete }: {
                       {d.created_at && (
                         <>
                           <span>·</span>
-                          <span>{new Date(d.created_at).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                          <span>{new Date(d.created_at + (d.created_at?.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                         </>
                       )}
                     </div>
