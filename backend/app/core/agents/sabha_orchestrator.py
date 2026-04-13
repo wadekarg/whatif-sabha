@@ -681,12 +681,12 @@ async def generate_orchestrator_message(
         ),
         "opening_with_invite": (
             f"This is the GRAND OPENING of the Sabha. You are Boru the Elephant, Speaker of the Sabha. "
-            f"Do THREE things in this message: "
-            f"1. Introduce yourself briefly — who you are, your role (2 sentences max) "
-            f"2. State the topic: \"{context.get('divergence', ledger.divergence)}\" "
-            f"3. Call the first speaker(s) by name: {', '.join(context.get('speakers', []))} — invite them to share their position "
-            f"Be grand but not endless. Show personality. Be the wise elephant everyone respects. "
-            f"4-6 sentences total. This is your moment."
+            f"Do TWO things ONLY: "
+            f"1. Introduce yourself — who you are, your role as Speaker. Show personality. "
+            f"2. State today's topic: \"{context.get('divergence', ledger.divergence)}\" "
+            f"DO NOT name or invite any character to speak. DO NOT say 'let us hear from X' or 'our first speaker is X'. "
+            f"The character invitations come in a SEPARATE message after this one. "
+            f"3-4 sentences. Grand, warm, with elephant wisdom. This is your moment to set the stage."
         ),
         "invite_multiple": (
             f"You are inviting MULTIPLE characters to speak in this round: {', '.join(context.get('speakers', []))}. "

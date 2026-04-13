@@ -240,24 +240,27 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             is_parallel = round_decision.get("is_parallel", False) and len(speakers_list) > 1
             speaker_names = [s["speaker"] for s in speakers_list]
 
-            # ── Boru's message — opening or invite ──
+            # ── Boru's messages ──
             if is_first_round:
-                # Grand opening: introduce himself, the topic, AND name who speaks first
-                boru_msg = await generate_orchestrator_message(
+                # Step 1: Grand opening — introduce himself + topic (NO character names)
+                opening_msg = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="opening_with_invite",
                     context={"speakers": speaker_names, "divergence": debate.divergence_description},
                 )
+                if opening_msg:
+                    yield sse("orchestrator", {"message": opening_msg, "phase": current_phase, "event": "opening"})
+                    transcript.append({"character": "Boru", "message": opening_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True})
                 is_first_round = False
-            elif len(speakers_list) == 1:
-                # Single speaker invite
+
+            # Step 2: Invite the speaker(s) — this is where characters get named
+            if len(speakers_list) == 1:
                 boru_msg = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="invite_speaker",
                     context={"speaker": speakers_list[0]["speaker"], "directive": speakers_list[0].get("directive", "")},
                 )
             else:
-                # Multiple speakers — one message naming all of them
                 boru_msg = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="invite_multiple",
