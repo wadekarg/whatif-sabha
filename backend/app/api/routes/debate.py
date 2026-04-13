@@ -384,9 +384,17 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     return None
 
                 target_char = _detect_question_target(full_response, char_names, next_speaker_name)
+                if not target_char:
+                    resp_lower = full_response.lower()
+                    for cn in char_names:
+                        if cn != next_speaker_name and cn.lower() in resp_lower:
+                            target_char = cn
+                            break
                 if not target_char and transcript:
                     for e in reversed(transcript):
-                        if not e.get("isOrchestrator") and e["character"] != next_speaker_name:
+                        if (not e.get("isOrchestrator") and not e.get("isObserver")
+                            and not e.get("isReaction") and not e.get("isStageDirection")
+                            and e["character"] != next_speaker_name):
                             target_char = e["character"]
                             break
 
@@ -604,10 +612,21 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     round_number += 1
                     continue
 
+                # Detect who this character is addressing
                 target_char = _detect_question_target(full_response, char_names, next_speaker_name)
-                if not target_char and transcript:
+                if not target_char:
+                    # Check if any character name is mentioned in their response
+                    resp_lower = full_response.lower()
+                    for cn in char_names:
+                        if cn != next_speaker_name and cn.lower() in resp_lower:
+                            target_char = cn
+                            break
+                if not target_char:
+                    # Fall back to the last REAL character who spoke (not Boru/observers)
                     for e in reversed(transcript):
-                        if not e.get("isOrchestrator") and e["character"] != next_speaker_name:
+                        if (not e.get("isOrchestrator") and not e.get("isObserver")
+                            and not e.get("isReaction") and not e.get("isStageDirection")
+                            and not e.get("isAudience") and e["character"] != next_speaker_name):
                             target_char = e["character"]
                             break
 
