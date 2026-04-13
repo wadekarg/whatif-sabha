@@ -279,30 +279,45 @@ export default function DebatePage() {
     // Update stats for React render
     setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
 
-    // Edge: use explicit target if available
+    // Edge: determine who this character is responding to
     let targetName = last.target;
-    // Fallback: check if Boru just invited this character (previous entry is orchestrator targeting them)
+
     if (!targetName) {
-      for (let j = transcript.length - 2; j >= 0; j--) {
-        const prev = transcript[j];
-        // Skip reactions/stage directions — they're not speakers
-        if ((prev as any).isReaction || (prev as any).isStageDirection) continue;
-        // If Boru just invited this character → edge goes back to Boru
-        if ((prev as any).isOrchestrator && prev.target === last.character) {
-          targetName = "Boru";
+      // Check if the character mentions another character by name in their response
+      const msgLower = last.message.toLowerCase();
+      for (const cn of activeCharacters) {
+        if (cn !== last.character && cn.toLowerCase() !== "boru" && msgLower.includes(cn.toLowerCase())) {
+          targetName = cn;
           break;
         }
-        // If Boru spoke but didn't target this character → skip to find real previous speaker
-        if ((prev as any).isOrchestrator) continue;
-        // Skip observers/audience
+      }
+    }
+
+    if (!targetName) {
+      // Walk back through transcript to find who prompted this character
+      for (let j = transcript.length - 2; j >= Math.max(0, transcript.length - 6); j--) {
+        const prev = transcript[j];
+        if ((prev as any).isReaction || (prev as any).isStageDirection) continue;
+
+        // If Boru's message mentions this character's name → responding to Boru
+        if ((prev as any).isOrchestrator) {
+          if (prev.target === last.character || prev.message?.toLowerCase().includes(last.character.toLowerCase())) {
+            targetName = "Boru";
+          }
+          break; // Boru is always the most recent prompter
+        }
+
         if ((prev as any).isObserver || (prev as any).isAudience) continue;
-        // Found a real character who spoke before
+
         if (prev.character !== last.character) {
           targetName = prev.character;
           break;
         }
       }
     }
+
+    // Final fallback
+    if (!targetName) targetName = "Boru";
     if (targetName && targetName !== last.character) {
       ensureNode(targetName);
       const isQuestion = last.message.includes("?");
