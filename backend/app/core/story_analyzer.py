@@ -136,11 +136,15 @@ Return a JSON object with this exact structure:
   "potential_divergence_points": [
     {{
       "event_id": "reference to key_events event_id",
-      "description": "what could have been different here",
-      "affected_characters": ["Character A"]
+      "description": "A compelling 'What if...' scenario",
+      "affected_characters": ["Character A", "Character B"]
     }}
   ]
 }}
+
+IMPORTANT: Generate 6-10 potential_divergence_points. Each should be a DIFFERENT pivotal
+moment. Think about: key decisions, betrayals, secrets revealed early, alliances that
+could have formed, events that never happened. Make each specific and debate-worthy.
 
 Return ONLY valid JSON. No markdown, no explanation. Be thorough — extract ALL named characters, even minor ones.\n\nFor timeline_metadata: invent a story-native time unit. Examples: Animal Farm → {{"unit_name":"Farm Year","unit_plural":"Farm Years","total_duration":3.0,"start_label":"Year 1","description":"The story spans approximately 3 farm years"}}. Mahabharata → {{"unit_name":"Parva","unit_plural":"Parvas","total_duration":18.0,"start_label":"Parva 1","description":"The epic spans 18 parvas"}}. A war story → {{"unit_name":"War Year","unit_plural":"War Years","total_duration":4.0,"start_label":"Year 1","description":"The war spans 4 years"}}. Pick a unit that feels NATIVE to this specific story's world. total_duration should be a reasonable real-world-scale number (e.g. 3.0 farm years, not 1.0 meaning 100%). The 0.0–1.0 timeline positions will be multiplied by total_duration to get the actual label.\n\nFor hidden_dimensions: generate 5-8 plausible-but-unverified inner truths per character — things the text implies but never states. These are the character's hidden self. Be specific to this story and character, not generic."""
 
@@ -244,11 +248,13 @@ Return a JSON object:
   "potential_divergence_points": [
     {{
       "event_id": "reference to key_events event_id",
-      "description": "what could have been different here",
-      "affected_characters": ["Character A"]
+      "description": "A compelling 'What if...' scenario",
+      "affected_characters": ["Character A", "Character B"]
     }}
   ]
 }}
+
+IMPORTANT: Generate 6-10 potential_divergence_points — each a DIFFERENT pivotal moment.
 
 For timeline_metadata: use a story-native time unit.
 Animal Farm → Farm Years · Mahabharata → Parvas · war story → War Years.

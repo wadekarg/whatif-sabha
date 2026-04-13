@@ -148,6 +148,74 @@ async def get_divergence_points(story_id: str, db: AsyncSession = Depends(get_db
     return story.analysis.get("potential_divergence_points", [])
 
 
+@router.post("/{story_id}/divergence-points/generate")
+async def generate_more_divergence_points(story_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate fresh What If suggestions using Boru's analysis."""
+    from langchain_core.messages import HumanMessage
+    from app.config import invoke_analysis_with_fallback
+
+    result = await db.execute(select(Story).where(Story.id == story_id))
+    story = result.scalar_one_or_none()
+    if not story or not story.analysis:
+        raise HTTPException(status_code=404, detail="Story analysis not ready.")
+
+    characters = story.analysis.get("characters", [])
+    char_names = [c["name"] for c in characters[:15]]
+    existing = story.analysis.get("potential_divergence_points", [])
+    existing_descs = [d.get("description", "") for d in existing]
+
+    prompt = f"""You are Boru the Elephant, the wise Speaker of the WhatIfSabha.
+You have deeply studied "{story.title}" {f'by {story.author}' if story.author else ''}.
+
+SUMMARY: {story.summary or 'N/A'}
+CHARACTERS: {', '.join(char_names)}
+
+EXISTING "What If" scenarios (DO NOT REPEAT these):
+{chr(10).join(f'- {d}' for d in existing_descs)}
+
+Generate 5 NEW and CREATIVE "What if..." divergence points for this story.
+Each should be a specific moment where the story could have gone dramatically differently.
+
+Think about:
+- What if a character made the OPPOSITE choice at a key moment?
+- What if a secret was revealed much earlier?
+- What if two enemies became allies (or allies became enemies)?
+- What if a death never happened (or happened to someone else)?
+- What if an event from the beginning had a different outcome?
+
+Return JSON array only:
+[
+  {{"description": "What if...", "affected_characters": ["Name1", "Name2"]}},
+  ...
+]"""
+
+    raw = await invoke_analysis_with_fallback([HumanMessage(content=prompt)])
+    if not raw:
+        return existing
+
+    import json, re
+    raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
+    raw = re.sub(r"\n?```$", "", raw.strip())
+    try:
+        new_points = json.loads(raw)
+        if isinstance(new_points, list):
+            # Merge with existing, avoid duplicates
+            all_points = list(existing)
+            for p in new_points:
+                if p.get("description") and p["description"] not in existing_descs:
+                    p["event_id"] = f"generated_{len(all_points)}"
+                    all_points.append(p)
+            # Save back to analysis
+            story.analysis["potential_divergence_points"] = all_points
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(story, "analysis")
+            await db.commit()
+            return all_points
+    except Exception:
+        pass
+    return existing
+
+
 @router.get("/{story_id}/overview")
 async def get_story_overview(story_id: str, db: AsyncSession = Depends(get_db)):
     """Full orchestrator view: timeline, character arcs, relationships, divergence points."""

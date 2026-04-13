@@ -311,20 +311,27 @@ export default function StoryPage() {
                 className="w-full bg-transparent resize-none text-[#1c1410] placeholder-[#c8b89a] focus:outline-none text-sm leading-relaxed"
               />
             </div>
-            {suggestions.length > 0 && (
-              <div className="px-6 pb-3 flex flex-wrap gap-2">
-                {suggestions.map((s: any) => (
-                  <button key={s.event_id} onClick={() => setWhatIf(s.description)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-                      whatIf === s.description
-                        ? "bg-[#fef3e2] border-[#f0c060] text-[#c07820] font-medium"
-                        : "bg-[#f7f3ed] border-[#e8e0d5] text-[#6b5c4e] hover:border-[#c07820]/40 hover:bg-[#fef3e2]/60"
-                    }`}>
-                    → {s.description}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="px-6 pb-3 flex flex-wrap gap-2">
+              {suggestions.map((s: any, i: number) => (
+                <button key={s.event_id || i} onClick={() => setWhatIf(s.description)}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                    whatIf === s.description
+                      ? "bg-[#fef3e2] border-[#f0c060] text-[#c07820] font-medium"
+                      : "bg-[#f7f3ed] border-[#e8e0d5] text-[#6b5c4e] hover:border-[#c07820]/40 hover:bg-[#fef3e2]/60"
+                  }`}>
+                  → {s.description}
+                </button>
+              ))}
+              <button
+                onClick={async () => {
+                  const res = await fetch(`${API}/stories/${id}/divergence-points/generate`, { method: "POST" });
+                  if (res.ok) { const data = await res.json(); if (Array.isArray(data)) setSuggestions(data); }
+                }}
+                className="text-xs px-3 py-1.5 rounded-full border border-dashed border-[#c07820]/40 text-[#c07820] hover:bg-[#fef3e2]/60 transition-all"
+              >
+                + More ideas
+              </button>
+            </div>
             <div className="px-6 py-3 bg-[#faf7f2] border-t border-[#e8e0d5] flex items-center justify-between">
               <span className="text-xs text-[#a09282]">
                 {whatIf.trim() ? `${whatIf.length} chars` : "Pick a suggestion or write your own"}
