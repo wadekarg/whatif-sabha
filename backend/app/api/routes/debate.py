@@ -217,7 +217,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         while round_number < max_rounds:
             # Check for user-initiated stop
             if _stop_signals.pop(debate_id, False):
-                yield sse("orchestrator", {"message": "The Sabha has been called to order. By request, we conclude early. Let me summarize what we've heard.", "phase": current_phase, "event": "user_stop"})
+                # Boru gives a proper closing summary
+                stop_summary = await generate_orchestrator_message(
+                    ledger, "closing", transcript, characters, story.title or "",
+                    event_type="closing_summary",
+                )
+                if not stop_summary:
+                    stop_summary = "The Sabha is concluded. What was said here will not be forgotten."
+                yield sse("orchestrator", {"message": stop_summary, "phase": "closing", "event": "user_stop"})
+                transcript.append({"character": "Boru", "message": stop_summary, "round": round_number, "phase": "closing", "isOrchestrator": True})
                 break
 
             if await should_end_debate(ledger, current_phase, transcript, characters):
