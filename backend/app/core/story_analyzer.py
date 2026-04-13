@@ -265,42 +265,58 @@ async def analyze_story_structure(full_text: str) -> dict:
     """
     Extract story structure — title, themes, events, phases.
     Does NOT extract characters (handled by multi_pass_extractor).
-    Output is small so fits within model output token limits.
+    Uses fallback chain: Gemini → NVIDIA → OpenRouter.
     """
-    llm = get_analysis_llm()
+    from app.config import get_analysis_fallbacks
     prompt = STRUCTURE_PROMPT.format(story_text=full_text)
-    response = await llm.ainvoke(prompt)
-    raw = response.content
-    if isinstance(raw, list):
-        raw = "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part)
-            for part in raw
-        )
-    raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
-    raw = re.sub(r"\n?```$", "", raw.strip())
-    return json.loads(raw)
+
+    for llm, label in get_analysis_fallbacks():
+        try:
+            response = await llm.ainvoke(prompt)
+            raw = response.content
+            if isinstance(raw, list):
+                raw = "".join(
+                    part.get("text", "") if isinstance(part, dict) else str(part)
+                    for part in raw
+                )
+            raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
+            raw = re.sub(r"\n?```$", "", raw.strip())
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            continue  # bad JSON, try next model
+        except Exception as e:
+            if "429" in str(e) or "rate" in str(e).lower() or "quota" in str(e).lower():
+                continue  # rate limited, try next
+            raise
+    raise ValueError("All LLM providers failed for story structure analysis")
 
 
 async def analyze_story(full_text: str) -> dict:
     """
     Analyze a story using the LLM and return structured JSON.
-    Uses full text for short stories (fits in Gemini's 1M context window).
+    Uses fallback chain: Gemini → NVIDIA → OpenRouter.
     """
-    llm = get_analysis_llm()
+    from app.config import get_analysis_fallbacks
     prompt = ANALYSIS_PROMPT.format(story_text=full_text)
 
-    response = await llm.ainvoke(prompt)
-
-    # New langchain-google-genai SDK returns content as list of parts
-    raw = response.content
-    if isinstance(raw, list):
-        raw = "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part)
-            for part in raw
-        )
-
-    # Strip markdown code blocks if LLM wraps response
-    raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
-    raw = re.sub(r"\n?```$", "", raw.strip())
-
-    return json.loads(raw)
+    for llm, label in get_analysis_fallbacks():
+        try:
+            response = await llm.ainvoke(prompt)
+            raw = response.content
+            if isinstance(raw, list):
+                raw = "".join(
+                    part.get("text", "") if isinstance(part, dict) else str(part)
+                    for part in raw
+                )
+            raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
+            raw = re.sub(r"\n?```$", "", raw.strip())
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        except Exception as e:
+            if "429" in str(e) or "rate" in str(e).lower() or "quota" in str(e).lower():
+                continue
+            raise
+    raise ValueError("All LLM providers failed for story analysis")
