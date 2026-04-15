@@ -1,6 +1,9 @@
 import os
 import uuid
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends
 import copy
@@ -192,34 +195,53 @@ async def _analyze_story_background(story_id: str, pdf_path: str):
                 log_fn=char_log,
             )
 
+            # Defense in depth: ensure no duplicate names slip into the final analysis
+            from app.core.multi_pass_extractor import _dedupe_characters
+            enriched_characters = _dedupe_characters(enriched_characters)
+
             updated_analysis = copy.deepcopy(analysis)
             updated_analysis["characters"] = enriched_characters
             story.analysis = updated_analysis
             flag_modified(story, "analysis")
             await db.commit()
 
-            # Step 5: Generate character portraits (Pollinations — free, parallel)
-            from app.core.portrait_generator import generate_all_portraits, generate_boru_portrait
-            portraits = await generate_all_portraits(
-                enriched_characters, story_id, story.title or "Unknown",
-                log_fn=char_log, max_concurrent=4,
-            )
-            # Store portrait paths in character data
-            if portraits:
-                for char in enriched_characters:
-                    if char["name"] in portraits:
-                        char["portrait"] = f"/portraits/{os.path.basename(portraits[char['name']])}"
-                updated_analysis["characters"] = enriched_characters
-                story.analysis = updated_analysis
-                flag_modified(story, "analysis")
-                await db.commit()
-
-            # Also generate Boru's portrait (once)
-            asyncio.create_task(generate_boru_portrait(story_id))
-
             _push_log(story, f"✅ Done! {len(enriched_characters)} characters fully profiled")
             story.status = "ready"
             await db.commit()
+
+            # Step 5: Generate character portraits in background (Pollinations — free, slow)
+            # Story is already "ready" so the user can start debating immediately.
+            # Portraits trickle in and get saved to the analysis as they complete.
+            from app.core.portrait_generator import generate_all_portraits, generate_boru_portrait
+
+            async def _generate_portraits_background():
+                from app.db.database import get_session_maker
+                try:
+                    portraits = await generate_all_portraits(
+                        enriched_characters, story_id, story.title or "Unknown",
+                        max_concurrent=2,
+                    )
+                    if portraits:
+                        session_maker = get_session_maker()
+                        async with session_maker() as bg_db:
+                            result = await bg_db.execute(
+                                select(Story).where(Story.id == story_id)
+                            )
+                            bg_story = result.scalar_one_or_none()
+                            if bg_story:
+                                bg_analysis = copy.deepcopy(bg_story.analysis or {})
+                                for char in bg_analysis.get("characters", []):
+                                    if char["name"] in portraits:
+                                        char["portrait"] = f"/portraits/{os.path.basename(portraits[char['name']])}"
+                                bg_story.analysis = bg_analysis
+                                flag_modified(bg_story, "analysis")
+                                await bg_db.commit()
+                                logger.info(f"Portraits saved: {len(portraits)}/{len(enriched_characters)}")
+                except Exception as e:
+                    logger.warning(f"Background portrait generation failed (non-fatal): {e}")
+
+            asyncio.create_task(_generate_portraits_background())
+            asyncio.create_task(generate_boru_portrait(story_id))
 
         except Exception as e:
             story.status = "error"

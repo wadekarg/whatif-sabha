@@ -112,8 +112,22 @@ YOUR KNOWLEDGE STATE:
 YOUR RELATIONSHIPS:
 {_format_relationships(phase.get('relationships', {}))}
 
-THE PROPOSED ALTERNATE SCENARIO:
-{divergence}
+━━━ THE WHAT-IF SCENARIO (THIS IS THE WHOLE POINT OF THIS DEBATE) ━━━
+
+IMAGINE THIS HAPPENED INSTEAD:
+"{divergence}"
+
+You are here to EXPLORE this alternate reality. Think about:
+- How would YOUR life change if this happened?
+- What new problems, opportunities, or dangers would arise for YOU specifically?
+- How would your relationships with other characters shift?
+- What would you DO differently? What choices would you face?
+- How does this alternate path END for you?
+
+CRITICAL RULE: Do NOT just argue about what happened in the original story.
+The past is background. This debate is about the FUTURE that WOULD HAVE BEEN.
+When you reference the past, do it ONLY to contrast with how this scenario changes things.
+Think forward, not backward. Imagine, don't justify.
 {_EMOTION_GUIDE}
 ━━━ HOW TO SPEAK IN THIS DEBATE ━━━
 
@@ -127,7 +141,14 @@ SPEAK LIKE A REAL PERSON IN CONFLICT:
 - Respond to the SPECIFIC words just said — not to the general debate topic.
 - Use the other characters' names. Call them out. Ask them things they can't easily answer.
 - You remember specific moments — use them as weapons or as wounds.
-- You are {character['name']}. Never break character. Never summarise. Just speak."""
+- ALWAYS tie your argument back to the what-if scenario. How does THIS change things?
+- You are {character['name']}. Never break character. Never summarise. Just speak.
+
+TARGETING — YOUR VERY FIRST LINE must be one of these (before your actual words):
+  @CharacterName — if you are responding to, commenting on, or challenging a specific character
+  @Boru — if you are making a general statement to the group
+Example: If you're responding to Napoleon, your output starts with "@Napoleon" on its own line, then your words.
+This line will be stripped — the audience never sees it. It just tells us who you're addressing."""
 
 
 def _build_narrative_prompt(character: dict, phase: dict, divergence: str) -> str:
@@ -152,8 +173,22 @@ YOUR KNOWLEDGE STATE:
 YOUR RELATIONSHIPS:
 {_format_relationships(phase.get('relationships', {}))}
 
-THE PROPOSED ALTERNATE SCENARIO:
-{divergence}
+━━━ THE WHAT-IF SCENARIO (THIS IS THE WHOLE POINT OF THIS DEBATE) ━━━
+
+IMAGINE THIS HAPPENED INSTEAD:
+"{divergence}"
+
+You are here to EXPLORE this alternate reality. Think about:
+- How would YOUR life change if this happened?
+- What new problems, opportunities, or dangers would arise for YOU specifically?
+- How would your relationships with other characters shift?
+- What would you DO differently? What choices would you face?
+- How does this alternate path END for you?
+
+CRITICAL RULE: Do NOT just argue about what happened in the original story.
+The past is background. This debate is about the FUTURE that WOULD HAVE BEEN.
+When you reference the past, do it ONLY to contrast with how this scenario changes things.
+Think forward, not backward. Imagine, don't justify.
 {_EMOTION_GUIDE}
 ━━━ HOW TO SPEAK IN THIS DEBATE ━━━
 
@@ -167,7 +202,14 @@ SPEAK LIKE A REAL PERSON IN CONFLICT:
 - Respond to the SPECIFIC words just said — not to the general topic.
 - Use the other characters' names. Call them out directly.
 - You remember specific moments — use them.
-- You are {character['name']}. Never break character."""
+- ALWAYS tie your argument back to the what-if scenario. How does THIS change things?
+- You are {character['name']}. Never break character.
+
+TARGETING — YOUR VERY FIRST LINE must be one of these (before your actual words):
+  @CharacterName — if you are responding to, commenting on, or challenging a specific character
+  @Boru — if you are making a general statement to the group
+Example: If you're responding to Napoleon, your output starts with "@Napoleon" on its own line, then your words.
+This line will be stripped — the audience never sees it. It just tells us who you're addressing."""
 
 
 def _format_knowledge_state(knowledge: dict) -> str:

@@ -1,6 +1,6 @@
 import json
 import re
-from app.config import get_analysis_llm
+from app.config import invoke_analysis_with_fallback
 
 RECONCILER_PROMPT = """You are synthesizing multiple sources to build a FAIR WITNESS profile of "{character_name}" from "{story_title}".
 
@@ -54,11 +54,42 @@ async def reconcile_perspectives(
     """
     Synthesize all research sources into a fair witness profile.
     This is the final step — the output becomes each character agent's true foundation.
+
+    Uses invoke_analysis_with_fallback so a single provider's rate limit / slowness
+    doesn't kill the whole research pass.
     """
-    llm = get_analysis_llm()
+    from langchain_core.messages import HumanMessage
 
     wiki_text = _format_wikipedia(wikipedia_data)
     web_text = _format_web_analysis(web_analysis)
+
+    # Count how many usable perspectives we have (not "[Analysis unavailable...")
+    usable = sum(
+        1 for v in llm_perspectives.values()
+        if v and not v.startswith("[Analysis unavailable")
+    )
+    sources_used = [k for k, v in llm_perspectives.items() if v and not v.startswith("[Analysis unavailable")]
+    if wiki_text and "No Wikipedia" not in wiki_text:
+        sources_used.append("wikipedia")
+    if web_text and "No web" not in web_text:
+        sources_used.append("web_analysis")
+
+    # Even with 0 web sources, if we have at least 1 LLM perspective, synthesize.
+    # Only skip if we truly have nothing to work with.
+    if usable == 0 and not (wiki_text and "No Wikipedia" not in wiki_text):
+        return {
+            "consensus_view": character.get("description", ""),
+            "disputed_aspects": [],
+            "narrative_bias": "Could not determine — no perspectives available.",
+            "hidden_motivations": "Unknown.",
+            "charitable_reading": "Unknown.",
+            "fair_personality_traits": [],
+            "fair_role": character.get("role", "character"),
+            "cultural_historical_context": "",
+            "speaks_as": "Speaks as themselves.",
+            "what_they_would_say": "",
+            "sources_used": [],
+        }
 
     prompt = RECONCILER_PROMPT.format(
         character_name=character["name"],
@@ -72,14 +103,23 @@ async def reconcile_perspectives(
         nvidia_perspective=llm_perspectives.get("nvidia", "Not available."),
     )
 
-    response = await llm.ainvoke(prompt)
-    raw = response.content
+    raw = await invoke_analysis_with_fallback([HumanMessage(content=prompt)])
 
-    if isinstance(raw, list):
-        raw = "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part)
-            for part in raw
-        )
+    if not raw:
+        # All providers failed / rate-limited — return minimal profile
+        return {
+            "consensus_view": character.get("description", ""),
+            "disputed_aspects": [],
+            "narrative_bias": "Could not determine — all synthesis providers unavailable.",
+            "hidden_motivations": "Unknown.",
+            "charitable_reading": "Unknown.",
+            "fair_personality_traits": [],
+            "fair_role": character.get("role", "character"),
+            "cultural_historical_context": "",
+            "speaks_as": "Speaks as themselves.",
+            "what_they_would_say": "",
+            "sources_used": [],
+        }
 
     raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
     raw = re.sub(r"\n?```$", "", raw.strip())

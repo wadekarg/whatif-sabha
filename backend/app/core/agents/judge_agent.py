@@ -55,7 +55,7 @@ PERSONALITY TRAITS: {', '.join(personality_traits)}
 RESPONSE TO EVALUATE:
 "{response_text}"
 
-Evaluate TWO things:
+Evaluate THREE things:
 
 1. CHARACTER FIDELITY (score 1–10):
    Does this response match who this character genuinely is?
@@ -71,6 +71,12 @@ Evaluate TWO things:
    - They clearly have more they NEED to say — not just more they could say
    - A short response IS complete if it's appropriately terse — do not penalise brevity
 
+3. WHO IS THIS CHARACTER ADDRESSING?
+   Read the response carefully. Identify who {character_name} is primarily talking TO.
+   Look for: direct name mentions, "you" directed at someone, questions asked to someone specific.
+   If they address multiple people, pick the PRIMARY addressee — who gets the most weight.
+   If they're making a general statement to no one specific, use null.
+
 Return JSON only:
 {{
   "score": <1-10>,
@@ -79,7 +85,8 @@ Return JSON only:
   "issue": "<specific out-of-character element if score < 6, else null>",
   "needs_continuation": <true/false>,
   "continuation_reason": "<one sentence on what burden is unmet, or null>",
-  "dominant_emotion": "<one of: anger, cold_fury, contempt, grief, desperation, pride, guilt, shame, defiance, bitterness, jealousy, longing, righteous_indignation, humiliation, weariness, hope, betrayal, neutral>"
+  "dominant_emotion": "<one of: anger, cold_fury, contempt, grief, desperation, pride, guilt, shame, defiance, bitterness, jealousy, longing, righteous_indignation, humiliation, weariness, hope, betrayal, neutral>",
+  "primary_target": "<name of the character being addressed, or null if general statement>"
 }}"""
 
     raw = await _invoke_judge(prompt)

@@ -10,12 +10,12 @@ from app.core.character_research.bias_reconciler import reconcile_perspectives
 async def research_character(character: dict, story_title: str, log_fn: Optional[Callable] = None) -> dict:
     """
     Full research pipeline for a single character.
-    Hard timeout of 120 seconds — returns partial results if slower.
+    Hard timeout of 180 seconds — returns partial results if slower.
     """
     try:
         return await asyncio.wait_for(
             _research_character_inner(character, story_title, log_fn=log_fn),
-            timeout=120.0,
+            timeout=180.0,
         )
     except asyncio.TimeoutError:
         msg = f"⚠️ {character['name']}: research timed out — continuing without Fair Witness"
@@ -70,10 +70,10 @@ async def _research_character_inner(character: dict, story_title: str, log_fn: O
     if log_fn:
         await log_fn(f"  🤖 {name}: Getting perspectives from Gemini · Groq · Cerebras · NVIDIA...")
 
-    # Phase 2: Three LLM perspectives — 45s total timeout
+    # Phase 2: LLM perspectives — each has 30s internal timeout, 60s outer budget
     perspectives = await asyncio.wait_for(
         get_all_perspectives(character, story_title, external_context),
-        timeout=45.0,
+        timeout=60.0,
     )
 
     models_used = list(perspectives.keys())
@@ -81,7 +81,7 @@ async def _research_character_inner(character: dict, story_title: str, log_fn: O
         await log_fn(f"  🤖 {name}: {len(models_used)} perspectives received ({', '.join(models_used)})")
         await log_fn(f"  ✨ {name}: Synthesising Fair Witness profile...")
 
-    # Phase 3: Synthesis — 30s timeout
+    # Phase 3: Synthesis — 75s to cover multi-provider fallback (25s × up to 3 tries)
     fair_witness = await asyncio.wait_for(
         reconcile_perspectives(
             character=character,
@@ -90,7 +90,7 @@ async def _research_character_inner(character: dict, story_title: str, log_fn: O
             web_analysis=web_data if isinstance(web_data, list) else [],
             llm_perspectives=perspectives,
         ),
-        timeout=30.0,
+        timeout=75.0,
     )
 
     fair_role = fair_witness.get("fair_role", "")
@@ -109,6 +109,31 @@ async def _research_character_inner(character: dict, story_title: str, log_fn: O
     }
 
 
+def _qualifies_for_fair_witness(character: dict) -> bool:
+    """
+    Fair Witness research is expensive (Wikipedia + web + 4 LLMs + synthesis).
+    Only run it on characters that genuinely matter. Skip:
+      - importance < 0.3 (enrichment-derived)
+      - mention_count present and < 5 (Pass 1 signal)
+      - role == "minor" AND importance < 0.5
+    """
+    importance = character.get("importance")
+    if isinstance(importance, (int, float)) and importance < 0.3:
+        return False
+
+    mention_count = character.get("mention_count")
+    if isinstance(mention_count, int) and 0 < mention_count < 5:
+        return False
+
+    role = (character.get("role") or "").lower()
+    if role == "minor":
+        imp = importance if isinstance(importance, (int, float)) else 0.0
+        if imp < 0.5:
+            return False
+
+    return True
+
+
 async def research_all_characters(
     characters: List[dict],
     story_title: str,
@@ -118,8 +143,28 @@ async def research_all_characters(
     """
     Research all characters with controlled concurrency.
     max_concurrent=2 avoids hammering APIs simultaneously.
+
+    Skips Fair Witness for low-signal characters — they keep their enrichment
+    profile but get fair_witness=None. This avoids burning 60+s per classical
+    allusion or bit-part that slipped through Pass 1.
     """
     semaphore = asyncio.Semaphore(max_concurrent)
+
+    # Partition: qualifying characters get full research, others pass through
+    qualifying = []
+    skipped = []
+    for char in characters:
+        if _qualifies_for_fair_witness(char):
+            qualifying.append(char)
+        else:
+            skipped.append(char)
+
+    if log_fn and skipped:
+        preview = ", ".join(c["name"] for c in skipped[:8]) + ("…" if len(skipped) > 8 else "")
+        await log_fn(
+            f"⏭️ Skipping Fair Witness for {len(skipped)} low-signal character"
+            f"{'s' if len(skipped) != 1 else ''} ({preview})"
+        )
 
     async def research_with_semaphore(character):
         async with semaphore:
@@ -129,8 +174,18 @@ async def research_all_characters(
                 print(f"  Research failed for {character['name']}: {e}")
                 return {**character, "fair_witness": None, "research_sources": {}}
 
-    tasks = [research_with_semaphore(char) for char in characters]
-    return await asyncio.gather(*tasks)
+    tasks = [research_with_semaphore(char) for char in qualifying]
+    researched = await asyncio.gather(*tasks)
+
+    # Skipped characters get a passthrough with fair_witness=None
+    passthrough = [
+        {**char, "fair_witness": None, "research_sources": {"skipped": "low_signal"}}
+        for char in skipped
+    ]
+
+    # Preserve original ordering
+    by_name = {c["name"]: c for c in list(researched) + passthrough}
+    return [by_name[c["name"]] for c in characters if c["name"] in by_name]
 
 
 def _build_external_context(wiki_data: dict | None, web_data: list) -> str:

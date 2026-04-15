@@ -63,18 +63,41 @@ def determine_strategy(word_count: int) -> dict:
 
 # ── Pass 1: Per-chunk character name extraction ───────────────────────────────
 
-CHUNK_EXTRACT_PROMPT = """You are analyzing a passage from a story.
+CHUNK_EXTRACT_PROMPT = """You are analyzing a passage from a story to find its CAST — people who are actually present and active in the narrative.
 
-List EVERY named character who appears or is mentioned in this passage.
-Include even characters mentioned briefly in a single sentence.
+List ONLY named characters who, in this passage, do AT LEAST ONE of the following:
+  - speak (have dialogue, direct or reported)
+  - perform an action in the scene
+  - are directly addressed or interact with another character who is present
+  - are described as physically present in the scene
+
+DO NOT list names that are merely:
+  - mentioned as classical, mythological, historical, or literary allusions (e.g. a character saying "like Caesar did" — Caesar is NOT a character unless Caesar is actually in the scene)
+  - referenced in dedications, prefaces, footnotes, editorial notes, title pages, or author bios
+  - invoked as metaphors, comparisons, or rhetorical references
+  - personifications of abstract concepts (Fortune, Death, Love, etc.) unless they actually appear and act
+  - names in lists, catalogs, genealogies, or cast-of-characters pages where they do nothing
+  - generic roles with no name (First Soldier, A Messenger, Gentleman) — skip unless they clearly have a distinct arc
+
+When uncertain whether a name is a real cast member versus an allusion, LEAVE IT OUT. It is far better to miss a minor character than to include a mythological reference.
 
 Return a JSON array of objects:
 [
-  {{"name": "Character Name", "role": "protagonist|antagonist|supporting|minor", "brief": "one sentence about them"}}
+  {{"name": "Character Name", "role": "protagonist|antagonist|supporting|minor", "brief": "one sentence about what they do in this passage"}}
 ]
 
-If no named characters appear, return an empty array: []
+If no qualifying characters appear, return an empty array: []
 Return ONLY valid JSON. No markdown."""
+
+
+# Generic / narrative-role names that are almost always noise — filter even if LLM includes them
+GENERIC_NAME_BLOCKLIST = {
+    "king", "queen", "prince", "princess", "lord", "lady", "duke", "duchess",
+    "gentleman", "gentlewoman", "messenger", "servant", "soldier", "attendant",
+    "player", "player king", "player queen", "prologue", "chorus", "narrator",
+    "first", "second", "third", "boy", "girl", "man", "woman",
+    "fortune", "death", "love", "fate", "time", "nature",
+}
 
 
 async def _extract_names_from_chunk(chunk: dict, llm) -> list[dict]:
@@ -95,14 +118,27 @@ async def _extract_names_from_chunk(chunk: dict, llm) -> list[dict]:
         return []
 
 
+def _count_mentions(name: str, full_text: str) -> int:
+    """Count case-insensitive word-boundary mentions of a name in the full text."""
+    if not name or not full_text:
+        return 0
+    pattern = r"\b" + re.escape(name) + r"\b"
+    return len(re.findall(pattern, full_text, flags=re.IGNORECASE))
+
+
 async def extract_all_character_names(
     chunks: list[dict],
     llm,
     log_fn: Callable = None,
+    full_text: str = "",
 ) -> list[dict]:
     """
     Pass 1: run extraction on all chunks in parallel batches.
-    Returns deduplicated list of {name, role, brief}.
+    Returns deduplicated list of {name, role, brief, chunk_hits, mention_count}.
+
+    Filters out probable noise:
+      - names appearing in only 1 chunk AND fewer than 3 total mentions (allusions)
+      - generic role words (King, Queen, Messenger, Fortune, etc.)
     """
     semaphore = asyncio.Semaphore(EXTRACTION_CONCURRENCY)
 
@@ -115,29 +151,54 @@ async def extract_all_character_names(
 
     results = await asyncio.gather(*[bounded_extract(c) for c in chunks])
 
-    # Merge and deduplicate by name (case-insensitive)
+    # Merge, dedupe, and track how many distinct chunks each character appears in.
+    role_priority = {"protagonist": 4, "antagonist": 3, "supporting": 2, "minor": 1}
     seen: dict[str, dict] = {}
-    for chunk_result in results:
+    for chunk_idx, chunk_result in enumerate(results):
         for char in chunk_result:
             name = char.get("name", "").strip()
             if not name:
                 continue
             key = name.lower()
             if key not in seen:
-                seen[key] = char
+                entry = dict(char)
+                entry["name"] = name
+                entry["chunk_hits"] = {chunk_idx}
+                seen[key] = entry
             else:
-                # Upgrade role if we see a more important one
-                role_priority = {"protagonist": 4, "antagonist": 3, "supporting": 2, "minor": 1}
+                seen[key]["chunk_hits"].add(chunk_idx)
                 existing_priority = role_priority.get(seen[key].get("role", "minor"), 1)
                 new_priority = role_priority.get(char.get("role", "minor"), 1)
                 if new_priority > existing_priority:
                     seen[key]["role"] = char["role"]
 
-    characters = list(seen.values())
-    if log_fn:
-        await log_fn(f"🔍 Pass 1 complete: {len(characters)} unique characters found")
+    raw_count = len(seen)
 
-    return characters
+    # Filter: blocklist + low-signal names (1 chunk hit AND < 3 total mentions in full text)
+    filtered: list[dict] = []
+    rejected: list[str] = []
+    for key, entry in seen.items():
+        name = entry["name"]
+        chunk_hits = len(entry.pop("chunk_hits", set()))
+        mention_count = _count_mentions(name, full_text) if full_text else chunk_hits
+        entry["mention_count"] = mention_count
+
+        if name.strip().lower() in GENERIC_NAME_BLOCKLIST:
+            rejected.append(f"{name} (generic)")
+            continue
+        if chunk_hits <= 1 and mention_count < 3:
+            rejected.append(f"{name} (chunk_hits={chunk_hits}, mentions={mention_count})")
+            continue
+
+        filtered.append(entry)
+
+    if log_fn:
+        if rejected:
+            preview = ", ".join(rejected[:8]) + ("…" if len(rejected) > 8 else "")
+            await log_fn(f"🧹 Pass 1 filter: dropped {len(rejected)} low-signal names ({preview})")
+        await log_fn(f"🔍 Pass 1 complete: {len(filtered)} unique characters (from {raw_count} raw)")
+
+    return filtered
 
 
 # ── Pass 2 (large stories only): Alias resolution ─────────────────────────────
@@ -165,55 +226,122 @@ If a character has no aliases, still include them with an empty aliases list.
 Return ONLY valid JSON. No markdown."""
 
 
+def _dedupe_characters(characters: list[dict]) -> list[dict]:
+    """Case-insensitive dedupe by name, merging aliases and preserving highest-priority role."""
+    role_priority = {"protagonist": 4, "antagonist": 3, "supporting": 2, "minor": 1}
+    seen: dict[str, dict] = {}
+    order: list[str] = []
+    for c in characters:
+        name = (c.get("name") or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key not in seen:
+            entry = dict(c)
+            entry["name"] = name
+            entry["aliases"] = list(dict.fromkeys(entry.get("aliases") or []))
+            seen[key] = entry
+            order.append(key)
+        else:
+            existing = seen[key]
+            # Merge aliases
+            merged_aliases = list(dict.fromkeys(
+                (existing.get("aliases") or []) + (c.get("aliases") or [])
+            ))
+            existing["aliases"] = merged_aliases
+            # Upgrade role
+            ep = role_priority.get(existing.get("role", "minor"), 1)
+            np = role_priority.get(c.get("role", "minor"), 1)
+            if np > ep:
+                existing["role"] = c["role"]
+            # Prefer longer brief
+            if len(c.get("brief") or "") > len(existing.get("brief") or ""):
+                existing["brief"] = c["brief"]
+            # Keep max mention_count
+            existing["mention_count"] = max(
+                existing.get("mention_count", 0) or 0,
+                c.get("mention_count", 0) or 0,
+            )
+    return [seen[k] for k in order]
+
+
 async def resolve_aliases(
     characters: list[dict],
     title: str,
-    llm,
+    llm=None,
     log_fn: Callable = None,
 ) -> list[dict]:
     """
     Pass 2 (large stories): merge alias names into canonical characters.
     e.g. Arjuna/Partha/Dhananjaya → one character with aliases list.
+
+    Uses invoke_analysis_with_fallback so Gemini rate limits don't kill the stage.
+    Always returns a deduped list, even on failure.
     """
     if log_fn:
         await log_fn(f"🔗 Pass 2: resolving aliases across {len(characters)} names...")
 
     from langchain_core.messages import HumanMessage
+    from app.config import invoke_analysis_with_fallback
+
     char_lines = "\n".join(f"- {c['name']} ({c.get('role','?')}): {c.get('brief','')}" for c in characters)
     prompt = ALIAS_MERGE_PROMPT.format(character_list=char_lines, title=title)
 
+    raw = ""
     try:
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = response.content
-        if isinstance(raw, list):
-            raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
+        raw = await asyncio.wait_for(
+            invoke_analysis_with_fallback([HumanMessage(content=prompt)]),
+            timeout=60.0,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Alias resolution timed out across all providers")
+    except Exception as e:
+        logger.warning(f"Alias resolution errored: {e!r}")
+
+    if not raw:
+        if log_fn:
+            await log_fn(f"⚠️ Alias resolution failed — deduping {len(characters)} names by exact match")
+        return _dedupe_characters(characters)
+
+    try:
         raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
         raw = re.sub(r"\n?```$", "", raw.strip())
         merged = json.loads(raw)
+        assert isinstance(merged, list)
 
-        # Rebuild as flat character list using canonical names
+        # Build a lookup from original characters so we preserve mention counts/briefs
+        by_name = {c["name"].lower(): c for c in characters}
+
         result = []
         for entry in merged:
+            canonical = (entry.get("canonical_name") or "").strip()
+            if not canonical:
+                continue
+            aliases = [a for a in (entry.get("aliases") or []) if a and a.lower() != canonical.lower()]
+            # Pull mention_count from canonical or best-matching alias
+            cand_keys = [canonical.lower()] + [a.lower() for a in aliases]
+            source = next((by_name[k] for k in cand_keys if k in by_name), None)
+            mention_count = max(
+                [by_name[k].get("mention_count", 0) or 0 for k in cand_keys if k in by_name] or [0]
+            )
             result.append({
-                "name": entry["canonical_name"],
-                "role": entry.get("role", "supporting"),
-                "aliases": entry.get("aliases", []),
-                "brief": next(
-                    (c.get("brief", "") for c in characters
-                     if c["name"].lower() == entry["canonical_name"].lower()),
-                    ""
-                ),
+                "name": canonical,
+                "role": entry.get("role", source.get("role", "supporting") if source else "supporting"),
+                "aliases": aliases,
+                "brief": (source.get("brief", "") if source else ""),
+                "mention_count": mention_count,
             })
 
+        result = _dedupe_characters(result)
         if log_fn:
             await log_fn(f"🔗 Pass 2 complete: {len(result)} canonical characters (aliases resolved)")
         return result
 
     except Exception as e:
-        logger.warning(f"Alias resolution failed: {e} — using unmerged list")
+        logger.warning(f"Alias resolution parse failed: {e!r} — deduping by exact match")
         if log_fn:
-            await log_fn(f"⚠️ Alias resolution failed — continuing with {len(characters)} names")
-        return characters
+            await log_fn(f"⚠️ Alias resolution parse failed — deduping {len(characters)} names by exact match")
+        return _dedupe_characters(characters)
 
 
 # ── Final pass: Per-character RAG enrichment ─────────────────────────────────
@@ -271,6 +399,9 @@ Be specific to what the passages reveal. Ensure phases reflect genuine change ac
 Return ONLY valid JSON. No markdown."""
 
 
+ENRICHMENT_TIMEOUT = 60.0  # seconds per character enrichment call
+
+
 async def _enrich_character(
     char: dict,
     story_id: str,
@@ -278,6 +409,7 @@ async def _enrich_character(
     llm,
     timeline_phases: list = None,
     n_chunks: int = 8,
+    fallback_llm=None,
 ) -> dict:
     """
     Final pass: retrieve relevant passages for this character from ChromaDB,
@@ -321,17 +453,29 @@ async def _enrich_character(
         passages=passages[:12000],  # cap at ~12K chars
     )
 
+    async def _call(target_llm):
+        response = await asyncio.wait_for(
+            target_llm.ainvoke([HumanMessage(content=prompt)]),
+            timeout=ENRICHMENT_TIMEOUT,
+        )
+        raw_ = response.content
+        if isinstance(raw_, list):
+            raw_ = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw_)
+        raw_ = re.sub(r"^```(?:json)?\n?", "", raw_.strip())
+        raw_ = re.sub(r"\n?```$", "", raw_.strip())
+        return json.loads(raw_)
+
     try:
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = response.content
-        if isinstance(raw, list):
-            raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
-        raw = re.sub(r"^```(?:json)?\n?", "", raw.strip())
-        raw = re.sub(r"\n?```$", "", raw.strip())
-        enriched = json.loads(raw)
-        return enriched
-    except Exception as e:
-        logger.warning(f"Enrichment failed for {name}: {e} — using minimal profile")
+        return await _call(llm)
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Primary enrichment failed for {name}: {e!r} — trying fallback")
+        if fallback_llm is not None and fallback_llm is not llm:
+            try:
+                return await _call(fallback_llm)
+            except Exception as e2:
+                logger.warning(f"Fallback enrichment failed for {name}: {e2!r} — using minimal profile")
+        else:
+            logger.warning(f"Enrichment failed for {name}: {e!r} — using minimal profile")
         fallback_phases = [
             {
                 "phase_id": p.get("phase_id", f"phase_{i+1}"),
@@ -372,6 +516,7 @@ async def enrich_all_characters(
     llm,
     log_fn: Callable = None,
     timeline_phases: list = None,
+    fallback_llm=None,
 ) -> list[dict]:
     """
     Final pass: enrich all characters in parallel using RAG retrieval.
@@ -380,7 +525,11 @@ async def enrich_all_characters(
 
     async def bounded_enrich(char):
         async with semaphore:
-            result = await _enrich_character(char, story_id, title, llm, timeline_phases=timeline_phases)
+            result = await _enrich_character(
+                char, story_id, title, llm,
+                timeline_phases=timeline_phases,
+                fallback_llm=fallback_llm,
+            )
             if log_fn:
                 await log_fn(f"✅ Enriched: {char['name']}")
             return result
@@ -466,19 +615,40 @@ async def multi_pass_extract(
     if extract_llm is None:
         extract_llm = get_analysis_llm()
 
-    raw_characters = await extract_all_character_names(final_chunks, extract_llm, log_fn)
+    raw_characters = await extract_all_character_names(
+        final_chunks, extract_llm, log_fn, full_text=full_text,
+    )
 
     # ── Pass 2: Alias resolution (all multi-pass stories) ─────────────────────
     # Runs for both two_pass and three_pass — catches duplicates like Napoleon/Comrade Napoleon
-    alias_llm = get_analysis_llm()  # Gemini — better at cross-cultural aliases
-    raw_characters = await resolve_aliases(raw_characters, title, alias_llm, log_fn)
+    raw_characters = await resolve_aliases(raw_characters, title, llm=None, log_fn=log_fn)
+
+    # Safety dedupe in case alias resolution is skipped or returns dupes
+    raw_characters = _dedupe_characters(raw_characters)
 
     # ── Final pass: Per-character RAG enrichment ──────────────────────────────
-    # Use NVIDIA for enrichment — parallel calls, good at character profiles
+    # Use NVIDIA for enrichment — parallel calls, good at character profiles.
+    # Fall back to a smaller/faster NVIDIA model, then Gemini, when the 253B model
+    # times out or rate-limits (it often does on free tier).
     enrich_llm = _make_nvidia_llm("nvidia/llama-3.1-nemotron-ultra-253b-v1", temperature=0.2)
+    enrich_fallback = _make_nvidia_llm("meta/llama-3.3-70b-instruct", temperature=0.2)
     if enrich_llm is None:
-        enrich_llm = get_analysis_llm()
+        enrich_llm = enrich_fallback or get_analysis_llm()
+        enrich_fallback = get_analysis_llm() if enrich_fallback is None else enrich_fallback
+    elif enrich_fallback is None:
+        enrich_fallback = get_analysis_llm()
 
-    enriched = await enrich_all_characters(raw_characters, story_id, title, enrich_llm, log_fn, timeline_phases=timeline_phases)
+    enriched = await enrich_all_characters(
+        raw_characters, story_id, title, enrich_llm, log_fn,
+        timeline_phases=timeline_phases,
+        fallback_llm=enrich_fallback,
+    )
+
+    # Final safety dedupe — enrichment may emit a different "name" field than input
+    # (e.g. LLM normalizes "Ophelia." to "Ophelia"), reintroducing duplicates.
+    before = len(enriched)
+    enriched = _dedupe_characters(enriched)
+    if log_fn and len(enriched) < before:
+        await log_fn(f"🧹 Final dedupe: collapsed {before - len(enriched)} duplicate(s)")
 
     return enriched

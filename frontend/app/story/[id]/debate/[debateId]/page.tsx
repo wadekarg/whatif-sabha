@@ -129,11 +129,14 @@ export default function DebateViewPage() {
     };
 
     for (const entry of transcript) {
+      // Skip non-dialogue entries (orchestrator, reactions, stage directions)
+      if ((entry as any).isOrchestrator || (entry as any).isReaction || (entry as any).isStageDirection || (entry as any).isAudience) continue;
       const node = ensureNode(entry.character);
       node.speeches++;
       node.r = Math.min(18 + node.speeches * 1.5, 34);
-      const targetName = entry.target || null;
-      if (targetName && targetName !== entry.character) {
+      // Backend stores as target_character; frontend SSE stored as target
+      const targetName = (entry as any).target_character || entry.target || null;
+      if (targetName && targetName !== entry.character && targetName !== "Boru" && targetName !== "all") {
         ensureNode(targetName);
         const isQ = entry.message.includes("?");
         const existing = graphEdgesRef.current.find(e => e.source === entry.character && e.target === targetName);
@@ -573,9 +576,22 @@ export default function DebateViewPage() {
             </div>
 
             {transcript.map((entry, i) => {
-              // Round separator
-              const prevRound = i > 0 ? transcript[i - 1].round : null;
-              const showRoundSep = entry.round !== prevRound && !entry.isObserver;
+              // Skip reactions (no longer generated, but old transcripts may have them)
+              if ((entry as any).isReaction) return null;
+              if ((entry as any).isStageDirection) return null;
+
+              // Round separator — only between actual character dialogue
+              const isDialogue = !entry.isObserver && !(entry as any).isOrchestrator && !(entry as any).isAudience;
+              let prevDialogueRound: number | null = null;
+              for (let j = i - 1; j >= 0; j--) {
+                const prev = transcript[j];
+                if (!prev.isObserver && !(prev as any).isOrchestrator && !(prev as any).isReaction && !(prev as any).isStageDirection && !(prev as any).isAudience) {
+                  prevDialogueRound = prev.round || 0;
+                  break;
+                }
+              }
+              const entryRound = entry.round || 0;
+              const showRoundSep = false;
               const isTwoChar = chars.length === 2;
               const charIdx = chars.indexOf(entry.character);
               const isRight = isTwoChar && charIdx === 1;
@@ -639,7 +655,7 @@ export default function DebateViewPage() {
                   {showRoundSep && (
                     <div className="flex items-center gap-3 my-4 px-1">
                       <div className="flex-1 h-px bg-[#e8e0d5]" />
-                      <span className="text-xs uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entry.round}</span>
+                      <span className="text-xs uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entryRound}</span>
                       <div className="flex-1 h-px bg-[#e8e0d5]" />
                     </div>
                   )}

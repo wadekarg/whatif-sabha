@@ -3,6 +3,44 @@ from app.config import get_agent_llm, get_agent_fallbacks
 from app.core.agents.base_agent import build_character_system_prompt
 
 
+def _extract_personal_directive(character_name: str, message: str) -> str | None:
+    """
+    When Boru issues a multi-character directive ("Hamlet, address X. Claudius, explain Y."),
+    extract only the sentence(s) relevant to this character. Returns None if not found.
+    """
+    import re
+    # Split on sentences that start with a character name
+    # Pattern: "Name, verb..." or "Name — verb..."
+    parts = re.split(r'(?<=[.!?])\s+(?=[A-Z])', message)
+    personal = [p for p in parts if character_name.lower() in p[:len(character_name) + 15].lower()]
+    if personal:
+        return " ".join(personal).strip()
+    return None
+
+
+def _summarize_own_arguments(character_name: str, debate_history: list) -> str:
+    """
+    Build a brief summary of what this character has already said in the debate.
+    Injected so the LLM knows what NOT to repeat.
+    """
+    own_msgs = [
+        e["message"][:120] for e in debate_history
+        if e["character"] == character_name
+        and not e.get("isReaction") and not e.get("isStageDirection")
+    ]
+    if not own_msgs:
+        return ""
+    # Take last 4 messages to keep context manageable
+    recent = own_msgs[-4:]
+    summary = "\n".join(f"  - {m}..." for m in recent)
+    return (
+        f"\n\n[WHAT YOU HAVE ALREADY ARGUED — DO NOT REPEAT THESE POINTS]:\n{summary}\n"
+        f"You MUST say something NEW. Build on what others said, imagine a new consequence, "
+        f"reveal something you haven't shared, or challenge someone on a specific claim. "
+        f"If you catch yourself restating an old point, STOP and think of what happens NEXT instead."
+    )
+
+
 def _build_turn_prompt(
     character_name: str,
     debate_history: list,
@@ -18,40 +56,58 @@ def _build_turn_prompt(
 
     if not debate_history:
         prompt = (
-            "The debate is opening. Speak your first words on this scenario — "
-            "set your position clearly and forcefully."
+            "The debate is opening. Imagine the what-if scenario is real — "
+            "what is the FIRST thing that changes for you personally? "
+            "How does your life, your choices, your relationships shift? "
+            "Speak from your gut. Be specific. Name names."
         )
     else:
+        # Find the last REAL speaker (skip Boru, reactions, stage directions)
         last = debate_history[-1]
+        for entry in reversed(debate_history):
+            if (not entry.get("isOrchestrator") and not entry.get("isReaction")
+                    and not entry.get("isStageDirection") and not entry.get("isAudience")):
+                last = entry
+                break
         last_speaker = last["character"]
         last_msg = last["message"]
         target = last.get("target_character")
 
-        snippet = last_msg[:250].rstrip() + ("…" if len(last_msg) > 250 else "")
+        # If the last message is from Boru and mentions multiple characters,
+        # extract only the part directed at THIS character to prevent identity bleed.
+        display_msg = last_msg
+        if last.get("isOrchestrator") and last_msg.count(",") >= 2:
+            personal = _extract_personal_directive(character_name, last_msg)
+            if personal:
+                display_msg = personal
+
+        snippet = display_msg[:250].rstrip() + ("…" if len(display_msg) > 250 else "")
 
         if target == character_name:
             is_direct = True
             prompt = (
                 f'{last_speaker} just spoke directly to you:\n"{snippet}"\n\n'
-                f'You MUST respond to {last_speaker} — directly and personally. '
-                f'Name the specific claim they made. Either counter it with your own logic, '
-                f'concede a point and reframe it, or attack the premise entirely. '
-                f'Do not speak in vague generalities. Speak to THIS argument. '
-                f'2–4 sentences unless this is a pivotal moment that demands more.'
+                f'You MUST respond to {last_speaker}. But don\'t just defend your old position — '
+                f'ADVANCE the story. What happens NEXT if they\'re right? What happens if they\'re wrong? '
+                f'Imagine a concrete scenario — a specific day, a specific choice, a specific consequence. '
+                f'2–4 sentences.'
             )
         elif "?" in last_msg and character_name.lower() in last_msg.lower():
             is_direct = True
             prompt = (
                 f'{last_speaker} just called your name:\n"{snippet}"\n\n'
-                f'They asked you something specific. Answer it directly — '
-                f'engage with their actual question, not around it. '
+                f'Answer their question — but don\'t stop there. '
+                f'Take it further: what would that answer LEAD TO? Paint the picture. '
                 f'2–3 sentences.'
             )
         else:
             prompt = (
                 f'{last_speaker} just said:\n"{snippet}"\n\n'
-                f'React. Push back or build on it — stay sharp. '
-                f'1–2 sentences unless you have something major to reveal.'
+                f'React — but move the story FORWARD. Don\'t restate what you\'ve already said. '
+                f'Instead: What new consequence follows from what they just said? '
+                f'What would happen next week, next month, next year in this alternate world? '
+                f'Challenge someone by name. Propose a specific scenario. Ask "and then what?" '
+                f'1–3 sentences.'
             )
 
     if correction_hint:
@@ -139,18 +195,37 @@ async def character_respond_stream(
 
     _inject_memories(messages, memory_context or [])
 
-    # Filter out reactions/stage directions — characters only see real dialogue
+    # Filter out reactions/stage directions AND most Boru messages.
+    # Characters should respond to EACH OTHER, not to Boru's framing.
+    # Only include Boru's structural messages (phase transitions, callouts directed at this character).
+    char_name = character["name"]
     for entry in debate_history[-12:]:
         if entry.get("isReaction") or entry.get("isStageDirection"):
             continue
+        if entry.get("isOrchestrator"):
+            event = entry.get("orchestratorEvent", "")
+            # Include phase transitions (they set important context)
+            if event in ("phase_transition", "closing_summary"):
+                messages.append(HumanMessage(content=f"[The moderator noted]: {entry['message'][:150]}"))
+            # Include forced questions / callouts directed at this character
+            elif event in ("forced_question", "call_out_repetition") and char_name.lower() in entry["message"].lower():
+                messages.append(HumanMessage(content=f"[The moderator said to you]: {entry['message']}"))
+            # Skip all other Boru messages — characters talk to each other
+            continue
         speaker = entry["character"]
         text = entry["message"]
-        if speaker == character["name"]:
+        if speaker == char_name:
             messages.append(HumanMessage(content=f"[You previously said]: {text}"))
         else:
             messages.append(HumanMessage(content=f"{speaker}: {text}"))
 
     turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history, correction_hint, pending_questions)
+
+    # Inject summary of what this character already argued — prevents repetition
+    own_summary = _summarize_own_arguments(character["name"], debate_history)
+    if own_summary:
+        turn_prompt += own_summary
+
     messages.append(HumanMessage(content=turn_prompt))
 
     if observer_challenge:

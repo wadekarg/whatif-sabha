@@ -269,7 +269,7 @@ export default function StoryPage() {
                     const col = CHAR_COLORS[i % CHAR_COLORS.length];
                     const roleColor: Record<string, string> = { protagonist: "#c07820", antagonist: "#ef4444", supporting: "#3b82f6" };
                     return (
-                      <Link key={char.name} href={`/story/${id}/characters/${encodeURIComponent(char.name)}`}
+                      <Link key={`${i}-${char.name}`} href={`/story/${id}/characters/${encodeURIComponent(char.name).replace(/\./g, "%2E")}`}
                         className="flex flex-col items-center gap-1.5 shrink-0 group">
                         {char.portrait ? (
                           <img src={`http://localhost:8001${char.portrait}`} alt={char.name} loading="lazy"
@@ -747,7 +747,7 @@ export default function StoryPage() {
                     const col = CHAR_COLORS[i % CHAR_COLORS.length];
                     const active = charChatCharacter?.name === c.name;
                     return (
-                      <button key={c.name}
+                      <button key={`${i}-${c.name}`}
                         onClick={() => {
                           setCharChatCharacter(c);
                           setCharMessages([]);
@@ -940,7 +940,7 @@ function DebateList({ debates, storyId, onDelete }: {
                 </div>
               </div>
             ) : (
-              <Link href={`/story/${storyId}/debate/${d.id}`} className="block p-4">
+              <Link href={`/story/${storyId}/debate?replay=${d.id}`} className="block p-4">
                 <div className="flex items-start gap-3">
                   <div className="text-[#c8b89a] text-sm font-mono mt-0.5 w-5 shrink-0">{String(i + 1).padStart(2, "0")}</div>
                   <div className="flex-1 min-w-0">

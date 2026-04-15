@@ -151,12 +151,37 @@ def pick_next_speaker(
     Reward-shaped speaker selection.
     Maximizes: engagement diversity + responsiveness to direct questions + relevance.
     """
+    _, scores = pick_next_speaker_with_scores(debate_history, characters, current_phase, round_number)
+    best = max(scores, key=lambda n: scores[n])
+    return best
+
+
+def pick_next_speaker_with_scores(
+    debate_history: list,
+    characters: list,
+    current_phase: str,
+    round_number: int,
+) -> tuple[str, dict]:
+    """
+    Heuristic speaker selection — returns (chosen_speaker, all_scores).
+    The scores dict lets the caller detect stalls (flat scores = nobody is
+    particularly motivated to respond → Boru should intervene).
+    """
     char_names = [c["name"] for c in characters]
 
     if not debate_history:
-        return char_names[0]
+        scores = {n: (3.0 if i == 0 else 0.0) for i, n in enumerate(char_names)}
+        return char_names[0], scores
 
+    # Find last REAL speaker (skip Boru/observers/reactions for scoring)
     last_entry = debate_history[-1]
+    for entry in reversed(debate_history):
+        if (not entry.get("isOrchestrator") and not entry.get("isObserver")
+                and not entry.get("isReaction") and not entry.get("isStageDirection")
+                and not entry.get("isAudience")):
+            last_entry = entry
+            break
+
     last_speaker = last_entry["character"]
     last_message = last_entry["message"]
 
@@ -165,7 +190,7 @@ def pick_next_speaker(
     )
 
     best = max(scores, key=lambda n: scores[n])
-    return best
+    return best, scores
 
 
 def should_synthesize(

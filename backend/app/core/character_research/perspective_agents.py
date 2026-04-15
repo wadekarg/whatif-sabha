@@ -73,10 +73,10 @@ async def get_all_perspectives(
     return perspectives
 
 
-async def _get_perspective(llm, prompt: str, label: str) -> str:
-    """Call a single LLM for its perspective. Returns text."""
+async def _get_perspective(llm, prompt: str, label: str, timeout: float = 30.0) -> str:
+    """Call a single LLM for its perspective. Returns text. Hard timeout per LLM."""
     try:
-        response = await llm.ainvoke(prompt)
+        response = await asyncio.wait_for(llm.ainvoke(prompt), timeout=timeout)
         content = response.content
         # Handle list content (new Google SDK)
         if isinstance(content, list):
@@ -85,6 +85,8 @@ async def _get_perspective(llm, prompt: str, label: str) -> str:
                 for part in content
             )
         return content.strip()
+    except asyncio.TimeoutError:
+        raise Exception(f"{label} perspective timed out ({timeout}s)")
     except Exception as e:
         raise Exception(f"{label} perspective failed: {str(e)}")
 

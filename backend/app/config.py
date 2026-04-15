@@ -86,7 +86,7 @@ def _make_groq_llm(model: str, temperature: float = 0.1):
     return ChatGroq(model=model, groq_api_key=key, temperature=temperature)
 
 
-def _make_nvidia_llm(model: str, temperature: float = 0.1):
+def _make_nvidia_llm(model: str, temperature: float = 0.1, timeout: float = 60.0, max_retries: int = 2):
     """NVIDIA NIM — OpenAI-compatible endpoint."""
     from langchain_openai import ChatOpenAI
     key = _key("NVIDIA_API_KEY")
@@ -97,6 +97,8 @@ def _make_nvidia_llm(model: str, temperature: float = 0.1):
         api_key=key,
         base_url="https://integrate.api.nvidia.com/v1",
         temperature=temperature,
+        timeout=timeout,
+        max_retries=max_retries,
     )
 
 

@@ -6,6 +6,12 @@ import Link from "next/link";
 
 const API = "http://localhost:8001";
 
+/** Encode a character name for use in URL paths — also encodes dots to prevent
+ *  Next.js from treating them as file extensions in dynamic segments. */
+function encodeCharName(name: string): string {
+  return encodeURIComponent(name).replace(/\./g, "%2E");
+}
+
 const ROLE_COLOR: Record<string, string> = {
   protagonist: "#c07820",
   antagonist:  "#ef4444",
@@ -33,15 +39,22 @@ function diffPhases(prev: any, next: any) {
 }
 
 export default function CharacterDetailPage() {
-  const { id, name } = useParams<{ id: string; name: string }>();
+  const { id, name: rawName } = useParams<{ id: string; name: string }>();
+  // Next.js may or may not decode the param — safely handle both
+  let name = rawName;
+  try { name = decodeURIComponent(rawName); } catch {}
   const [character, setCharacter] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set([0]));
   const [showFairWitness, setShowFairWitness] = useState(false);
+  const [showPortrait, setShowPortrait] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/stories/${id}/characters/${encodeURIComponent(name)}`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then(d => { setCharacter(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, [id, name]);
@@ -102,6 +115,32 @@ export default function CharacterDetailPage() {
   return (
     <main className="flex flex-col overflow-hidden bg-[#f7f3ed]" style={{ height: "calc(100vh - 56px)" }}>
 
+      {/* ── Portrait Lightbox ── */}
+      {showPortrait && character.portrait && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
+          onClick={() => setShowPortrait(false)}
+        >
+          <div className="relative max-w-lg max-h-[80vh] rounded-2xl overflow-hidden shadow-2xl border-4 border-white/20" onClick={e => e.stopPropagation()}>
+            <img
+              src={`${API}${character.portrait}`}
+              alt={character.name}
+              className="w-full h-full object-contain"
+            />
+            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-5 py-4">
+              <p className="text-white font-bold text-lg">{character.name}</p>
+              <p className="text-white/70 text-sm capitalize">{character.role}</p>
+            </div>
+            <button
+              onClick={() => setShowPortrait(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors text-sm"
+            >
+              x
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Header (full-width, not sticky — main is fixed height) ── */}
       <div className="shrink-0 bg-white border-b border-[#e8e0d5]">
         <div className="px-8 lg:px-12 py-4 flex items-center gap-4">
@@ -110,12 +149,13 @@ export default function CharacterDetailPage() {
           </Link>
           <div className="w-px h-4 bg-[#e8e0d5]" />
           {character.portrait ? (
-            <img src={`http://localhost:8001${character.portrait}`} alt={character.name} loading="lazy"
-              className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-sm border border-[#e8e0d5]"
+            <img src={`${API}${character.portrait}`} alt={character.name} loading="lazy"
+              className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-sm border border-[#e8e0d5] cursor-pointer hover:ring-2 hover:ring-[#c07820] transition-all"
+              onClick={() => setShowPortrait(true)}
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
           ) : (
             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0" style={{ backgroundColor: color }}>
-              {character.name[0]}
+              {(character.name || "?")[0]}
             </div>
           )}
           <div className="flex-1 min-w-0">
@@ -143,6 +183,37 @@ export default function CharacterDetailPage() {
       {/* LEFT: main content */}
       <div className="flex-1 overflow-y-auto">
       <div className="px-8 lg:px-12 py-8 space-y-8">
+
+        {/* ── Portrait + Description Hero ── */}
+        {character.portrait && (
+          <div className="flex items-start gap-6">
+            <img
+              src={`${API}${character.portrait}`}
+              alt={character.name}
+              loading="lazy"
+              className="w-32 h-32 rounded-2xl object-cover shadow-md border-2 border-[#e8e0d5] cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all"
+              onClick={() => setShowPortrait(true)}
+              onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = "none"; }}
+            />
+            <div className="flex-1 pt-1">
+              <p className="text-[#1c1410] text-sm leading-relaxed">{character.description}</p>
+              {character.aliases?.length > 0 && (
+                <p className="text-xs text-[#a09282] mt-2">
+                  Also known as: {character.aliases.join(", ")}
+                </p>
+              )}
+              {character.importance != null && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-[#a09282]">Importance:</span>
+                  <div className="w-24 h-1.5 bg-[#e8e0d5] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${character.importance * 100}%`, backgroundColor: color }} />
+                  </div>
+                  <span className="text-xs font-medium" style={{ color }}>{Math.round(character.importance * 100)}%</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Story Timeline Bar ── */}
         {tlPhases.length > 0 && (

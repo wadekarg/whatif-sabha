@@ -56,6 +56,8 @@ export default function DebatePage() {
   const [transcript, setTranscript] = useState<DebateEntry[]>([]);
   const [streaming, setStreaming] = useState<StreamEntry | null>(null);
   const [alternateEnding, setAlternateEnding] = useState("");
+  const [debateSummary, setDebateSummary] = useState("");
+  const [streamingSummary, setStreamingSummary] = useState("");
   const [streamingEnding, setStreamingEnding] = useState("");
   const [alternateTimeline, setAlternateTimeline] = useState<any[]>([]);
   const [showConclusion, setShowConclusion] = useState(false);
@@ -118,6 +120,7 @@ export default function DebatePage() {
   }>({ open_questions: [], resolved_questions: [], claims: [], positions: {}, progress: "", phase: "" });
   const [graphHover, setGraphHover] = useState<{ x: number; y: number; source: string; target: string; count: number; questions: number; snippet: string } | null>(null);
   const transcriptRef = useRef<DebateEntry[]>([]);
+  const streamingSummaryRef = useRef("");
 
   useEffect(() => {
     fetch(`${API}/stories/${id}`)
@@ -144,8 +147,51 @@ export default function DebatePage() {
       .catch(() => {});
   }, [id]);
 
+  // Replay mode: load a past debate by ?replay=<debateId>
+  useEffect(() => {
+    const replayId = searchParams.get("replay");
+    if (!replayId) return;
+    setStatus("starting");
+    fetch(`${API}/debates/${replayId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d || !d.transcript) return;
+        setDebateId(d.id);
+        setDivergence(d.divergence_description || "");
+        setActiveCharacters(d.participating_characters || []);
+        setAlternateEnding(d.alternate_ending || "");
+        setDebateSummary(d.debate_summary || "");
+        setAlternateTimeline(d.alternate_timeline || []);
+        if (d.debate_summary) {
+          // Don't auto-show conclusion — let user see the debate first
+        }
+        // Replay transcript entries into state one by one to trigger graph building
+        const entries: DebateEntry[] = [];
+        for (const entry of d.transcript) {
+          entries.push({
+            character: entry.character,
+            message: entry.message,
+            round: entry.round || 0,
+            target: entry.target_character || entry.target || undefined,
+            emotion: entry.emotion || "neutral",
+            isObserver: entry.isObserver,
+            observerEra: entry.observerEra || entry.era,
+            ...(entry.isOrchestrator ? { isOrchestrator: true, orchestratorEvent: entry.orchestratorEvent } : {}),
+            ...(entry.isReaction ? { isReaction: true } : {}),
+            ...(entry.isStageDirection ? { isStageDirection: true } : {}),
+            ...(entry.isAudience ? { isAudience: true } : {}),
+          } as any);
+        }
+        setTranscript(entries);
+        setStatus("done");
+      })
+      .catch(() => setStatus("idle"));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     transcriptRef.current = transcript;
+    streamingSummaryRef.current = streamingSummary;
     if (!userScrolledUpRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
@@ -167,6 +213,9 @@ export default function DebatePage() {
 
   const colorOf = (name: string) => CHAR_COLORS[activeCharacters.indexOf(name) % CHAR_COLORS.length] || CHAR_COLORS[0];
   const initials = (name: string) => name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+
+  // Track how many transcript entries the graph has already processed
+  const graphProcessedRef = useRef(0);
 
   // Sync transcript → graph nodes + edges
   useEffect(() => {
@@ -208,128 +257,100 @@ export default function DebatePage() {
       });
     }
 
-    const last = transcript[transcript.length - 1];
+    // Process all unprocessed entries (supports both live streaming and bulk replay)
+    const startIdx = graphProcessedRef.current;
+    const entriesToProcess = transcript.slice(startIdx);
+    if (entriesToProcess.length === 0) return;
 
-    // Skip non-content entries (reactions, stage directions)
-    if ((last as any).isReaction || (last as any).isStageDirection) {
-      return;
-    }
+    for (let ei = 0; ei < entriesToProcess.length; ei++) {
+      const last = entriesToProcess[ei];
+      const globalIdx = startIdx + ei;
 
-    // World observers get a node + edge to their target (or Boru if no target)
-    if ((last as any).isObserver) {
-      const obsNode = ensureNode(last.character);
-      obsNode.speeches++;
-      obsNode.r = Math.min(14 + obsNode.speeches * 0.5, 18);
-      obsNode.shape = "square";
-      obsNode.color = "#64748b"; // slate for observers
-      // Primary edge: observer → target character (if they asked someone a question)
-      const primaryTarget = last.target && last.target !== last.character ? last.target : "Boru";
-      ensureNode(primaryTarget);
-      const existing = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === primaryTarget);
-      if (existing) { existing.count++; if (primaryTarget !== "Boru") existing.questions++; }
-      else { graphEdgesRef.current.push({ source: last.character, target: primaryTarget, sourceId: last.character, targetId: primaryTarget, count: 1, questions: primaryTarget !== "Boru" ? 1 : 0 }); }
-      setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
-      if (d3SimRef.current && (d3SimRef.current as any).update) { (d3SimRef.current as any).update(); }
-      return;
-    }
+      // Skip non-content entries (reactions, stage directions)
+      if ((last as any).isReaction || (last as any).isStageDirection) continue;
 
-    // Boru's messages: count speeches + create edge to target character
-    if ((last as any).isOrchestrator) {
-      const boruNode = graphNodesRef.current.find(n => n.id === "Boru");
-      if (boruNode) {
-        boruNode.speeches++;
-        boruNode.r = Math.min(26 + boruNode.speeches * 0.3, 34);
+      // World observers get a node + edge to their target
+      if ((last as any).isObserver) {
+        const obsNode = ensureNode(last.character);
+        obsNode.speeches++;
+        obsNode.r = Math.min(14 + obsNode.speeches * 0.5, 18);
+        obsNode.shape = "square";
+        obsNode.color = "#64748b";
+        const primaryTarget = last.target && last.target !== last.character ? last.target : "Boru";
+        ensureNode(primaryTarget);
+        const existing = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === primaryTarget);
+        if (existing) { existing.count++; if (primaryTarget !== "Boru") existing.questions++; }
+        else { graphEdgesRef.current.push({ source: last.character, target: primaryTarget, sourceId: last.character, targetId: primaryTarget, count: 1, questions: primaryTarget !== "Boru" ? 1 : 0 }); }
+        continue;
       }
-      // Create edge from Boru → target character (when he invites/directs someone)
-      const target = last.target;
-      if (target && target !== "Boru") {
-        ensureNode(target);
-        const existing = graphEdgesRef.current.find(
-          e => e.sourceId === "Boru" && e.targetId === target
-        );
+
+      // Boru's messages: count speeches + create edge to target character(s)
+      if ((last as any).isOrchestrator) {
+        const boruNode = graphNodesRef.current.find(n => n.id === "Boru");
+        if (boruNode) {
+          boruNode.speeches++;
+          boruNode.r = Math.min(26 + boruNode.speeches * 0.3, 34);
+        }
+        const allTargets: string[] = [];
+        if ((last as any).targets && Array.isArray((last as any).targets)) {
+          allTargets.push(...(last as any).targets);
+        } else if (last.target && last.target !== "Boru" && last.target !== "all") {
+          allTargets.push(last.target);
+        }
+        for (const t of allTargets) {
+          ensureNode(t);
+          const existing = graphEdgesRef.current.find(e => e.sourceId === "Boru" && e.targetId === t);
+          if (existing) { existing.count++; }
+          else { graphEdgesRef.current.push({ source: "Boru", target: t, sourceId: "Boru", targetId: t, count: 1, questions: 0 }); }
+        }
+        continue;
+      }
+
+      // Character dialogue
+      const isAudience = (last as any).isAudience;
+      const lastNode = ensureNode(last.character);
+      if (!isAudience) {
+        lastNode.speeches++;
+        lastNode.r = Math.min(18 + lastNode.speeches * 1.5, 34);
+      } else {
+        lastNode.r = 12;
+      }
+
+      // Edge: who is this character responding to?
+      let targetName = last.target;
+      if (!targetName || targetName === "all") {
+        // Lightweight fallback: find previous real character speaker
+        for (let j = globalIdx - 1; j >= Math.max(0, globalIdx - 4); j--) {
+          const prev = transcript[j];
+          if ((prev as any).isReaction || (prev as any).isStageDirection) continue;
+          if ((prev as any).isOrchestrator) continue;
+          if (!(prev as any).isObserver && !(prev as any).isAudience && prev.character !== last.character) {
+            targetName = prev.character;
+            break;
+          }
+        }
+        if (!targetName || targetName === "all") targetName = "Boru";
+      }
+      if (targetName && targetName !== last.character) {
+        ensureNode(targetName);
+        const isQuestion = last.message.includes("?");
+        const existing = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === targetName);
         if (existing) {
           existing.count++;
+          if (isQuestion) existing.questions++;
         } else {
-          graphEdgesRef.current.push({ source: "Boru", target, sourceId: "Boru", targetId: target, count: 1, questions: 0 });
+          graphEdgesRef.current.push({ source: last.character, target: targetName, sourceId: last.character, targetId: targetName, count: 1, questions: isQuestion ? 1 : 0 });
         }
       }
-      setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
-      if (d3SimRef.current && (d3SimRef.current as any).update) {
-        (d3SimRef.current as any).update();
-      }
-      return;
     }
 
-    // Audience members get a small node but don't count as main speakers
-    const isAudience = (last as any).isAudience;
-
-    const lastNode = ensureNode(last.character);
-    if (!isAudience) {
-      lastNode.speeches++;
-      lastNode.r = Math.min(18 + lastNode.speeches * 1.5, 34);
-    } else {
-      lastNode.r = 12; // small node for audience
-    }
+    graphProcessedRef.current = transcript.length;
     activeNodeRef.current = null;
 
-    // Restart D3 simulation with updated nodes/edges
+    // Update D3 simulation + stats
+    setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
     if (d3SimRef.current && (d3SimRef.current as any).update) {
       (d3SimRef.current as any).update();
-    }
-    // Update stats for React render
-    setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
-
-    // Edge: determine who this character is responding to
-    let targetName = last.target;
-
-    if (!targetName) {
-      // Check if the character mentions another character by name in their response
-      const msgLower = last.message.toLowerCase();
-      for (const cn of activeCharacters) {
-        if (cn !== last.character && cn.toLowerCase() !== "boru" && msgLower.includes(cn.toLowerCase())) {
-          targetName = cn;
-          break;
-        }
-      }
-    }
-
-    if (!targetName) {
-      // Walk back through transcript to find who prompted this character
-      for (let j = transcript.length - 2; j >= Math.max(0, transcript.length - 6); j--) {
-        const prev = transcript[j];
-        if ((prev as any).isReaction || (prev as any).isStageDirection) continue;
-
-        // If Boru's message mentions this character's name → responding to Boru
-        if ((prev as any).isOrchestrator) {
-          if (prev.target === last.character || prev.message?.toLowerCase().includes(last.character.toLowerCase())) {
-            targetName = "Boru";
-          }
-          break; // Boru is always the most recent prompter
-        }
-
-        if ((prev as any).isObserver || (prev as any).isAudience) continue;
-
-        if (prev.character !== last.character) {
-          targetName = prev.character;
-          break;
-        }
-      }
-    }
-
-    // Final fallback
-    if (!targetName) targetName = "Boru";
-    if (targetName && targetName !== last.character) {
-      ensureNode(targetName);
-      const isQuestion = last.message.includes("?");
-      const existing = graphEdgesRef.current.find(
-        e => e.sourceId === last.character && e.targetId === targetName
-      );
-      if (existing) {
-        existing.count++;
-        if (isQuestion) existing.questions++;
-      } else {
-        graphEdgesRef.current.push({ source: last.character, target: targetName, sourceId: last.character, targetId: targetName, count: 1, questions: isQuestion ? 1 : 0 });
-      }
     }
   }, [transcript, activeCharacters, storyCharacters]);
 
@@ -755,16 +776,27 @@ export default function DebatePage() {
           message: ev.message,
           round: 0,
           target: ev.target || undefined,
+          targets: ev.targets || undefined,
           isOrchestrator: true,
           orchestratorEvent: ev.event,
           phase: ev.phase,
         }]);
+      } else if (ev.type === "summary_token") {
+        setStreamingSummary(prev => prev + ev.text);
+      } else if (ev.type === "summary_start") {
+        setStreamingSummary("");
+      } else if (ev.type === "synthesis_start") {
+        // Summary is done, save it and start ending
+        setDebateSummary(prev => prev || streamingSummaryRef.current);
+        setStreamingSummary("");
       } else if (ev.type === "ending_token") {
         setStreamingEnding(prev => prev + ev.text);
       } else if (ev.type === "debate_end") {
         setAlternateEnding(ev.alternate_ending);
+        setDebateSummary(ev.debate_summary || streamingSummaryRef.current || "");
         setAlternateTimeline(ev.alternate_timeline || []);
         setStreamingEnding("");
+        setStreamingSummary("");
         setStatus("done");
         if (ev.oracle_ready) setOracleReady(true);
         setTimeout(() => setShowConclusion(true), 800);
@@ -983,49 +1015,6 @@ export default function DebatePage() {
                 </div>
               </div>
 
-              {/* Suggestions */}
-              {suggestions.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-[#a09282] uppercase tracking-widest mb-2">Story suggests</div>
-                  {suggestions.map((s) => {
-                    const active = divergence === s.description;
-                    return (
-                      <button
-                        key={s.event_id}
-                        onClick={() => setDivergence(s.description)}
-                        className={`w-full text-left px-4 py-3 rounded-xl border transition-all duration-150 group ${
-                          active
-                            ? "border-[#c07820] bg-[#fef3e2]"
-                            : "border-[#e8e0d5] bg-white hover:border-[#c07820]/50 hover:bg-[#fef9f2]"
-                        }`}
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <span className={`mt-0.5 shrink-0 text-sm font-bold transition-colors ${active ? "text-[#c07820]" : "text-[#c8b89a] group-hover:text-[#c07820]"}`}>→</span>
-                          <div>
-                            <p className={`text-sm leading-snug ${active ? "text-[#1c1410] font-medium" : "text-[#6b5c4e]"}`}>{s.description}</p>
-                            {s.affected_characters.length > 0 && (
-                              <div className="flex gap-1 mt-1.5 flex-wrap">
-                                {s.affected_characters.map((c: string, ci: number) => (
-                                  <span key={c} className="text-xs px-2 py-0.5 rounded-full font-medium"
-                                    style={{ background: CHAR_COLORS[ci % CHAR_COLORS.length].hex + "18", color: CHAR_COLORS[ci % CHAR_COLORS.length].hex }}>
-                                    {c}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  <div className="flex items-center gap-3 pt-1">
-                    <div className="flex-1 h-px bg-[#e8e0d5]" />
-                    <span className="text-xs text-[#c8b89a]">or write your own</span>
-                    <div className="flex-1 h-px bg-[#e8e0d5]" />
-                  </div>
-                </div>
-              )}
-
               {/* Textarea card */}
               <div className={`bg-white rounded-2xl border-2 transition-colors overflow-hidden ${divergence.trim() ? "border-[#c07820]" : "border-[#e8e0d5] focus-within:border-[#c07820]"}`}>
                 <div className="px-5 pt-4 pb-2">
@@ -1055,13 +1044,56 @@ export default function DebatePage() {
                 </div>
               </div>
 
+              {/* Suggestions — shown below textarea as inspiration */}
+              {suggestions.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-3 pb-1">
+                    <div className="flex-1 h-px bg-[#e8e0d5]" />
+                    <span className="text-xs text-[#c8b89a]">or pick a story suggestion</span>
+                    <div className="flex-1 h-px bg-[#e8e0d5]" />
+                  </div>
+                  <div className="text-xs font-medium text-[#a09282] uppercase tracking-widest mb-2">Story suggests</div>
+                  {suggestions.map((s) => {
+                    const active = divergence === s.description;
+                    return (
+                      <button
+                        key={s.event_id}
+                        onClick={() => setDivergence(s.description)}
+                        className={`w-full text-left px-4 py-3 rounded-xl border transition-all duration-150 group ${
+                          active
+                            ? "border-[#c07820] bg-[#fef3e2]"
+                            : "border-[#e8e0d5] bg-white hover:border-[#c07820]/50 hover:bg-[#fef9f2]"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className={`mt-0.5 shrink-0 text-sm font-bold transition-colors ${active ? "text-[#c07820]" : "text-[#c8b89a] group-hover:text-[#c07820]"}`}>→</span>
+                          <div>
+                            <p className={`text-sm leading-snug ${active ? "text-[#1c1410] font-medium" : "text-[#6b5c4e]"}`}>{s.description}</p>
+                            {s.affected_characters.length > 0 && (
+                              <div className="flex gap-1 mt-1.5 flex-wrap">
+                                {s.affected_characters.map((c: string, ci: number) => (
+                                  <span key={`${ci}-${c}`} className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                    style={{ background: CHAR_COLORS[ci % CHAR_COLORS.length].hex + "18", color: CHAR_COLORS[ci % CHAR_COLORS.length].hex }}>
+                                    {c}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* How it works — subtle hint */}
               <div className="flex items-start gap-3 px-1">
                 <div className="shrink-0 w-5 h-5 rounded-full bg-[#f0ece5] border border-[#e8e0d5] flex items-center justify-center mt-0.5">
                   <span className="text-[#a09282] text-xs">?</span>
                 </div>
                 <p className="text-xs text-[#a09282] leading-relaxed">
-                  Characters will argue, question, and reveal hidden depths across multiple rounds. A judge scores each turn. When the debate concludes, an alternate ending is written.
+                  Characters will explore the what-if scenario, challenge each other, and imagine how the story changes. When the debate concludes, an alternate ending is written.
                 </p>
               </div>
             </div>
@@ -1072,7 +1104,7 @@ export default function DebatePage() {
                 <div className="w-7 h-7 rounded-full bg-[#3d2f20] text-white text-xs font-bold flex items-center justify-center shrink-0">2</div>
                 <div>
                   <div className="text-base font-bold text-[#1c1410]">Assemble the Cast</div>
-                  <div className="text-xs text-[#a09282]">Choose who debates and tune their depth</div>
+                  <div className="text-xs text-[#a09282]">Choose who joins the debate</div>
                 </div>
               </div>
 
@@ -1092,12 +1124,12 @@ export default function DebatePage() {
 
                   {/* Character cards */}
                   <div className="space-y-2">
-                    {storyCharacters.map((char) => {
+                    {storyCharacters.map((char, idx) => {
                       const rate = explorationRates[char.name] ?? 10;
-                      const color = CHAR_COLORS[storyCharacters.indexOf(char) % CHAR_COLORS.length];
+                      const color = CHAR_COLORS[idx % CHAR_COLORS.length];
                       const selected = selectedCharacters.has(char.name);
                       return (
-                        <div key={char.name}
+                        <div key={`${idx}-${char.name}`}
                           className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
                             selected
                               ? "bg-white border-[#e8e0d5] shadow-sm"
@@ -1127,17 +1159,10 @@ export default function DebatePage() {
                               <div className="text-sm font-semibold text-[#1c1410] truncate">{char.name}</div>
                               {char.role && <div className="text-xs text-[#a09282] truncate">{char.role}</div>}
                             </div>
-                            {/* Exploration badge */}
-                            {selected && (
-                              <div className="shrink-0 text-right">
-                                <div className="text-sm font-bold tabular-nums" style={{ color: rate > 25 ? color.hex : "#c8b89a" }}>{rate}%</div>
-                                <div className="text-[10px] text-[#c8b89a] leading-none">depth</div>
-                              </div>
-                            )}
                           </div>
 
-                          {/* Slider row — only when selected */}
-                          {selected && (
+                          {/* Depth slider removed — exploration rate fixed at 10% internally */}
+                          {false && selected && (
                             <div className="px-4 pb-3 space-y-1.5 border-t border-[#f0ece5]">
                               <div className="flex items-center gap-3 pt-2">
                                 <span className="text-xs text-[#c8b89a] shrink-0">In character</span>
@@ -1163,15 +1188,6 @@ export default function DebatePage() {
                     })}
                   </div>
 
-                  {/* Depth explainer */}
-                  <div className="flex items-start gap-3 px-1">
-                    <div className="shrink-0 w-5 h-5 rounded-full bg-[#f0ece5] border border-[#e8e0d5] flex items-center justify-center mt-0.5">
-                      <span className="text-[#a09282] text-xs">?</span>
-                    </div>
-                    <p className="text-xs text-[#a09282] leading-relaxed">
-                      <span className="font-semibold text-[#6b5c4e]">Hidden depth</span> controls how often a character breaks from their expected position and reveals something surprising — a buried fear, a secret loyalty, or an unexpected argument.
-                    </p>
-                  </div>
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center space-y-2 bg-white rounded-2xl border border-[#e8e0d5]">
@@ -1248,16 +1264,21 @@ export default function DebatePage() {
 
         {/* Stats bar */}
         {transcript.length > 0 && (() => {
-          const N = Math.max(activeCharacters.length, 1);
-          const lastTurn = transcript[transcript.length - 1]?.round ?? 0;
-          const currentRound = Math.floor(lastTurn / N) + 1;
+          // Find the latest round from actual character dialogue (not reactions/orchestrator)
+          let currentRound = 1;
+          for (let j = transcript.length - 1; j >= 0; j--) {
+            const e = transcript[j];
+            if (!(e as any).isOrchestrator && !(e as any).isReaction && !(e as any).isStageDirection && !(e as any).isAudience && !e.isObserver && e.round > 0) {
+              currentRound = e.round;
+              break;
+            }
+          }
           const sorted = [...graphStats].sort((a, b) => b.speeches - a.speeches);
           const total = sorted.reduce((s, n) => s + n.speeches, 0) || 1;
           return (
             <div className="px-5 pb-1.5 flex items-center gap-4">
               {[
-                { label: "Turns", value: String(transcript.length) },
-                { label: "Round", value: String(currentRound) },
+                { label: "Turns", value: String(transcript.filter(e => !(e as any).isOrchestrator && !(e as any).isReaction && !(e as any).isStageDirection).length) },
                 { label: "Speakers", value: String(activeCharacters.length) },
               ].map(s => (
                 <div key={s.label} className="flex items-center gap-1.5 text-xs">
@@ -1389,23 +1410,27 @@ export default function DebatePage() {
             </div>
 
             {transcript.map((entry, i) => {
-              const N = Math.max(activeCharacters.length, 1);
-              const entryRound = Math.floor(entry.round / N) + 1;
-              const prevEntryRound = i > 0 ? Math.floor(transcript[i - 1].round / N) + 1 : null;
-              const showRoundSep = entryRound !== prevEntryRound && !entry.isObserver;
+              // Round separator: only show between actual character dialogue turns,
+              // not on reactions/stage-directions/orchestrator/observers
+              const isDialogue = !entry.isObserver && !(entry as any).isOrchestrator && !(entry as any).isReaction && !(entry as any).isStageDirection && !(entry as any).isAudience;
+              const entryRound = entry.round || 0;
+              // Find previous dialogue entry's round
+              let prevDialogueRound: number | null = null;
+              for (let j = i - 1; j >= 0; j--) {
+                const prev = transcript[j];
+                if (!prev.isObserver && !(prev as any).isOrchestrator && !(prev as any).isReaction && !(prev as any).isStageDirection && !(prev as any).isAudience) {
+                  prevDialogueRound = prev.round || 0;
+                  break;
+                }
+              }
+              // Round separators removed — debate flows as a conversation, not discrete rounds
+              const showRoundSep = false;
               const isTwoChar = activeCharacters.length === 2;
               const charIdx = activeCharacters.indexOf(entry.character);
               const isRight = isTwoChar && charIdx === 1;
 
-              // Emotional reaction — brief body language
-              if ((entry as any).isReaction) return (
-                <div key={i} className="mx-8 my-0.5">
-                  <span className="text-xs italic text-[#a09282]">
-                    <span className="font-medium text-[#6b5c4e]">{entry.character}</span>
-                    {" "}{entry.message}
-                  </span>
-                </div>
-              );
+              // Skip reactions (no longer generated)
+              if ((entry as any).isReaction) return null;
 
               // Stage direction — atmospheric
               if ((entry as any).isStageDirection) return (
@@ -1617,30 +1642,43 @@ export default function DebatePage() {
               );
             })()}
 
-            {streamingEnding && !alternateEnding && (
+            {streamingSummary && !debateSummary && (
               <div className="mt-8 pt-8 border-t border-[#e8e0d5]">
                 <div className="flex items-center gap-2 text-xs text-[#a09282] mb-5 uppercase tracking-widest font-medium">
-                  <span className="animate-breathe text-[#c07820]">✦</span> Writing the alternate ending…
+                  <span className="animate-breathe text-[#c07820]">✦</span> Summarizing the debate…
                 </div>
-                <div className="text-[#2d1f14] leading-[2] text-[16px]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
-                  {streamingEnding}<span className="animate-pulse text-[#c07820]">▌</span>
+                <div className="text-[#2d1f14] leading-relaxed text-sm">
+                  {streamingSummary}<span className="animate-pulse text-[#c07820]">▌</span>
                 </div>
               </div>
             )}
 
-            {status === "done" && alternateEnding && (
+            {status === "done" && debateSummary && (
               <div className="mt-8 pt-8 border-t border-[#e8e0d5] space-y-3">
                 <button
                   onClick={() => setShowConclusion(true)}
                   className="w-full py-4 rounded-2xl bg-[#1c1410] text-white font-semibold text-sm hover:bg-[#2d1f14] transition-colors flex items-center justify-center gap-2"
                 >
-                  <span className="text-[#f0c060]">✦</span> Read the Alternate Ending
+                  <span className="text-[#f0c060]">&#9670;</span> Read the Debate Summary
                 </button>
                 <Link
                   href={`/story/${id}/debate`}
                   className="block text-center text-sm text-[#a09282] hover:text-[#6b5c4e] transition-colors py-2 font-medium"
                 >
                   Start another debate →
+                </Link>
+              </div>
+            )}
+            {status === "done" && !debateSummary && transcript.length > 0 && (
+              <div className="mt-8 pt-8 border-t border-[#e8e0d5] space-y-3">
+                <div className="text-center py-6 px-4 rounded-2xl border border-[#e8e0d5] bg-white">
+                  <p className="text-sm text-[#6b5c4e]">This debate was interrupted before the summary could be written.</p>
+                </div>
+                <Link
+                  href={`/story/${id}/debate`}
+                  className="block text-center text-sm text-[#a09282] hover:text-[#6b5c4e] transition-colors py-2 font-medium"
+                >
+                  Start a new debate →
                 </Link>
               </div>
             )}
@@ -2159,7 +2197,7 @@ export default function DebatePage() {
       </div>
 
       {/* ── Full-screen Book Conclusion — two-column layout ── */}
-      {showConclusion && alternateEnding && (
+      {showConclusion && debateSummary && (
         <div className="absolute inset-0 z-50 flex flex-col" style={{ background: "#f7f3ed" }}>
 
           {/* Sticky nav */}
@@ -2181,7 +2219,7 @@ export default function DebatePage() {
           <div className="relative flex flex-col items-center justify-center text-center px-8 py-32 overflow-hidden" style={{ minHeight: "50vh" }}>
             <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 80% 60% at 50% 40%, rgba(192,120,32,0.1) 0%, transparent 70%)" }} />
             <div className="relative z-10 space-y-7 max-w-3xl">
-              <div className="text-[#c07820] text-xs uppercase tracking-[0.45em] font-semibold">Alternate History</div>
+              <div className="text-[#c07820] text-xs uppercase tracking-[0.45em] font-semibold">Debate Concluded</div>
               <h1 className="text-5xl sm:text-6xl font-bold leading-tight text-[#1c1410]">{divergence}</h1>
               <div className="flex items-center justify-center gap-5 text-sm text-[#6b5c4e]">
                 <span>{activeCharacters.length} characters</span>
@@ -2248,36 +2286,34 @@ export default function DebatePage() {
             </div>
           )}
 
-          {/* THE ALTERNATE ENDING */}
-          <div style={{ background: "#fefcf8" }} className="py-24">
-            <div className="max-w-[780px] mx-auto px-8 lg:px-12">
-              <div className="text-center mb-16">
-                <div className="flex items-center justify-center gap-5 mb-8">
-                  <div className="flex-1 h-px bg-[#e8e0d5]" />
-                  <span className="text-[#c07820] text-xl">✦</span>
-                  <div className="flex-1 h-px bg-[#e8e0d5]" />
+          {/* DEBATE SUMMARY */}
+          {debateSummary && (
+            <div style={{ background: "#f7f3ed" }} className="py-16">
+              <div className="max-w-[780px] mx-auto px-8 lg:px-12">
+                <div className="text-center mb-10">
+                  <div className="flex items-center justify-center gap-5 mb-6">
+                    <div className="flex-1 h-px bg-[#e8e0d5]" />
+                    <span className="text-[#6b5c4e] text-lg">&#9670;</span>
+                    <div className="flex-1 h-px bg-[#e8e0d5]" />
+                  </div>
+                  <div className="text-xs uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Debate</div>
                 </div>
-                <div className="text-xs uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Alternate Ending</div>
+                <div className="text-[#2d1f14] leading-relaxed text-[15px] prose prose-stone max-w-none">
+                  <ReactMarkdown components={{
+                    p: ({children}) => <p className="mb-4">{children}</p>,
+                    strong: ({children}) => <strong className="font-semibold text-[#1c1410]">{children}</strong>,
+                    em: ({children}) => <em className="italic text-[#6b5c4e]">{children}</em>,
+                  }}>{debateSummary}</ReactMarkdown>
+                </div>
               </div>
-              <div className="text-[#2d1f14] leading-[2.2] text-[20px]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
-                <ReactMarkdown
-                  components={{
-                    p: ({ children, ...props }) => {
-                      const node = props.node as any;
-                      const isFirst = node?.position?.start?.line === 1;
-                      return isFirst
-                        ? <p className="mb-8 first-letter:text-6xl first-letter:font-bold first-letter:float-left first-letter:mr-3 first-letter:leading-none first-letter:text-[#c07820]">{children}</p>
-                        : <p className="mb-6 indent-8">{children}</p>;
-                    },
-                    em: ({ children }) => <em style={{ color: "#6b5c4e" }}>{children}</em>,
-                    strong: ({ children }) => <strong style={{ color: "#1c1410", fontWeight: 600 }}>{children}</strong>,
-                  }}
-                >{alternateEnding}</ReactMarkdown>
-              </div>
-              <div className="mt-20 text-center space-y-2">
-                <div className="text-[#c07820] text-lg tracking-[0.5em]">✦ ✦ ✦</div>
-                <p className="text-xs text-[#a09282] mt-3">Shaped by {activeCharacters.join(", ")} · {transcript.length} exchanges</p>
-              </div>
+            </div>
+          )}
+
+          {/* END MARKER */}
+          <div style={{ background: "#fefcf8" }} className="py-12">
+            <div className="max-w-[780px] mx-auto px-8 lg:px-12 text-center space-y-2">
+              <div className="text-[#c07820] text-lg tracking-[0.5em]">&#9670; &#9670; &#9670;</div>
+              <p className="text-xs text-[#a09282] mt-3">Shaped by {activeCharacters.join(", ")} · {transcript.filter(e => !(e as any).isOrchestrator && !(e as any).isReaction).length} exchanges</p>
             </div>
           </div>
 

@@ -204,8 +204,8 @@ export default function Home() {
                     </div>
                     {characters.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
-                        {characters.slice(0, 8).map((c: any) => (
-                          <span key={c.name} className={`text-xs px-2.5 py-1 rounded-full border font-medium ${ROLE_CHIP[c.role] || ROLE_CHIP.neutral}`}>
+                        {characters.slice(0, 8).map((c: any, i: number) => (
+                          <span key={`${i}-${c.name}`} className={`text-xs px-2.5 py-1 rounded-full border font-medium ${ROLE_CHIP[c.role] || ROLE_CHIP.neutral}`}>
                             {c.name}
                           </span>
                         ))}

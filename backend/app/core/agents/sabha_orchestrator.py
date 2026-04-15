@@ -23,6 +23,23 @@ from app.core.usage_tracker import tracker
 logger = logging.getLogger(__name__)
 
 
+def _jaccard_similarity(text_a: str, text_b: str) -> float:
+    """Jaccard similarity on 4+ letter words. Used for repetition detection."""
+    words_a = set(re.findall(r'\b\w{4,}\b', text_a.lower()))
+    words_b = set(re.findall(r'\b\w{4,}\b', text_b.lower()))
+    if not words_a or not words_b:
+        return 0.0
+    return len(words_a & words_b) / max(len(words_a | words_b), 1)
+
+
+def _is_similar_to_previous(text: str, previous: list[str], threshold: float = 0.55) -> bool:
+    """Check if text is too similar to any previous entry."""
+    for prev in previous:
+        if _jaccard_similarity(text, prev) > threshold:
+            return True
+    return False
+
+
 def _get_orchestrator_llm():
     """Get an LLM for Boru — tries Gemini first, falls back to OpenRouter, then Groq/NVIDIA."""
     # Try Gemini first
@@ -260,6 +277,7 @@ class ArgumentLedger:
             "status": "unanswered",
             "answers": {},
             "_asked_at": 0,  # will be set to round_number when tracked in debate loop
+            "_deflections": 0,  # how many times the target deflected instead of answering
         })
         return qid
 
@@ -277,14 +295,36 @@ class ArgumentLedger:
 
     def is_repeating(self, character: str, claim_summary: str) -> bool:
         """Check if this character has made essentially the same claim before."""
-        # Simple hash-based: normalize and compare
         normalized = re.sub(r'\s+', ' ', claim_summary.lower().strip())
         key_words = set(re.findall(r'\b\w{4,}\b', normalized))
         for prev in self.repetition_log.get(character, []):
             prev_words = set(re.findall(r'\b\w{4,}\b', prev))
-            if len(key_words & prev_words) / max(len(key_words | prev_words), 1) > 0.6:
+            # Threshold 0.45 (was 0.6) — catches paraphrases like
+            # "control isn't cruelty" vs "control isn't a flaw"
+            if len(key_words & prev_words) / max(len(key_words | prev_words), 1) > 0.45:
                 return True
         self.repetition_log.setdefault(character, []).append(normalized)
+        return False
+
+    def is_response_repeating(self, character: str, full_response: str, transcript: list[dict]) -> bool:
+        """
+        Direct check on the full response text against this character's prior messages.
+        Catches paraphrased repeats — threshold 0.40 (was 0.55).
+        """
+        response_words = set(re.findall(r'\b\w{4,}\b', full_response.lower()))
+        if len(response_words) < 5:
+            return False
+        for entry in transcript:
+            if entry["character"] != character:
+                continue
+            if entry.get("isReaction") or entry.get("isStageDirection"):
+                continue
+            prev_words = set(re.findall(r'\b\w{4,}\b', entry["message"].lower()))
+            if not prev_words:
+                continue
+            similarity = len(response_words & prev_words) / max(len(response_words | prev_words), 1)
+            if similarity > 0.40:
+                return True
         return False
 
 
@@ -440,6 +480,14 @@ Be concise. Return ONLY valid JSON."""
                     ledger.open_questions.remove(q)
                 else:
                     q["status"] = "partially_answered"
+                    q["_deflections"] = q.get("_deflections", 0) + 1
+                    # After 3 deflections, dismiss the question — the character
+                    # has made clear they won't/can't answer (e.g. dead characters).
+                    if q["_deflections"] >= 3:
+                        q["status"] = "dismissed"
+                        ledger.resolved_questions.append(q)
+                        ledger.open_questions.remove(q)
+                        logger.info(f"Question Q{qid} dismissed after {q['_deflections']} deflections")
                 break
 
     if result.get("position_update"):
@@ -508,6 +556,13 @@ async def decide_phase_transition(
 
     if not min_met:
         return None
+
+    # Hard fallback: if we have WAY exceeded minimum turns, force transition
+    # regardless of what the LLM says. Prevents getting stuck in one phase forever.
+    hard_limit = max(len(char_names) * (min_turns + 2), 8)
+    if total_char_turns >= hard_limit:
+        logger.info(f"Hard phase transition: {current_phase} → {next_phase} after {total_char_turns} turns (hard limit {hard_limit})")
+        return next_phase
 
     # Ask LLM if transition makes sense
     prompt = f"""You are Boru, the Speaker of this Sabha. The debate is in the "{current_phase}" phase.
@@ -647,6 +702,17 @@ If only 1 speaker needed, set is_parallel to false."""
                 "mode": "main",
             }]
 
+        # Deduplicate Boru's directives: if a directive is too similar to a
+        # recent one (Jaccard > 0.55), rewrite it to push for a new angle.
+        for sp in valid_speakers:
+            directive = sp.get("directive", "")
+            if directive and _is_similar_to_previous(directive, boru_prev):
+                sp["directive"] = (
+                    f"{sp['speaker']}, we've covered that ground. "
+                    f"Take a NEW angle — something you haven't said yet."
+                )
+                logger.info(f"Directive for {sp['speaker']} was too similar to a previous one — replaced with fresh prompt")
+
         return {
             "speakers": valid_speakers,
             "boru_intro": result.get("boru_intro", ""),
@@ -747,8 +813,18 @@ async def generate_orchestrator_message(
         ),
         "observer_intro": (
             f"You are introducing a world observer: {context.get('observer_name', 'an outside voice')}. "
-            f"Build anticipation — 'There's someone who's been watching this with great interest.' "
-            f"Set up why their perspective is going to shake things up. 1-2 sentences."
+            + (
+                f"This observer has ALREADY spoken before in this debate — they are RETURNING, not arriving for the first time. "
+                f"Do NOT say 'There's someone who's been watching' or treat them as new. "
+                f"Instead, bring them back naturally: 'I see {context.get('observer_name', 'our friend')} has more to say...' or "
+                f"'{context.get('observer_name', 'Our observer')} is back — and I suspect they won't be gentle.' "
+                f"Reference what they said before or why THIS moment demands their return. 1 sentence."
+                if context.get("is_returning")
+                else
+                f"This is their FIRST appearance in this debate. Build anticipation — "
+                f"'There's someone who's been watching this with great interest.' "
+                f"Set up why their perspective is going to shake things up. 1-2 sentences."
+            )
         ),
         "forced_question": (
             f"A critical question has gone unanswered for too long and you're done waiting. "
@@ -760,9 +836,14 @@ async def generate_orchestrator_message(
         "summon_observer": (
             f"{context.get('requester', 'Someone')} has requested an outside perspective. "
             f"Reason: {context.get('reason', 'the debate needs a fresh angle')}. "
-            f"Introduce the observer dramatically — 'An interesting request. "
-            f"There IS someone who has been watching this with great interest...' "
-            f"Build anticipation. 1-2 sentences."
+            + (
+                f"This observer has spoken before — bring them back naturally, not as a new arrival. 1 sentence."
+                if context.get("is_returning")
+                else
+                f"Introduce the observer dramatically — 'An interesting request. "
+                f"There IS someone who has been watching this with great interest...' "
+                f"Build anticipation. 1-2 sentences."
+            )
         ),
         "respond_to_character": (
             f"{context.get('speaker', 'A character')} just addressed YOU directly. "
@@ -859,7 +940,15 @@ async def should_end_debate(
     Multiple signals considered — not just round count.
     """
     char_names = set(c["name"] for c in characters)
-    char_turns = [e for e in transcript if e["character"] in char_names and not e.get("isOrchestrator")]
+    char_turns = [
+        e for e in transcript
+        if e["character"] in char_names
+        and not e.get("isOrchestrator")
+        and not e.get("isReaction")
+        and not e.get("isStageDirection")
+        and not e.get("isAudience")
+        and not e.get("isObserver")
+    ]
     total_turns = len(char_turns)
 
     # Hard minimum: at least 2 turns per character

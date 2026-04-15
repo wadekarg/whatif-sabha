@@ -123,10 +123,11 @@ async def generate_all_portraits(
     story_id: str,
     story_title: str,
     log_fn=None,
-    max_concurrent: int = 4,
+    max_concurrent: int = 2,
 ) -> dict[str, str]:
     """
-    Generate portraits for all characters in parallel.
+    Generate portraits for all characters sequentially in small batches.
+    Pollinations.ai rate-limits aggressively — 2 concurrent max with backoff.
     Returns: {character_name: portrait_file_path}
     """
     _ensure_portrait_dir()
@@ -140,11 +141,20 @@ async def generate_all_portraits(
     async with aiohttp.ClientSession() as session:
         async def _generate_bounded(char: dict):
             async with semaphore:
+                # First attempt
                 path = await generate_single_portrait(char, story_id, story_title, session)
                 if path:
                     results[char["name"]] = path
                     if log_fn:
                         await log_fn(f"🎨 Portrait ready: {char['name']}")
+                    return
+                # Retry once after backoff
+                await asyncio.sleep(5)
+                path = await generate_single_portrait(char, story_id, story_title, session)
+                if path:
+                    results[char["name"]] = path
+                    if log_fn:
+                        await log_fn(f"🎨 Portrait ready (retry): {char['name']}")
 
         await asyncio.gather(*[_generate_bounded(c) for c in characters])
 

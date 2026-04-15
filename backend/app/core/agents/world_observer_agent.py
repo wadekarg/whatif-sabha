@@ -131,6 +131,21 @@ async def observer_respond_stream(
     # Collect this observer's own previous statements + all asked questions
     own_prev = [e["message"][:150] for e in debate_history if e.get("isObserver") and e["character"] == observer.get("name", "")]
     all_avoid = list(already_asked or []) + own_prev
+
+    # Summarize this observer's CORE themes so they're forced to find new ground
+    own_full = [e["message"] for e in debate_history if e.get("isObserver") and e["character"] == observer.get("name", "")]
+    theme_summary = ""
+    if own_full:
+        themes = set()
+        for msg in own_full:
+            themes.update(re.findall(r'\b\w{5,}\b', msg.lower()))
+        top_themes = sorted(themes, key=lambda w: sum(w in m.lower() for m in own_full), reverse=True)[:10]
+        theme_summary = (
+            f"\n\nYOU HAVE ALREADY COVERED THESE THEMES: {', '.join(top_themes)}. "
+            f"Do NOT revisit them. Find a genuinely DIFFERENT angle — a new aspect of the story, "
+            f"a different character to challenge, a contradiction nobody has noticed."
+        )
+
     avoid_text = ""
     if all_avoid:
         avoid_text = (
@@ -139,6 +154,7 @@ async def observer_respond_stream(
             + "\n".join(f"- {q}" for q in all_avoid[-10:])
             + "\nYour commentary and question MUST be completely NEW and DIFFERENT. "
             f"Find a FRESH angle that nobody has raised yet."
+            + theme_summary
         )
 
     messages.append(HumanMessage(content=(

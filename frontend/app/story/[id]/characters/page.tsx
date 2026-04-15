@@ -58,8 +58,8 @@ export default function CharactersPage() {
               const importance = Math.round((c.importance || 0.5) * 100);
               return (
                 <Link
-                  key={c.name}
-                  href={`/story/${id}/characters/${encodeURIComponent(c.name)}`}
+                  key={`${i}-${c.name}`}
+                  href={`/story/${id}/characters/${encodeURIComponent(c.name).replace(/\./g, "%2E")}`}
                   style={{ animationDelay: `${i * 0.05}s`, opacity: 0 }}
                   className={`group block border border-[#e8e0d5] border-l-4 ${s.border} rounded-2xl p-5 transition-all duration-200 hover:scale-[1.01] animate-fade-up bg-white hover:shadow-md hover:border-[#c8b89a]`}
                 >
