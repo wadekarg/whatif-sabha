@@ -3,18 +3,31 @@ import uuid
 import asyncio
 import random
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 # Shared audience message queues per debate — {debate_id: asyncio.Queue}
 _audience_queues: dict[str, asyncio.Queue] = {}
 _stop_signals: dict[str, bool] = {}  # {debate_id: True} to signal debate should stop
+_bg_tasks: dict[str, list[asyncio.Task]] = {}  # track background tasks per debate
+
+
+def _track_task(debate_id: str, coro):
+    """Create a background task with error logging (not fire-and-forget)."""
+    async def _safe():
+        try:
+            await coro
+        except Exception as e:
+            logger.error(f"Background task failed for debate {debate_id}: {e}")
+    task = asyncio.create_task(_safe())
+    _bg_tasks.setdefault(debate_id, []).append(task)
 
 from app.db.database import get_db
 from app.models.story import Story
@@ -53,7 +66,7 @@ from app.db.database import get_session_maker
 router = APIRouter(prefix="/debates", tags=["debates"])
 
 
-def _resolve_target(
+def _resolve_targets(
     speaker_name: str,
     full_response: str,
     char_names: list[str],
@@ -61,58 +74,87 @@ def _resolve_target(
     ledger=None,
     observer_challenge: dict | None = None,
     was_invited_by_boru: bool = False,
-    judge_target: str | None = None,
-) -> str | None:
+    judge_targets: list[str] | None = None,
+) -> list[str]:
     """
-    Target resolution for the interaction graph.
+    Target resolution for the interaction graph — extracts ALL targets.
 
     Priority:
-    1. Judge's primary_target (LLM-analyzed, most accurate — no extra call)
-    2. Observer challenge → the observer
-    3. Heuristic: first character name in response text
-    4. Walk back transcript for previous real character speaker
-    5. Fallback → Boru
+    1. Judge's addressed_targets (LLM-analyzed, all targets)
+    2. Observer challenge → add observer
+    3. Heuristic: ALL character names mentioned in response text
+    4. Fallback → ["Boru"] if no targets found
     """
-    # 1. Judge already analyzed the response — trust its target if valid
-    if judge_target and judge_target in char_names and judge_target != speaker_name:
-        return judge_target
-
+    targets = set()
+    
+    # 1. Judge already analyzed the response — trust its targets if valid
+    if judge_targets:
+        for t in judge_targets:
+            if t in char_names and t != speaker_name:
+                targets.add(t)
+    
     # 2. Responding to an observer challenge
     if observer_challenge:
-        return observer_challenge.get("observer_name", "Boru")
-
-    # 3. Heuristic: first character name mentioned (excluding self and Boru)
+        targets.add(observer_challenge.get("observer_name", "Boru"))
+    
+    # 3. Heuristic: ALL character names mentioned (excluding self and Boru)
+    # Scan entire response for mentions with case-insensitive matching
     resp_lower = full_response.lower()
-    best_name = None
-    best_pos = len(resp_lower) + 1
     for cn in char_names:
         if cn == speaker_name or cn.lower() == "boru":
             continue
-        pos = resp_lower.find(cn.lower())
-        if pos != -1 and pos < best_pos:
-            best_pos = pos
-            best_name = cn
-    if best_name and best_pos < 300:
-        return best_name
+        if cn.lower() in resp_lower:
+            targets.add(cn)
+    
+    # 4. If still empty, walk back transcript for last real character speaker
+    if not targets:
+        for entry in reversed(transcript):
+            if entry.get("isReaction") or entry.get("isStageDirection") or entry.get("isOrchestrator"):
+                continue
+            if entry.get("isObserver"):
+                targets.add(entry["character"])
+                break
+            if (not entry.get("isAudience") and entry["character"] != speaker_name):
+                targets.add(entry["character"])
+                break
+    
+    # 5. Absolute fallback if absolutely nothing found
+    if not targets:
+        targets.add("Boru")
+    
+    return list(targets)
 
-    # 4. Walk back transcript for last real character speaker
-    for entry in reversed(transcript):
-        if entry.get("isReaction") or entry.get("isStageDirection") or entry.get("isOrchestrator"):
-            continue
-        if entry.get("isObserver"):
-            return entry["character"]
-        if (not entry.get("isAudience") and entry["character"] != speaker_name):
-            return entry["character"]
 
-    # 5. Absolute fallback
-    return "Boru"
+def _extract_boru_question(full_response: str) -> str | None:
+    """Detect a direct Boru question from a character response."""
+    if not full_response or "boru" not in full_response.lower():
+        return None
+    if "?" not in full_response:
+        return None
+
+    # Prefer explicit @Boru mentions
+    m = re.search(r"@Boru\b", full_response, re.IGNORECASE)
+    if m:
+        rest = full_response[m.end():]
+        q = re.search(r"[^?]*\?", rest)
+        if q:
+            return q.group(0).strip()
+
+    # Prefer a sentence containing Boru / moderator / Speaker
+    for sentence in re.split(r"(?<=[.?!])\s+", full_response):
+        if re.search(r"\b(Boru|Speaker|moderator|elephant)\b", sentence, re.IGNORECASE) and "?" in sentence:
+            return sentence.strip()
+
+    # Fallback to the first question in the response
+    first_q = re.search(r"[^?]*\?", full_response)
+    return first_q.group(0).strip() if first_q else None
 
 
 class DebateStartRequest(BaseModel):
-    story_id: str
-    divergence_description: str
+    story_id: str = Field(..., min_length=1)
+    divergence_description: str = Field(..., min_length=5, max_length=2000)
     character_names: Optional[list[str]] = None  # None = use all characters
-    max_rounds: int = 20
+    max_rounds: int = Field(default=20, ge=5, le=100)
     character_exploration: Optional[dict[str, float]] = None  # {name: 0.0–1.0}, default 0.10
 
 
@@ -164,9 +206,9 @@ async def start_debate(req: DebateStartRequest, db: AsyncSession = Depends(get_d
 
 
 class AudienceMessage(BaseModel):
-    name: str  # audience member's chosen name
-    message: str  # their question or comment
-    directed_to: Optional[str] = None  # optional: specific character they're addressing
+    name: str = Field(..., min_length=1, max_length=100)
+    message: str = Field(..., min_length=1, max_length=1000)
+    directed_to: Optional[str] = Field(default=None, max_length=100)
 
 
 @router.post("/{debate_id}/audience")
@@ -176,7 +218,10 @@ async def audience_interjection(debate_id: str, body: AudienceMessage):
     Boru will acknowledge it and route it to the right character(s).
     """
     if debate_id not in _audience_queues:
-        _audience_queues[debate_id] = asyncio.Queue()
+        _audience_queues[debate_id] = asyncio.Queue(maxsize=50)
+
+    if _audience_queues[debate_id].full():
+        raise HTTPException(status_code=429, detail="Too many queued messages. Please wait.")
 
     await _audience_queues[debate_id].put({
         "name": body.name.strip() or "Someone in the audience",
@@ -478,6 +523,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     memory_context=memory_context,
                     observer_challenge=observer_challenge,
                     pending_questions=_pqs,
+                    debate_progress=ledger.progress_summary if ledger.progress_summary else None,
                 ):
                     if not first_line_extracted:
                         # Buffer tokens until we find the first newline
@@ -560,12 +606,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 continue
 
             # ── 8. Target resolution + emit character_end ──
-            # Priority: self-declared @target > judge > heuristic
-            judge_primary = judge_result.get("primary_target")
+            # Priority: self-declared @targets > judge > heuristic
+            # Now supports multiple targets
+            judge_addressed = judge_result.get("addressed_targets", [])
             if self_declared_target and self_declared_target != next_speaker_name:
-                target_char = self_declared_target
+                target_chars = [self_declared_target]  # Self-declared takes priority
             else:
-                target_char = _resolve_target(
+                target_chars = _resolve_targets(
                     speaker_name=next_speaker_name,
                     full_response=full_response,
                     char_names=char_names,
@@ -573,7 +620,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     ledger=ledger,
                     observer_challenge=observer_challenge,
                     was_invited_by_boru=boru_spoke_this_turn,
-                    judge_target=judge_primary,
+                    judge_targets=judge_addressed,
                 )
 
             yield sse("character_end", {
@@ -581,7 +628,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "message": full_response,
                 "round": round_number,
                 "judge_score": judge_result.get("score", 7),
-                "target_character": target_char,
+                "target_characters": target_chars,
                 "emotion": judge_result.get("dominant_emotion", "neutral"),
             })
 
@@ -590,12 +637,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "message": full_response,
                 "round": round_number,
                 "phase": current_phase,
-                "target_character": target_char,
+                "target_characters": target_chars,
                 "emotion": judge_result.get("dominant_emotion", "neutral"),
             })
 
-            # Save to character soul memory
-            asyncio.create_task(save_debate_turn(
+            # Save to character soul memory (tracked, not fire-and-forget)
+            _track_task(debate_id, save_debate_turn(
                 story_id=debate.story_id,
                 character_name=next_speaker_name,
                 message=full_response,
@@ -622,8 +669,33 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             # ── 10. Ledger update — every 2nd turn (0 or 1 LLM call) ──
             obs_names = [o["name"] for o in active_observers] if active_observers else []
+
+            # Immediate Boru response on odd turns if asked directly
+            if round_number % 2 != 0:
+                boru_question = _extract_boru_question(full_response)
+                if boru_question:
+                    boru_reply = await generate_orchestrator_message(
+                        ledger, current_phase, transcript, characters, story.title or "",
+                        event_type="respond_to_character",
+                        context={"speaker": next_speaker_name, "question": boru_question},
+                    )
+                    if boru_reply:
+                        yield sse("orchestrator", {"message": boru_reply, "phase": current_phase, "event": "respond_to_character", "target": next_speaker_name})
+                        transcript.append({
+                            "character": "Boru", "message": boru_reply,
+                            "round": round_number, "phase": current_phase,
+                            "isOrchestrator": True, "orchestratorEvent": "respond_to_character",
+                        })
+
             if round_number % 2 == 0:
                 ledger_update = await update_ledger(ledger, next_speaker_name, full_response, transcript, observer_names=obs_names)
+
+                # If the character explicitly asks Boru a question, ensure the moderator gets it.
+                if not ledger_update.get("addresses_boru") and not ledger_update.get("boru_question"):
+                    boru_question = _extract_boru_question(full_response)
+                    if boru_question:
+                        ledger_update["addresses_boru"] = True
+                        ledger_update["boru_question"] = boru_question
 
                 yield sse("ledger_update", {
                     "open_questions": ledger.open_questions[:10],
@@ -796,8 +868,8 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             "oracle_ready": bool(alternate_world_state),
         })
 
-        # Character evolution — run in background after debate ends (non-blocking)
-        asyncio.create_task(evolve_characters_after_debate(
+        # Character evolution — run in background after debate ends (tracked)
+        _track_task(debate_id, evolve_characters_after_debate(
             story_id=debate.story_id,
             debate_id=debate_id,
             transcript=transcript,
@@ -806,6 +878,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         ))
 
     finally:
+        # Await any remaining background tasks before final persist
+        tasks = _bg_tasks.pop(debate_id, [])
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        _audience_queues.pop(debate_id, None)
+        _stop_signals.pop(debate_id, None)
+
         # Always persist final state — even if client disconnects mid-stream
         async with session_maker() as db:
             db_debate = (await db.execute(
@@ -821,9 +900,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
 
 class OracleRequest(BaseModel):
-    character_name: str
-    question: str
-    history: list[dict] = []
+    character_name: str = Field(..., min_length=1, max_length=200)
+    question: str = Field(..., min_length=1, max_length=2000)
+    history: list[dict] = Field(default=[], max_length=50)
 
 
 @router.get("/{debate_id}/oracle")

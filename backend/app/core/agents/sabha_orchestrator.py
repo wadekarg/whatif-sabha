@@ -17,7 +17,7 @@ import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from app.config import get_analysis_llm, _make_openrouter_llm, _make_nvidia_llm, _make_github_models_llm, _make_cloudflare_llm, get_narrator_fallbacks
+from app.config import get_analysis_llm, _make_nvidia_llm, _make_github_models_llm, _make_cloudflare_llm, get_narrator_fallbacks
 from app.core.usage_tracker import tracker
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def _is_similar_to_previous(text: str, previous: list[str], threshold: float = 0
 
 
 def _get_orchestrator_llm():
-    """Get an LLM for Boru — tries Gemini first, falls back to OpenRouter, then Groq/NVIDIA."""
+    """Get an LLM for Boru — tries Gemini first, falls back to NVIDIA/Groq."""
     # Try Gemini first
     try:
         llm = get_analysis_llm()
@@ -49,13 +49,7 @@ def _get_orchestrator_llm():
     except Exception:
         pass
 
-    # Try OpenRouter free models
-    for model in ["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free", "nousresearch/hermes-3-llama-3.1-405b:free"]:
-        llm = _make_openrouter_llm(model, temperature=0.3)
-        if llm:
-            return llm
-
-    # Try Groq/NVIDIA narrator fallbacks
+    # Try NVIDIA/Groq narrator fallbacks
     fallbacks = get_narrator_fallbacks(temperature=0.3)
     if fallbacks:
         return fallbacks[0][0]
@@ -64,17 +58,7 @@ def _get_orchestrator_llm():
 
 
 async def _invoke_with_fallback(messages: list) -> str:
-    """Invoke LLM with automatic fallback across all free providers."""
-    # Prioritize FAST + CLEAN instruct models. Avoid slow or thinking models.
-    BEST_FREE = [
-        "google/gemma-4-31b-it:free",                      # 31B — fast, clean, no thinking
-        "google/gemma-3-27b-it:free",                      # 27B — proven, fast
-        "meta-llama/llama-3.3-70b-instruct:free",          # 70B — clean instruct
-        "nvidia/nemotron-nano-9b-v2:free",                 # 9B — ultra fast
-        "google/gemma-3-12b-it:free",                      # 12B — fast
-        "openai/gpt-oss-20b:free",                         # 20B — clean
-    ]
-
+    """Invoke LLM with automatic fallback across all providers."""
     providers = []
 
     # 1. NVIDIA — most reliable, no daily limit, ~40 RPM, clean instruct output
@@ -106,13 +90,7 @@ async def _invoke_with_fallback(messages: list) -> str:
     except Exception:
         pass
 
-    # 6. OpenRouter (50/day — last resort)
-    for model in BEST_FREE[:2]:
-        llm = _make_openrouter_llm(model, temperature=0.4)
-        if llm:
-            providers.append((f"or:{model.split('/')[-1].split(':')[0]}", llm))
-
-    # 7. Groq as absolute last resort
+    # 6. Groq as absolute last resort
     for llm, label in get_narrator_fallbacks(temperature=0.3):
         providers.append((label, llm))
 
@@ -418,7 +396,7 @@ Respond with JSON only:
   "questions_answered": [{{"question_id": 1, "satisfactory": true, "summary": "..."}}],
   "position_update": "one-sentence summary of this character's current stance",
   "is_repetition": false,
-  "progress_note": "brief note on how the debate moved forward (or didn't)",
+  "progress_note": "short, user-facing Boru note summarizing what changed, what remains unresolved, and what the next key issue is",
   "follow_up_questions": [{{"question": "a NEW question Boru should ask based on what was said", "directed_to": ["CharName"], "reason": "why this matters"}}],
   "wants_observer": false,
   "wanted_observer_reason": "",
@@ -438,6 +416,8 @@ FOLLOW-UP QUESTIONS:
 - Think about: contradictions in what was said, things left unsaid, consequences not considered
 - Only generate a follow-up if the response genuinely opens a new angle
 - Direct it at the character(s) most relevant to answer
+- If there are unresolved questions, mention them briefly in the progress note
+- Summarize what has changed in the debate, what remains at stake, and what the next move should be
 
 Be concise. Return ONLY valid JSON."""
 

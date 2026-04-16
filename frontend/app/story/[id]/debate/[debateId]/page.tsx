@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-
-const API = "http://localhost:8001";
+import { API } from "../../../../config";
 
 const CHAR_COLORS = [
   { text: "text-[#c07820]",   bg: "bg-[#c07820]",   ring: "ring-[#f0c060]",   hex: "#c07820" },
@@ -134,14 +133,20 @@ export default function DebateViewPage() {
       const node = ensureNode(entry.character);
       node.speeches++;
       node.r = Math.min(18 + node.speeches * 1.5, 34);
-      // Backend stores as target_character; frontend SSE stored as target
-      const targetName = (entry as any).target_character || entry.target || null;
-      if (targetName && targetName !== entry.character && targetName !== "Boru" && targetName !== "all") {
-        ensureNode(targetName);
-        const isQ = entry.message.includes("?");
-        const existing = graphEdgesRef.current.find(e => e.source === entry.character && e.target === targetName);
-        if (existing) { existing.count++; if (isQ) existing.questions++; }
-        else graphEdgesRef.current.push({ source: entry.character, target: targetName, count: 1, questions: isQ ? 1 : 0 });
+      // Backend stores as target_characters (array); frontend SSE stored as targets (array) or target_character (string for backward compat)
+      const targetNames = (entry as any).target_characters || (entry as any).targets || 
+                          ((entry as any).target_character ? [(entry as any).target_character] : []) ||
+                          (entry.target ? [entry.target] : []);
+      
+      // Create an edge for each target
+      for (const targetName of targetNames) {
+        if (targetName && targetName !== entry.character && targetName !== "Boru" && targetName !== "all") {
+          ensureNode(targetName);
+          const isQ = entry.message.includes("?");
+          const existing = graphEdgesRef.current.find(e => e.source === entry.character && e.target === targetName);
+          if (existing) { existing.count++; if (isQ) existing.questions++; }
+          else graphEdgesRef.current.push({ source: entry.character, target: targetName, count: 1, questions: isQ ? 1 : 0 });
+        }
       }
     }
     setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
@@ -476,7 +481,7 @@ export default function DebateViewPage() {
               setOracleStreaming("");
               gotDone = true;
             }
-          } catch {}
+          } catch (e) { console.error("Failed to parse oracle SSE:", e); }
         }
       }
       if (!gotDone) {
@@ -580,18 +585,6 @@ export default function DebateViewPage() {
               if ((entry as any).isReaction) return null;
               if ((entry as any).isStageDirection) return null;
 
-              // Round separator — only between actual character dialogue
-              const isDialogue = !entry.isObserver && !(entry as any).isOrchestrator && !(entry as any).isAudience;
-              let prevDialogueRound: number | null = null;
-              for (let j = i - 1; j >= 0; j--) {
-                const prev = transcript[j];
-                if (!prev.isObserver && !(prev as any).isOrchestrator && !(prev as any).isReaction && !(prev as any).isStageDirection && !(prev as any).isAudience) {
-                  prevDialogueRound = prev.round || 0;
-                  break;
-                }
-              }
-              const entryRound = entry.round || 0;
-              const showRoundSep = false;
               const isTwoChar = chars.length === 2;
               const charIdx = chars.indexOf(entry.character);
               const isRight = isTwoChar && charIdx === 1;
@@ -652,13 +645,6 @@ export default function DebateViewPage() {
 
               return (
                 <div key={i}>
-                  {showRoundSep && (
-                    <div className="flex items-center gap-3 my-4 px-1">
-                      <div className="flex-1 h-px bg-[#e8e0d5]" />
-                      <span className="text-xs uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entryRound}</span>
-                      <div className="flex-1 h-px bg-[#e8e0d5]" />
-                    </div>
-                  )}
                   <div className={`flex gap-3 py-1.5 ${isRight ? "flex-row-reverse" : ""}`}>
                     <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs mt-0.5 shadow-sm"
                       style={{ backgroundColor: c.hex }}>

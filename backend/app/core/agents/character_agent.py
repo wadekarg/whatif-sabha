@@ -1,9 +1,7 @@
-from langchain_core.messages import SystemMessage, HumanMessage
-from app.config import get_agent_llm, get_agent_fallbacks
-from app.core.agents.base_agent import build_character_system_prompt
+from typing import Optional
 
 
-def _extract_personal_directive(character_name: str, message: str) -> str | None:
+def _extract_personal_directive(character_name, message):
     """
     When Boru issues a multi-character directive ("Hamlet, address X. Claudius, explain Y."),
     extract only the sentence(s) relevant to this character. Returns None if not found.
@@ -18,7 +16,7 @@ def _extract_personal_directive(character_name: str, message: str) -> str | None
     return None
 
 
-def _summarize_own_arguments(character_name: str, debate_history: list) -> str:
+def _summarize_own_arguments(character_name, debate_history):
     """
     Build a brief summary of what this character has already said in the debate.
     Injected so the LLM knows what NOT to repeat.
@@ -42,11 +40,11 @@ def _summarize_own_arguments(character_name: str, debate_history: list) -> str:
 
 
 def _build_turn_prompt(
-    character_name: str,
-    debate_history: list,
-    correction_hint: str = None,
-    pending_questions: list = None,
-) -> tuple[str, bool]:
+    character_name,
+    debate_history,
+    correction_hint=None,
+    pending_questions=None,
+):
     """
     Build a context-aware turn prompt.
     Returns (prompt_text, is_direct_response).
@@ -117,15 +115,24 @@ def _build_turn_prompt(
     if pending_questions:
         qs = "\n".join(f"  - \"{q['question']}\" (asked by {q.get('asked_by', 'someone')})" for q in pending_questions[:3])
         prompt += (
-            f"\n\nUNANSWERED QUESTIONS DIRECTED AT YOU — you MUST address at least one:\n{qs}\n"
-            f"Work your answer naturally into your response. Don't just list answers — weave them in."
+            f"\n\n" + "="*60 + "\n"
+            f"UNANSWERED QUESTIONS DIRECTED AT YOU — DO NOT DODGE THEM.\n"
+            f"{qs}\n\n"
+            f"You MUST do all of the following:\n"
+            f"  1. Pick at least ONE of these questions and answer it directly.\n"
+            f"  2. Restate the question clearly before answering it.\n"
+            f"  3. Do not deflect, change the subject, or answer vaguely.\n"
+            f"  4. After answering, explain the consequences: what happens next, what changes for you, and what risks are exposed.\n"
+            f"  5. If you evade this question, your credibility collapses and your argument becomes weak.\n"
+            f"Integrate this naturally into your response, but make sure the question is clearly addressed."
+            f"\n" + "="*60
         )
         is_direct = True  # treat as direct response for higher token limit
 
     return prompt, is_direct
 
 
-def _inject_memories(messages: list, memories: list[str]) -> None:
+def _inject_memories(messages, memories):
     """Inject past memories as a framing message right after the system prompt."""
     if not memories:
         return
@@ -138,20 +145,27 @@ def _inject_memories(messages: list, memories: list[str]) -> None:
 
 
 async def character_respond(
-    character: dict,
-    phase: dict,
-    divergence: str,
-    debate_history: list,
-    story_title: str = "",
-    exploration_hint: str = None,
-    memory_context: list[str] = None,
-) -> str:
+    character,
+    phase,
+    divergence,
+    debate_history,
+    story_title="",
+    exploration_hint=None,
+    memory_context=None,
+    debate_progress=None,  # NEW: Short note on debate state
+):
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
 
     messages = [SystemMessage(content=system_prompt)]
 
     _inject_memories(messages, memory_context or [])
+
+    # Add debate progress note if available
+    if debate_progress:
+        messages.append(HumanMessage(content=(
+            f"[CURRENT DEBATE STATE — what's been happening so far]: {debate_progress}"
+        )))
 
     for entry in debate_history[-12:]:
         speaker = entry["character"]
@@ -177,16 +191,17 @@ async def character_respond(
 
 
 async def character_respond_stream(
-    character: dict,
-    phase: dict,
-    divergence: str,
-    debate_history: list,
-    story_title: str = "",
-    correction_hint: str = None,
-    exploration_hint: str = None,
-    memory_context: list[str] = None,
-    observer_challenge: dict | None = None,
-    pending_questions: list = None,
+    character,
+    phase,
+    divergence,
+    debate_history,
+    story_title="",
+    correction_hint=None,
+    exploration_hint=None,
+    memory_context=None,
+    observer_challenge=None,
+    pending_questions=None,
+    debate_progress=None,  # NEW: Short note on debate state
 ):
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
@@ -194,6 +209,12 @@ async def character_respond_stream(
     messages = [SystemMessage(content=system_prompt)]
 
     _inject_memories(messages, memory_context or [])
+
+    # Add debate progress note if available
+    if debate_progress:
+        messages.append(HumanMessage(content=(
+            f"[CURRENT DEBATE STATE — what's been happening so far]: {debate_progress}"
+        )))
 
     # Filter out reactions/stage directions AND most Boru messages.
     # Characters should respond to EACH OTHER, not to Boru's framing.
@@ -244,7 +265,7 @@ async def character_respond_stream(
             f"{exploration_hint}"
         )))
 
-    # Try Cerebras → OpenRouter → Groq (full fallback chain)
+    # Try full fallback chain (Cerebras → NVIDIA → GitHub → Cloudflare → Groq)
     from app.config import _is_rate_limit
 
     token_limit = 300 if is_direct else 180
@@ -275,6 +296,7 @@ async def character_continue_stream(
     previous_response: str = "",
     continuation_reason: str = "",
     exploration_hint: str = None,
+    debate_progress: str = None,  # NEW: Short note on debate state
 ):
     """
     A second pass for a character when the judge grants them more space.
@@ -285,6 +307,12 @@ async def character_continue_stream(
     system_prompt = build_character_system_prompt(character, phase, divergence)
 
     messages = [SystemMessage(content=system_prompt)]
+
+    # Add debate progress note if available
+    if debate_progress:
+        messages.append(HumanMessage(content=(
+            f"[CURRENT DEBATE STATE — what's been happening so far]: {debate_progress}"
+        )))
 
     for entry in debate_history[-12:]:
         speaker = entry["character"]
