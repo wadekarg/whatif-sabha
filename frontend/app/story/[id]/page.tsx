@@ -99,10 +99,14 @@ export default function StoryPage() {
   };
 
   useEffect(() => {
+    let stopped = false;
     const poll = async () => {
+      if (stopped) return;
       try {
         const res = await fetch(`${API}/stories/${id}/status`);
+        if (!res.ok) { if (!stopped) setTimeout(poll, 3000); return; }
         const data = await res.json();
+        if (stopped) return;
         setStatus(data.status);
         if (data.status === "ready") {
           const [sr, dr, sgr, cr] = await Promise.all([
@@ -111,13 +115,10 @@ export default function StoryPage() {
             fetch(`${API}/stories/${id}/divergence-points`),
             fetch(`${API}/stories/${id}/characters`),
           ]);
-          setStory(await sr.json());
-          setPastDebates(await dr.json());
-          const sg = await sgr.json();
-          if (Array.isArray(sg)) setSuggestions(sg);
-          const chars = await cr.json();
-          if (Array.isArray(chars)) setStoryCharacters(chars);
-          // Fetch overview independently so a failure doesn't break the page
+          if (sr.ok) setStory(await sr.json());
+          if (dr.ok) setPastDebates(await dr.json());
+          if (sgr.ok) { const sg = await sgr.json(); if (Array.isArray(sg)) setSuggestions(sg); }
+          if (cr.ok) { const chars = await cr.json(); if (Array.isArray(chars)) setStoryCharacters(chars); }
           fetch(`${API}/stories/${id}/overview`)
             .then(r => r.ok ? r.json() : null)
             .then(data => { if (data) setOverview(data); })
@@ -125,11 +126,12 @@ export default function StoryPage() {
         } else if (data.status === "error") {
           setStatus("error");
         } else {
-          setTimeout(poll, 2500);
+          if (!stopped) setTimeout(poll, 2500);
         }
-      } catch (e) { console.error("Poll error:", e); setTimeout(poll, 3000); }
+      } catch (e) { console.error("Poll error:", e); if (!stopped) setTimeout(poll, 3000); }
     };
     poll();
+    return () => { stopped = true; };
   }, [id]);
 
   useEffect(() => {

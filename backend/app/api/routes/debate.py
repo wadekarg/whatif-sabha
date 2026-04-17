@@ -370,6 +370,8 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         await db.commit()
 
     consecutive_errors = 0
+    repetition_counts: dict[str, int] = {}   # {character: strike_count}
+    correction_hints: dict[str, str] = {}    # {character: hint for next turn}
 
     is_first_round = True
     previous_phase = None
@@ -523,7 +525,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     divergence=debate.divergence_description,
                     debate_history=transcript,
                     story_title=story.title or "",
-                    correction_hint=None,
+                    correction_hint=correction_hints.pop(next_speaker_name, None),
                     exploration_hint=exploration_hint,
                     memory_context=memory_context,
                     observer_challenge=observer_challenge,
@@ -668,13 +670,20 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 divergence=debate.divergence_description,
             ))
 
-            # ── 9. Heuristic repetition check (0 LLM calls) ──
+            # ── 9. Heuristic repetition check (0 LLM calls) — escalating warnings ──
             is_repeating = ledger.is_response_repeating(next_speaker_name, full_response, transcript[:-1])
             if is_repeating:
+                # Track repeat offenders
+                repetition_counts[next_speaker_name] = repetition_counts.get(next_speaker_name, 0) + 1
+                strike = repetition_counts[next_speaker_name]
+
                 callout_msg = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="call_out_repetition",
-                    context={"speaker": next_speaker_name},
+                    context={
+                        "speaker": next_speaker_name,
+                        "strike": strike,
+                    },
                 )
                 if callout_msg:
                     yield sse("orchestrator", {"message": callout_msg, "phase": current_phase, "event": "call_out_repetition", "target": next_speaker_name})
@@ -683,6 +692,14 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         "round": round_number, "phase": current_phase,
                         "isOrchestrator": True, "orchestratorEvent": "call_out_repetition",
                     })
+
+                # Store correction hint — injected into this character's NEXT turn
+                correction_hints[next_speaker_name] = (
+                    f"WARNING: Boru just called you out for repeating yourself (strike {strike}). "
+                    f"You MUST say something completely NEW. If you repeat the same idea even slightly, "
+                    f"you will be silenced. Change your angle entirely — attack a different character, "
+                    f"raise a new consequence, confess something you've been hiding, or flip your position."
+                )
 
             # ── 10. Process ledger result + Boru replies ──
             # Boru responds if character asked a direct question
@@ -732,13 +749,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     e.get("isObserver") and e["character"] == observer["name"]
                     for e in transcript
                 )
-                obs_intro = await generate_orchestrator_message(
-                    ledger, current_phase, transcript, characters, story.title or "",
-                    event_type="observer_intro",
-                    context={"observer_name": observer["name"], "is_returning": obs_has_spoken},
-                )
-                if obs_intro:
-                    yield sse("orchestrator", {"message": obs_intro, "phase": current_phase, "event": "observer_intro", "target": observer["name"]})
+                # Only introduce if this is their first appearance — returning observers just speak
+                if not obs_has_spoken:
+                    obs_intro = await generate_orchestrator_message(
+                        ledger, current_phase, transcript, characters, story.title or "",
+                        event_type="observer_intro",
+                        context={"observer_name": observer["name"], "is_returning": False},
+                    )
+                    if obs_intro:
+                        yield sse("orchestrator", {"message": obs_intro, "phase": current_phase, "event": "observer_intro", "target": observer["name"]})
 
                 obs_response = ""
                 try:
@@ -781,6 +800,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         last_observer_at = len(transcript)
                 except Exception as obs_exc:
                     logger.warning(f"Observer failed (non-fatal): {obs_exc}")
+                    last_observer_at = len(transcript)  # reset timer even on failure
 
             # ── 13. Audience messages ──
             queue = _audience_queues.get(debate_id)
@@ -892,7 +912,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             db_debate = (await db.execute(
                 select(Debate).where(Debate.id == debate_id)
             )).scalar_one()
-            db_debate.alternate_ending = alternate_ending or db_debate.alternate_ending
+            db_debate.alternate_ending = debate_summary or alternate_ending or db_debate.alternate_ending
             db_debate.alternate_timeline = alternate_timeline or db_debate.alternate_timeline
             if alternate_world_state:
                 db_debate.alternate_world_state = alternate_world_state
@@ -1037,6 +1057,154 @@ HOW TO ANSWER:
     if not answer:
         answer = "This elephant's thoughts are momentarily elsewhere. Try asking again."
     return {"answer": answer}
+
+
+@router.get("/{debate_id}/tts/{turn_index}")
+async def get_turn_audio(debate_id: str, turn_index: int, db: AsyncSession = Depends(get_db)):
+    """Generate TTS audio for a specific debate turn. Returns MP3."""
+    from app.core.tts import generate_speech, assign_voices_to_cast, BORU_VOICE
+
+    result = await db.execute(select(Debate).where(Debate.id == debate_id))
+    debate = result.scalar_one_or_none()
+    if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+
+    transcript = debate.transcript or []
+    if turn_index < 0 or turn_index >= len(transcript):
+        raise HTTPException(status_code=404, detail="Turn not found.")
+
+    entry = transcript[turn_index]
+    text = entry.get("message", "")
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty message.")
+
+    character_name = entry.get("character", "")
+
+    story_result = await db.execute(select(Story).where(Story.id == debate.story_id))
+    story = story_result.scalar_one_or_none()
+    characters = story.analysis.get("characters", []) if story and story.analysis else []
+
+    voice_assignments = assign_voices_to_cast(characters)
+
+    if entry.get("isOrchestrator") or character_name == "Boru":
+        voice = BORU_VOICE
+    else:
+        voice = voice_assignments.get(character_name, BORU_VOICE)
+
+    emotion = entry.get("emotion", "neutral")
+    cache_key = f"{debate_id}_{turn_index}"
+    audio_bytes = await generate_speech(text, voice, emotion=emotion, cache_key=cache_key)
+
+    if not audio_bytes:
+        raise HTTPException(status_code=500, detail="TTS generation failed.")
+
+    from starlette.responses import Response
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Content-Disposition": f"inline; filename=turn_{turn_index}.mp3",
+        },
+    )
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+    character_name: str = Field(..., min_length=1)
+    emotion: str = Field(default="neutral")
+    is_orchestrator: bool = Field(default=False)
+
+
+@router.post("/{debate_id}/tts")
+async def generate_tts_audio(debate_id: str, body: TTSRequest, db: AsyncSession = Depends(get_db)):
+    """Generate TTS audio for given text + character. Works during live debates (no DB transcript lookup)."""
+    from app.core.tts import generate_speech, assign_voices_to_cast, BORU_VOICE, _clean_text_for_speech
+    import hashlib
+
+    result = await db.execute(select(Debate).where(Debate.id == debate_id))
+    debate = result.scalar_one_or_none()
+    if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+
+    story_result = await db.execute(select(Story).where(Story.id == debate.story_id))
+    story = story_result.scalar_one_or_none()
+    characters = story.analysis.get("characters", []) if story and story.analysis else []
+
+    voice_assignments = assign_voices_to_cast(characters)
+
+    if body.is_orchestrator or body.character_name == "Boru":
+        voice = BORU_VOICE
+    else:
+        voice = voice_assignments.get(body.character_name, BORU_VOICE)
+
+    # Cache key based on text hash (deterministic for same content)
+    text_hash = hashlib.md5(body.text[:200].encode()).hexdigest()[:12]
+    cache_key = f"{debate_id}_{body.character_name}_{text_hash}"
+
+    audio_bytes = await generate_speech(body.text, voice, emotion=body.emotion, cache_key=cache_key)
+
+    if not audio_bytes:
+        raise HTTPException(status_code=500, detail="TTS generation failed.")
+
+    from starlette.responses import Response
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "public, max-age=86400",
+        },
+    )
+
+
+@router.get("/{debate_id}/voices")
+async def get_debate_voices(debate_id: str, db: AsyncSession = Depends(get_db)):
+    """Return voice assignments for all characters in a debate."""
+    from app.core.tts import assign_voices_to_cast
+
+    result = await db.execute(select(Debate).where(Debate.id == debate_id))
+    debate = result.scalar_one_or_none()
+    if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+
+    story_result = await db.execute(select(Story).where(Story.id == debate.story_id))
+    story = story_result.scalar_one_or_none()
+    characters = story.analysis.get("characters", []) if story and story.analysis else []
+
+    return assign_voices_to_cast(characters)
+
+
+@router.get("/{debate_id}/tts/summary")
+async def get_summary_audio(debate_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate TTS audio for the debate summary. Returns MP3."""
+    from app.core.tts import generate_speech, BORU_VOICE
+
+    result = await db.execute(select(Debate).where(Debate.id == debate_id))
+    debate = result.scalar_one_or_none()
+    if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+
+    # The summary is stored in alternate_ending field (or we reconstruct from transcript)
+    summary = debate.alternate_ending or ""
+    if not summary:
+        raise HTTPException(status_code=404, detail="No summary available.")
+
+    cache_key = f"{debate_id}_summary"
+    # Summary is read by Boru's voice — he's the narrator
+    audio_bytes = await generate_speech(summary, BORU_VOICE, emotion="neutral", cache_key=cache_key)
+
+    if not audio_bytes:
+        raise HTTPException(status_code=500, detail="TTS generation failed.")
+
+    from starlette.responses import Response
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Content-Disposition": f"inline; filename=summary.mp3",
+        },
+    )
 
 
 @router.delete("/{debate_id}")

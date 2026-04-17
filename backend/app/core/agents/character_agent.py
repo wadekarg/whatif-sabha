@@ -24,14 +24,14 @@ def _summarize_own_arguments(character_name, debate_history):
     Injected so the LLM knows what NOT to repeat.
     """
     own_msgs = [
-        e["message"][:120] for e in debate_history
+        e["message"][:150] for e in debate_history
         if e["character"] == character_name
         and not e.get("isReaction") and not e.get("isStageDirection")
     ]
     if not own_msgs:
         return ""
-    # Take last 4 messages to keep context manageable
-    recent = own_msgs[-4:]
+    # Take last 6 messages — wider window catches more repetition
+    recent = own_msgs[-6:]
     summary = "\n".join(f"  - {m}..." for m in recent)
     return (
         f"\n\n[WHAT YOU HAVE ALREADY ARGUED — DO NOT REPEAT THESE POINTS]:\n{summary}\n"
@@ -123,7 +123,7 @@ def _build_turn_prompt(
             f"What changes for you, who gets hurt, what new danger or opportunity opens up? "
             f"Imagine the specific day, the specific choice, the specific consequence."
         )
-        is_direct = True
+        # Don't inflate token budget — pending questions are a nudge, not a direct address
 
     return prompt, is_direct
 
@@ -181,7 +181,7 @@ async def character_respond(
             f"{exploration_hint}"
         )))
 
-    llm = get_agent_llm(max_tokens=300 if is_direct else 180)
+    llm = get_agent_llm(max_tokens=220 if is_direct else 150)
     response = await llm.ainvoke(messages)
     return response.content.strip()
 
@@ -264,7 +264,7 @@ async def character_respond_stream(
     # Try full fallback chain (Cerebras → NVIDIA → GitHub → Cloudflare → Groq)
     from app.config import _is_rate_limit
 
-    token_limit = 300 if is_direct else 180
+    token_limit = 220 if is_direct else 150
     fallbacks = get_agent_fallbacks(max_tokens=token_limit)
 
     last_exc = None

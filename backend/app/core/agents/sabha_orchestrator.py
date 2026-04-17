@@ -278,9 +278,8 @@ class ArgumentLedger:
         key_words = set(re.findall(r'\b\w{4,}\b', normalized))
         for prev in self.repetition_log.get(character, []):
             prev_words = set(re.findall(r'\b\w{4,}\b', prev))
-            # Threshold 0.45 (was 0.6) — catches paraphrases like
-            # "control isn't cruelty" vs "control isn't a flaw"
-            if len(key_words & prev_words) / max(len(key_words | prev_words), 1) > 0.45:
+            # Threshold 0.35 — catches paraphrases and thematic repetition
+            if len(key_words & prev_words) / max(len(key_words | prev_words), 1) > 0.35:
                 return True
         self.repetition_log.setdefault(character, []).append(normalized)
         return False
@@ -288,7 +287,7 @@ class ArgumentLedger:
     def is_response_repeating(self, character: str, full_response: str, transcript: list[dict]) -> bool:
         """
         Direct check on the full response text against this character's prior messages.
-        Catches paraphrased repeats — threshold 0.40 (was 0.55).
+        Catches paraphrased repeats — threshold 0.30 (tighter to catch thematic loops).
         """
         response_words = set(re.findall(r'\b\w{4,}\b', full_response.lower()))
         if len(response_words) < 5:
@@ -302,7 +301,7 @@ class ArgumentLedger:
             if not prev_words:
                 continue
             similarity = len(response_words & prev_words) / max(len(response_words | prev_words), 1)
-            if similarity > 0.40:
+            if similarity > 0.30:
                 return True
         return False
 
@@ -405,20 +404,25 @@ Respond with JSON only:
   "boru_question": ""
 }}
 
+QUESTIONS ANSWERED — THIS IS CRITICAL:
+Look at the OPEN QUESTIONS in the ledger above. For EACH open question, check:
+  Did {speaker} address this question in their message? Even partially?
+If yes, add it to "questions_answered" with:
+  - "question_id": the exact ID number from the ledger (e.g. 1, 2, 3)
+  - "satisfactory": true if they gave a real answer, false if they dodged/deflected
+  - "summary": one sentence summarizing what they said about it
+Do NOT skip this. If {speaker} answered a question, it MUST appear in questions_answered.
+
 DETECTION RULES:
-- "wants_observer": true if the speaker asks for an outside perspective, mentions an observer by name, or says something like "what would X think?" where X is a world observer
-- "wanted_observer_reason": which observer and why (e.g. "Wants to hear from the Soviet analyst about propaganda")
-- "addresses_boru": true if the speaker directly addresses Boru/the Speaker/the moderator/the elephant, asks a meta-question about the debate, or challenges the process
-- "boru_question": what they asked Boru (e.g. "Why are you letting Napoleon dodge?")
+- "wants_observer": true if the speaker asks for an outside perspective or mentions an observer by name
+- "wanted_observer_reason": which observer and why
+- "addresses_boru": true if the speaker directly addresses Boru/the Speaker/the moderator/the elephant
+- "boru_question": what they asked Boru
 
 FOLLOW-UP QUESTIONS:
-- Generate 0-1 follow-up questions that Boru should ask in future rounds
-- These should be NEW angles not yet explored — creative, probing, unexpected
-- Think about: contradictions in what was said, things left unsaid, consequences not considered
-- Only generate a follow-up if the response genuinely opens a new angle
+- Generate 0-1 follow-up questions that Boru should ask — NEW angles not yet explored
 - Direct it at the character(s) most relevant to answer
-- If there are unresolved questions, mention them briefly in the progress note
-- Summarize what has changed in the debate, what remains at stake, and what the next move should be
+- Summarize what has changed in the progress_note
 
 Be concise. Return ONLY valid JSON."""
 
@@ -772,12 +776,28 @@ async def generate_orchestrator_message(
             f"1-2 sentences."
         ),
         "call_out_repetition": (
-            f"{context.get('speaker', 'Someone')} is repeating themselves. "
-            f"Be devastating but funny. Reference their SPECIFIC repeated point. Examples of your style: "
-            f"'You've said that three times now. My memory is long, {context.get('speaker', 'friend')}, but my patience is not.' "
-            f"'Even the walls are bored of that argument.' "
-            f"'I believe the flies have memorized that speech by now.' "
-            f"1 sentence, make it sting."
+            (
+                # Strike 1 — witty warning
+                f"{context.get('speaker', 'Someone')} is repeating themselves. "
+                f"Give a sharp, witty warning. Make it sting but keep it light. "
+                f"Reference the SPECIFIC point they keep making. "
+                f"Then redirect: ask them a NEW question or challenge them to take a completely different angle. "
+                f"1-2 sentences."
+            ) if context.get('strike', 1) == 1 else (
+                # Strike 2 — harsh admonishment
+                f"{context.get('speaker', 'Someone')} has been warned about repeating themselves and did it AGAIN. "
+                f"Be harsh. This is not a joke anymore. Tell them directly: you are wasting everyone's time. "
+                f"Name the repeated argument explicitly. Then DEMAND they either say something new or yield the floor "
+                f"to someone who has something fresh to say. Call on a specific other character by name. "
+                f"2 sentences, no humor — pure authority."
+            ) if context.get('strike', 1) == 2 else (
+                # Strike 3+ — public shaming + redirect
+                f"{context.get('speaker', 'Someone')} has been warned MULTIPLE TIMES and keeps repeating the same ideas. "
+                f"Shut them down. Tell them their turn is forfeit. Say something like: "
+                f"'Enough. You've said your piece — three times over. The Sabha moves on.' "
+                f"Then immediately call on a different character by name with a new question. "
+                f"2 sentences. Absolute authority. No negotiation."
+            )
         ),
         "phase_transition": (
             f"The debate is moving from '{context.get('from_phase', '')}' to '{context.get('to_phase', '')}'. "

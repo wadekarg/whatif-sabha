@@ -91,7 +91,7 @@ export default function DebatePage() {
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
-  const [showStats, setShowStats] = useState(true);
+  const [showStats, setShowStats] = useState(false);
   const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(false);
   const pendingExplorationRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -104,7 +104,203 @@ export default function DebatePage() {
   const [chatInput, setChatInput]       = useState("");
   const [chatLoading, setChatLoading]   = useState(false);
   const [debateId, setDebateId]         = useState<string>("");
+  const debateIdRef = useRef<string>("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // ── TTS: generation-based system — one audio at a time, no races ──
+  const [ttsPlaying, setTtsPlaying] = useState<number | null>(null);
+  const [ttsAutoPlay, setTtsAutoPlay] = useState(true);
+  const [ttsLoading, setTtsLoading] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsAutoPlayRef = useRef(true);
+  const ttsQueueRef = useRef<{idx: number; entry: any}[]>([]);
+  const ttsCacheRef = useRef<Map<number, string>>(new Map());
+  const ttsFetchingRef = useRef<Set<number>>(new Set());
+  const ttsGenRef = useRef(0);  // generation counter — incremented on every stop/new play
+
+  useEffect(() => { ttsAutoPlayRef.current = ttsAutoPlay; }, [ttsAutoPlay]);
+
+  // Prefetch audio (background, no playback)
+  const prefetchTTS = (turnIndex: number, entry?: any) => {
+    if (ttsCacheRef.current.has(turnIndex)) return;
+    if (ttsFetchingRef.current.has(turnIndex)) return;
+    if (!debateIdRef.current) return;
+    const e = entry || transcriptRef.current[turnIndex];
+    if (!e || !e.message || e.isReaction || e.isStageDirection) return;
+
+    ttsFetchingRef.current.add(turnIndex);
+    const gen = ttsGenRef.current;
+
+    fetch(`${API}/debates/${debateIdRef.current}/tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: e.message, character_name: e.character,
+        emotion: e.emotion || "neutral", is_orchestrator: !!e.isOrchestrator,
+      }),
+    })
+      .then(res => res.ok ? res.blob() : null)
+      .then(blob => {
+        ttsFetchingRef.current.delete(turnIndex);
+        if (blob) ttsCacheRef.current.set(turnIndex, URL.createObjectURL(blob));
+        // Only drain if this generation is still active
+        if (gen === ttsGenRef.current && ttsAutoPlayRef.current && !audioRef.current) drainQueue();
+      })
+      .catch(() => { ttsFetchingRef.current.delete(turnIndex); });
+  };
+
+  const stopAllAudio = () => {
+    ttsGenRef.current++;  // invalidate all in-flight plays
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setTtsPlaying(null);
+    setTtsLoading(null);
+  };
+
+  // Play one turn — checks generation to prevent stale plays
+  const playTTS = async (turnIndex: number, entryData?: any) => {
+    stopAllAudio();
+    const myGen = ttsGenRef.current;
+
+    const entry = entryData || transcriptRef.current[turnIndex];
+    if (!entry || !entry.message || entry.isReaction || entry.isStageDirection || !debateIdRef.current) {
+      drainQueue(); return;
+    }
+
+    setTtsLoading(turnIndex);
+
+    try {
+      let blobUrl = ttsCacheRef.current.get(turnIndex);
+
+      if (!blobUrl) {
+        const res = await fetch(`${API}/debates/${debateIdRef.current}/tts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: entry.message, character_name: entry.character,
+            emotion: entry.emotion || "neutral", is_orchestrator: !!entry.isOrchestrator,
+          }),
+        });
+        // Check if we were cancelled while fetching
+        if (myGen !== ttsGenRef.current) return;
+        if (!res.ok) throw new Error(`TTS ${res.status}`);
+        const blob = await res.blob();
+        if (myGen !== ttsGenRef.current) return;
+        blobUrl = URL.createObjectURL(blob);
+        ttsCacheRef.current.set(turnIndex, blobUrl);
+      }
+
+      // Final generation check before playing
+      if (myGen !== ttsGenRef.current) return;
+
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
+      audio.onended = () => {
+        if (myGen !== ttsGenRef.current) return;
+        audioRef.current = null;
+        setTtsPlaying(null);
+        drainQueue();
+      };
+      audio.onerror = () => {
+        if (myGen !== ttsGenRef.current) return;
+        audioRef.current = null;
+        setTtsPlaying(null);
+        setTtsLoading(null);
+        drainQueue();
+      };
+      await audio.play();
+      if (myGen !== ttsGenRef.current) { audio.pause(); return; }
+      setTtsPlaying(turnIndex);
+      setTtsLoading(null);
+    } catch (e: any) {
+      if (myGen !== ttsGenRef.current) return;
+      console.error("TTS error:", e);
+      setTtsLoading(null);
+      drainQueue();
+    }
+  };
+
+  const drainQueue = () => {
+    if (!ttsAutoPlayRef.current) return;
+    if (audioRef.current) return;  // something is playing
+    const next = ttsQueueRef.current.shift();
+    if (next) playTTS(next.idx, next.entry);
+  };
+
+  // Queue for auto-play (deduped)
+  const queueTTS = (turnIndex: number, entry?: any) => {
+    prefetchTTS(turnIndex, entry);
+    if (!ttsAutoPlayRef.current) return;
+    if (ttsQueueRef.current.some(q => q.idx === turnIndex)) return;
+    ttsQueueRef.current.push({ idx: turnIndex, entry });
+    if (!audioRef.current) drainQueue();
+  };
+
+  // Play from this message through the end
+  const playFromHere = (startIndex: number) => {
+    stopAllAudio();
+    ttsQueueRef.current = [];
+    setTtsAutoPlay(true);
+    ttsAutoPlayRef.current = true;
+    const t = transcriptRef.current;
+    for (let j = startIndex; j < t.length; j++) {
+      const e = t[j];
+      if (e && e.message && !(e as any).isReaction && !(e as any).isStageDirection) {
+        ttsQueueRef.current.push({ idx: j, entry: e });
+      }
+    }
+    drainQueue();
+  };
+
+  const [summaryPlaying, setSummaryPlaying] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  const playSummaryTTS = async () => {
+    stopAllAudio();
+    if (summaryPlaying) { setSummaryPlaying(false); return; }
+    if (!debateSummary) return;
+    const myGen = ttsGenRef.current;
+    setSummaryLoading(true);
+    try {
+      const res = await fetch(`${API}/debates/${debateIdRef.current}/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: debateSummary, character_name: "Boru", emotion: "neutral", is_orchestrator: true }),
+      });
+      if (myGen !== ttsGenRef.current) return;
+      if (!res.ok) throw new Error(`Summary TTS ${res.status}`);
+      const blob = await res.blob();
+      if (myGen !== ttsGenRef.current) return;
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { setSummaryPlaying(false); audioRef.current = null; };
+      audio.onerror = () => { setSummaryPlaying(false); setSummaryLoading(false); audioRef.current = null; };
+      await audio.play();
+      if (myGen !== ttsGenRef.current) { audio.pause(); return; }
+      setSummaryPlaying(true);
+    } catch (e: any) {
+      if (myGen !== ttsGenRef.current) return;
+      console.error("Summary TTS error:", e);
+    }
+    setSummaryLoading(false);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      ttsGenRef.current++;
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      ttsAutoPlayRef.current = false;
+      ttsQueueRef.current = [];
+      ttsCacheRef.current.forEach(url => URL.revokeObjectURL(url));
+      ttsCacheRef.current.clear();
+    };
+  }, []);
 
   // Interaction graph (SVG + D3)
   const graphSvgRef         = useRef<SVGSVGElement>(null);
@@ -167,6 +363,7 @@ export default function DebatePage() {
       .then(d => {
         if (!d || !d.transcript) return;
         setDebateId(d.id);
+        debateIdRef.current = d.id;
         setDivergence(d.divergence_description || "");
         setActiveCharacters(d.participating_characters || []);
         setAlternateEnding(d.alternate_ending || "");
@@ -721,6 +918,7 @@ export default function DebatePage() {
     });
     const data = await res.json();
     setDebateId(data.debate_id);
+    debateIdRef.current = data.debate_id;
     setActiveCharacters(data.characters);
     setStatus("running");
 
@@ -742,7 +940,7 @@ export default function DebatePage() {
         if (isExploration) pendingExplorationRef.current = null;
         // Clear any pending observer challenge for this character
         setPendingChallenge(prev => prev?.character === ev.character ? null : prev);
-        setTranscript(prev => [...prev, {
+        const newEntry = {
           character: ev.character,
           message: ev.message,
           round: ev.round || 0,
@@ -751,7 +949,12 @@ export default function DebatePage() {
           emotion: ev.emotion || "neutral",
           judgeScore: typeof ev.judge_score === "number" ? ev.judge_score : undefined,
           isExploration,
-        }]);
+        };
+        setTranscript(prev => {
+          const idx = prev.length;
+          queueTTS(idx, newEntry);
+          return [...prev, newEntry];
+        });
         setStreaming(null);
       } else if (ev.type === "ledger_update") {
         setLedgerState({
@@ -789,7 +992,7 @@ export default function DebatePage() {
         }]);
       } else if (ev.type === "orchestrator") {
         // Boru the Elephant speaks
-        setTranscript(prev => [...prev, {
+        const boruEntry = {
           character: "Boru",
           message: ev.message,
           round: 0,
@@ -798,7 +1001,12 @@ export default function DebatePage() {
           isOrchestrator: true,
           orchestratorEvent: ev.event,
           phase: ev.phase,
-        }]);
+        };
+        setTranscript(prev => {
+          const idx = prev.length;
+          queueTTS(idx, boruEntry);
+          return [...prev, boruEntry];
+        });
       } else if (ev.type === "summary_token") {
         setStreamingSummary(prev => prev + ev.text);
       } else if (ev.type === "summary_start") {
@@ -1395,15 +1603,33 @@ export default function DebatePage() {
             }}
           >
 
-            {/* Emotion legend */}
+            {/* Emotion legend + Auto-play */}
             <div className="mb-3">
-              <button
-                onClick={() => setShowLegend(v => !v)}
-                className="flex items-center gap-2 text-xs text-[#a09282] hover:text-[#6b5c4e] uppercase tracking-widest font-medium transition-colors"
-              >
-                <span>{showLegend ? "▾" : "▸"}</span>
-                Emotion colours
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setShowLegend(v => !v)}
+                  className="flex items-center gap-2 text-xs text-[#a09282] hover:text-[#6b5c4e] uppercase tracking-widest font-medium transition-colors"
+                >
+                  <span>{showLegend ? "▾" : "▸"}</span>
+                  Emotion colours
+                </button>
+                <button
+                  onClick={() => {
+                    const newVal = !ttsAutoPlay;
+                    setTtsAutoPlay(newVal);
+                    ttsAutoPlayRef.current = newVal;
+                    if (!newVal) { stopAllAudio(); ttsQueueRef.current = []; }
+                  }}
+                  className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    ttsAutoPlay
+                      ? "bg-[#c07820] text-white border-[#c07820]"
+                      : "text-[#6b5c4e] border-[#e8e0d5] hover:border-[#c07820] hover:text-[#c07820]"
+                  }`}
+                  title={ttsAutoPlay ? "Mute — stop auto-playing" : "Auto-play — read messages aloud"}
+                >
+                  {ttsAutoPlay ? "🔊 Auto-Play On" : "🔇 Auto-Play Off"}
+                </button>
+              </div>
               {showLegend && (
                 <div className="mt-2 bg-white border border-[#e8e0d5] rounded-xl px-4 py-3 grid grid-cols-3 gap-x-4 gap-y-1.5">
                   {Object.entries(EMOTION_STYLE)
@@ -1459,9 +1685,34 @@ export default function DebatePage() {
                       <span className="text-xs uppercase tracking-widest font-bold text-[#c07820]">Boru</span>
                       <span className="text-xs text-[#a09282] italic">· Speaker of the Sabha</span>
                       {(entry as any).phase && (
-                        <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-[#c07820]/10 border border-[#c07820]/20 text-[#c07820] font-medium uppercase tracking-wide">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#c07820]/10 border border-[#c07820]/20 text-[#c07820] font-medium uppercase tracking-wide">
                           {(entry as any).phase.replace(/_/g, " ")}
                         </span>
+                      )}
+                      {debateId && (
+                        <div className="ml-auto flex items-center gap-0.5">
+                          <button
+                            onClick={() => playTTS(i)}
+                            disabled={ttsLoading === i}
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${
+                              ttsPlaying === i
+                                ? "bg-[#c07820] text-white shadow-sm"
+                                : ttsLoading === i
+                                  ? "bg-[#c07820]/10 text-[#c07820] animate-pulse"
+                                  : "bg-transparent text-[#c8b89a] hover:bg-[#c07820]/10 hover:text-[#c07820]"
+                            }`}
+                            title={ttsPlaying === i ? "Stop" : "Play this message"}
+                          >
+                            {ttsPlaying === i ? "■" : "▶"}
+                          </button>
+                          <button
+                            onClick={() => playFromHere(i)}
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-transparent text-[#c8b89a] hover:bg-[#c07820]/10 hover:text-[#c07820] transition-all"
+                            title="Play from here"
+                          >
+                            ▶▶
+                          </button>
+                        </div>
                       )}
                     </div>
                     <div className="text-sm leading-relaxed text-[#3d2f20] font-medium">
@@ -1483,6 +1734,14 @@ export default function DebatePage() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-xs uppercase tracking-widest font-bold text-zinc-400">⚖ The Interrogator</span>
                         <span className="text-xs text-zinc-600 italic">· structural voice</span>
+                        {debateId && (
+                          <div className="ml-auto flex items-center gap-0.5">
+                            <button onClick={() => playTTS(i)} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${ttsPlaying === i ? "bg-zinc-500 text-white" : "text-zinc-600 hover:text-zinc-300"}`} title={ttsPlaying === i ? "Stop" : "Play"}>
+                              {ttsPlaying === i ? "■" : "▶"}
+                            </button>
+                            <button onClick={() => playFromHere(i)} className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-zinc-600 hover:text-zinc-300 transition-all" title="Play from here">▶▶</button>
+                          </div>
+                        )}
                       </div>
                       <div className="text-sm leading-relaxed text-zinc-200">
                         <ReactMarkdown components={{
@@ -1498,6 +1757,14 @@ export default function DebatePage() {
                         <span className="text-xs uppercase tracking-widest font-bold text-slate-400">🌍 World Observer</span>
                         {entry.observerEra && <span className="text-xs text-slate-500 italic">· {entry.observerEra}</span>}
                         <span className="text-xs text-slate-400 font-medium ml-1">{entry.character}</span>
+                        {debateId && (
+                          <div className="ml-auto flex items-center gap-0.5">
+                            <button onClick={() => playTTS(i)} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${ttsPlaying === i ? "bg-slate-500 text-white" : "text-slate-600 hover:text-slate-300"}`} title={ttsPlaying === i ? "Stop" : "Play"}>
+                              {ttsPlaying === i ? "■" : "▶"}
+                            </button>
+                            <button onClick={() => playFromHere(i)} className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-slate-600 hover:text-slate-300 transition-all" title="Play from here">▶▶</button>
+                          </div>
+                        )}
                       </div>
                       <div className="text-sm leading-relaxed text-slate-200">
                         <ReactMarkdown components={{
@@ -1551,6 +1818,32 @@ export default function DebatePage() {
                         )}
                         {entry.isExploration && (
                           <span title="Hidden depth — character revealed something unexpected" className="text-xs text-[#c07820] font-medium">✦</span>
+                        )}
+                        {/* TTS buttons — top right */}
+                        {debateId && (
+                          <div className="ml-auto flex items-center gap-0.5">
+                            <button
+                              onClick={() => playTTS(i)}
+                              disabled={ttsLoading === i}
+                              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${
+                                ttsPlaying === i
+                                  ? "bg-[#c07820] text-white shadow-sm"
+                                  : ttsLoading === i
+                                    ? "bg-[#f0ebe4] text-[#c8b89a] animate-pulse"
+                                    : "bg-transparent text-[#c8b89a] hover:bg-[#f0ebe4] hover:text-[#c07820]"
+                              }`}
+                              title={ttsPlaying === i ? "Stop" : "Play this message"}
+                            >
+                              {ttsPlaying === i ? "■" : "▶"}
+                            </button>
+                            <button
+                              onClick={() => playFromHere(i)}
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-transparent text-[#c8b89a] hover:bg-[#f0ebe4] hover:text-[#c07820] transition-all"
+                              title="Play from here"
+                            >
+                              ▶▶
+                            </button>
+                          </div>
                         )}
                       </div>
                       {/* Reply quote preview (WhatsApp-style) */}
@@ -2285,6 +2578,21 @@ export default function DebatePage() {
                     <div className="flex-1 h-px bg-[#e8e0d5]" />
                   </div>
                   <div className="text-xs uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Debate</div>
+                  {debateId && (
+                    <button
+                      onClick={playSummaryTTS}
+                      disabled={summaryLoading}
+                      className={`mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all ${
+                        summaryPlaying
+                          ? "bg-[#c07820] text-white shadow-md"
+                          : summaryLoading
+                            ? "bg-[#f0ebe4] text-[#c8b89a] animate-pulse"
+                            : "bg-white text-[#6b5c4e] border border-[#e8e0d5] hover:border-[#c07820] hover:text-[#c07820]"
+                      }`}
+                    >
+                      {summaryPlaying ? "■ Stop Narration" : summaryLoading ? "Loading..." : "▶ Listen to Summary"}
+                    </button>
+                  )}
                 </div>
                 <div className="text-[#2d1f14] leading-relaxed text-[15px] prose prose-stone max-w-none">
                   <ReactMarkdown components={{
