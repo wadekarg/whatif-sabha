@@ -267,5 +267,5 @@ MIT — do whatever you want with it.
 ---
 
 <p align="center">
-  <b>Built with curiosity by <a href="https://github.com/wadekarg">Gaj</a></b> — because every story deserves a second chance.
+  <b>Built with curiosity by <a href="https://github.com/wadekarg">@wadekarg</a></b> — because every story deserves a second chance.
 </p>
