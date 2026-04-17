@@ -11,6 +11,8 @@ class KeysRequest(BaseModel):
     groq_key: Optional[str] = None
     cerebras_key: Optional[str] = None
     nvidia_key: Optional[str] = None
+    anthropic_key: Optional[str] = None
+    openai_key: Optional[str] = None
 
 
 @router.post("/keys")
@@ -20,6 +22,8 @@ async def set_api_keys(body: KeysRequest):
         groq_key=body.groq_key or None,
         cerebras_key=body.cerebras_key or None,
         nvidia_key=body.nvidia_key or None,
+        anthropic_key=body.anthropic_key or None,
+        openai_key=body.openai_key or None,
     )
     return {"status": "ok"}
 
@@ -30,6 +34,8 @@ async def get_keys_status():
     runtime = get_runtime_keys()
     s = get_settings()
     return {
+        "anthropic": bool(runtime.get("ANTHROPIC_API_KEY") or s.ANTHROPIC_API_KEY),
+        "openai": bool(runtime.get("OPENAI_API_KEY") or s.OPENAI_API_KEY),
         "gemini": bool(runtime.get("GEMINI_API_KEY") or s.GEMINI_API_KEY),
         "groq": bool(runtime.get("GROQ_API_KEY") or s.GROQ_API_KEY),
         "cerebras": bool(runtime.get("CEREBRAS_API_KEY") or s.CEREBRAS_API_KEY),

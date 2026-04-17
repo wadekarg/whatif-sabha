@@ -265,7 +265,7 @@ async def analyze_story_structure(full_text: str) -> dict:
     """
     Extract story structure — title, themes, events, phases.
     Does NOT extract characters (handled by multi_pass_extractor).
-    Uses fallback chain: Gemini → NVIDIA → OpenRouter.
+    Uses fallback chain: Gemini → NVIDIA → GitHub → Cloudflare.
     """
     from app.config import get_analysis_fallbacks
     prompt = STRUCTURE_PROMPT.format(story_text=full_text)
@@ -295,7 +295,7 @@ async def analyze_story_structure(full_text: str) -> dict:
 async def analyze_story(full_text: str) -> dict:
     """
     Analyze a story using the LLM and return structured JSON.
-    Uses fallback chain: Gemini → NVIDIA → OpenRouter.
+    Uses fallback chain: Gemini → NVIDIA → GitHub → Cloudflare.
     """
     from app.config import get_analysis_fallbacks
     prompt = ANALYSIS_PROMPT.format(story_text=full_text)

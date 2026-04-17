@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,6 +9,7 @@ from app.models.story import Story
 from app.models.debate import Debate
 from app.config import get_analysis_llm
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stories", tags=["stories"])
 
 
@@ -55,8 +57,8 @@ async def delete_story(story_id: str, db: AsyncSession = Depends(get_db)):
         try:
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
-        except Exception:
-            pass
+        except OSError as e:
+            logger.warning(f"Failed to clean up PDF {pdf_path}: {e}")
 
     # Clean up ChromaDB embeddings
     try:
@@ -64,8 +66,8 @@ async def delete_story(story_id: str, db: AsyncSession = Depends(get_db)):
         client = get_chroma_client()
         collection_name = f"story_{story_id}"
         client.delete_collection(collection_name)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to clean up ChromaDB collection for {story_id}: {e}")
 
     return {"ok": True}
 

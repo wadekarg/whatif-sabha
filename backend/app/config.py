@@ -14,7 +14,8 @@ def update_runtime_keys(
     groq_key: str = None,
     cerebras_key: str = None,
     nvidia_key: str = None,
-    openrouter_key: str = None,
+    anthropic_key: str = None,
+    openai_key: str = None,
 ):
     if gemini_key:
         _runtime_keys["GEMINI_API_KEY"] = gemini_key
@@ -24,8 +25,10 @@ def update_runtime_keys(
         _runtime_keys["CEREBRAS_API_KEY"] = cerebras_key
     if nvidia_key:
         _runtime_keys["NVIDIA_API_KEY"] = nvidia_key
-    if openrouter_key:
-        _runtime_keys["OPENROUTER_API_KEY"] = openrouter_key
+    if anthropic_key:
+        _runtime_keys["ANTHROPIC_API_KEY"] = anthropic_key
+    if openai_key:
+        _runtime_keys["OPENAI_API_KEY"] = openai_key
 
 
 def get_runtime_keys() -> dict:
@@ -37,7 +40,8 @@ class Settings(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
     CEREBRAS_API_KEY: Optional[str] = None
     NVIDIA_API_KEY: Optional[str] = None
-    OPENROUTER_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
     GITHUB_MODELS_TOKEN: Optional[str] = None
     CLOUDFLARE_ACCOUNT_ID: Optional[str] = None
     CLOUDFLARE_API_TOKEN: Optional[str] = None
@@ -133,55 +137,110 @@ def _make_cloudflare_llm(model: str, temperature: float = 0.7, max_tokens: int =
     )
 
 
-def _make_openrouter_llm(model: str, temperature: float = 0.7, max_tokens: int = 300):
-    """OpenRouter — 27+ free models via OpenAI-compatible API."""
+def _make_anthropic_llm(model: str, temperature: float = 0.7, max_tokens: int = 1024):
+    """Anthropic Claude — best-in-class quality."""
+    from langchain_anthropic import ChatAnthropic
+    key = _key("ANTHROPIC_API_KEY")
+    if not key:
+        return None
+    return ChatAnthropic(
+        model=model,
+        anthropic_api_key=key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def _make_openai_llm(model: str, temperature: float = 0.7, max_tokens: int = 1024):
+    """OpenAI native — GPT-4o, GPT-4o-mini."""
     from langchain_openai import ChatOpenAI
-    key = _key("OPENROUTER_API_KEY")
+    key = _key("OPENAI_API_KEY")
     if not key:
         return None
     return ChatOpenAI(
         model=model,
         api_key=key,
-        base_url="https://openrouter.ai/api/v1",
         temperature=temperature,
         max_tokens=max_tokens,
-        default_headers={"HTTP-Referer": "https://whatif-sabha.local", "X-Title": "WhatIfSabha"},
     )
 
 
-# Free models on OpenRouter (diverse for character variety)
-# Free models on OpenRouter — sorted by capability (best first)
-# Total available: 27. We use the best text-generation ones.
-OPENROUTER_FREE_MODELS = [
-    # Tier 1: Large, high quality
-    "nousresearch/hermes-3-llama-3.1-405b:free",     # 405B — strongest free model
-    "meta-llama/llama-3.3-70b-instruct:free",         # 70B — excellent prose
-    "nvidia/nemotron-3-super-120b-a12b:free",          # 120B MoE — strong reasoning
-    "openai/gpt-oss-120b:free",                        # 120B — OpenAI open-source
-    "qwen/qwen3-next-80b-a3b-instruct:free",           # 80B MoE — multilingual
-    "minimax/minimax-m2.5:free",                       # large context, good quality
-    # Tier 2: Medium, reliable
-    "google/gemma-4-31b-it:free",                      # 31B — Google latest
-    "google/gemma-4-26b-a4b-it:free",                  # 26B MoE — efficient
-    "google/gemma-3-27b-it:free",                      # 27B — proven quality
-    "nvidia/nemotron-3-nano-30b-a3b:free",             # 30B MoE — fast
-    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",  # 24B — uncensored
-    "openai/gpt-oss-20b:free",                         # 20B
-    "z-ai/glm-4.5-air:free",                          # GLM — good at dialogue
-    "google/gemma-3-12b-it:free",                      # 12B — fast
-    "arcee-ai/trinity-large-preview:free",             # preview — varied
-    # Tier 3: Small, very fast
-    "nvidia/nemotron-nano-9b-v2:free",                 # 9B — snappy
-    "google/gemma-3-4b-it:free",                       # 4B — ultra-fast for minor chars
-    "meta-llama/llama-3.2-3b-instruct:free",           # 3B — quick reactions
-]
+# ── Provider detection for single-key mode ──
+
+# Role-based model selection per provider
+PROVIDER_ROLE_MODELS: dict[tuple[str, str], str] = {
+    ("anthropic", "agent"):    "claude-haiku-4-5-20251001",
+    ("anthropic", "judge"):    "claude-haiku-4-5-20251001",
+    ("anthropic", "narrator"): "claude-sonnet-4-20250514",
+    ("anthropic", "analysis"): "claude-sonnet-4-20250514",
+    ("openai", "agent"):       "gpt-4o-mini",
+    ("openai", "judge"):       "gpt-4o-mini",
+    ("openai", "narrator"):    "gpt-4o-mini",
+    ("openai", "analysis"):    "gpt-4o-mini",
+    ("gemini", "agent"):       "gemini-2.0-flash",
+    ("gemini", "judge"):       "gemini-2.0-flash",
+    ("gemini", "narrator"):    "gemini-2.0-flash",
+    ("gemini", "analysis"):    "gemini-2.0-flash",
+    ("groq", "agent"):         "llama-3.3-70b-versatile",
+    ("groq", "judge"):         "llama-3.3-70b-versatile",
+    ("groq", "narrator"):      "llama-3.3-70b-versatile",
+    ("groq", "analysis"):      "llama-3.3-70b-versatile",
+}
+
+# Map provider name → factory function + key name
+_PROVIDER_FACTORIES = {
+    "anthropic": ("ANTHROPIC_API_KEY", _make_anthropic_llm),
+    "openai":    ("OPENAI_API_KEY",    _make_openai_llm),
+    "gemini":    ("GEMINI_API_KEY",    None),  # Gemini uses its own ChatGoogleGenerativeAI
+    "groq":      ("GROQ_API_KEY",      _make_groq_llm),
+    "cerebras":  ("CEREBRAS_API_KEY",  None),  # Cerebras uses its own ChatCerebras
+    "nvidia":    ("NVIDIA_API_KEY",    _make_nvidia_llm),
+}
+
+
+def _available_providers() -> list[str]:
+    """Return list of providers with valid API keys configured."""
+    return [name for name, (key_name, _) in _PROVIDER_FACTORIES.items() if _key(key_name)]
+
+
+def _make_llm_for_role(role: str, temperature: float, max_tokens: int = 1024):
+    """
+    Create an LLM for a given role using whatever provider is available.
+    In single-provider mode, uses that provider. Otherwise returns None
+    (callers fall through to their existing multi-provider chains).
+    """
+    providers = _available_providers()
+    if not providers:
+        return None
+
+    # In single-provider mode OR when the preferred provider for this role isn't available
+    for provider in providers:
+        model = PROVIDER_ROLE_MODELS.get((provider, role))
+        if not model:
+            continue
+        if provider == "anthropic":
+            return _make_anthropic_llm(model, temperature=temperature, max_tokens=max_tokens)
+        elif provider == "openai":
+            return _make_openai_llm(model, temperature=temperature, max_tokens=max_tokens)
+        elif provider == "gemini":
+            try:
+                return ChatGoogleGenerativeAI(
+                    model=model, google_api_key=_key("GEMINI_API_KEY"), temperature=temperature,
+                )
+            except Exception:
+                continue
+        elif provider == "groq":
+            return _make_groq_llm(model, temperature=temperature)
+        elif provider == "nvidia":
+            return _make_nvidia_llm(model, temperature=temperature)
+    return None
 
 
 def get_model_pool() -> list[dict]:
     """
     Build a pool of available LLM instances from all configured providers.
     Each entry: {provider, model, llm, tier}
-    tier: "fast" (cerebras/groq), "smart" (gemini/nvidia), "free" (openrouter)
+    tier: "fast" (cerebras/groq), "smart" (gemini/nvidia)
     """
     pool = []
     s = get_settings()
@@ -206,11 +265,15 @@ def get_model_pool() -> list[dict]:
         if llm:
             pool.append({"provider": "nvidia", "model": model, "llm": llm, "tier": "smart"})
 
-    # OpenRouter — free models, great for parallel overflow
-    for model in OPENROUTER_FREE_MODELS:
-        llm = _make_openrouter_llm(model, temperature=0.8)
-        if llm:
-            pool.append({"provider": "openrouter", "model": model, "llm": llm, "tier": "free"})
+    # Anthropic — high quality
+    llm = _make_anthropic_llm("claude-haiku-4-5-20251001", temperature=0.85, max_tokens=300)
+    if llm:
+        pool.append({"provider": "anthropic", "model": "claude-haiku-4-5", "llm": llm, "tier": "fast"})
+
+    # OpenAI — reliable
+    llm = _make_openai_llm("gpt-4o-mini", temperature=0.85, max_tokens=300)
+    if llm:
+        pool.append({"provider": "openai", "model": "gpt-4o-mini", "llm": llm, "tier": "fast"})
 
     return pool
 
@@ -240,7 +303,7 @@ def assign_models_to_characters(characters: list[dict], pool: list[dict]) -> dic
 def get_agent_fallbacks(max_tokens: int = 300) -> list:
     """
     Character agent fallback chain:
-    Cerebras → NVIDIA (91 models, no daily limit) → OpenRouter → Groq
+    Cerebras → Anthropic → OpenAI → NVIDIA → GitHub Models → Cloudflare → Groq
     """
     candidates = []
 
@@ -250,11 +313,21 @@ def get_agent_fallbacks(max_tokens: int = 300) -> list:
     except Exception:
         pass
 
-    # 2. NVIDIA — 91 free models, ~40 RPM, NO daily token limit
+    # 2. Anthropic Claude Haiku — fast, high quality
+    llm = _make_anthropic_llm("claude-haiku-4-5-20251001", temperature=0.85, max_tokens=max_tokens)
+    if llm:
+        candidates.append((llm, "anthropic:haiku"))
+
+    # 3. OpenAI GPT-4o-mini — fast, reliable
+    llm = _make_openai_llm("gpt-4o-mini", temperature=0.85, max_tokens=max_tokens)
+    if llm:
+        candidates.append((llm, "openai:gpt-4o-mini"))
+
+    # 4. NVIDIA — 91 free models, ~40 RPM, NO daily token limit
     NVIDIA_AGENT_MODELS = [
         "meta/llama-3.3-70b-instruct",
         "meta/llama-4-maverick-17b-128e-instruct",       # Llama 4!
-        "mistralai/mistral-small-3.1-24b-instruct-2503",
+        "mistralai/mistral-small-3.2-24b-instruct",
         "google/gemma-4-31b-it",
         "deepseek-ai/deepseek-v3.2",
         "meta/llama-3.1-70b-instruct",
@@ -285,17 +358,7 @@ def get_agent_fallbacks(max_tokens: int = 300) -> list:
         if llm:
             candidates.append((llm, f"cf:{model.split('/')[-1][:20]}"))
 
-    # 5. OpenRouter free models (50/day limit — last resort)
-    OPENROUTER_AGENT_MODELS = [
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-4-31b-it:free",
-    ]
-    for model in OPENROUTER_AGENT_MODELS:
-        llm = _make_openrouter_llm(model, temperature=0.85, max_tokens=max_tokens)
-        if llm:
-            candidates.append((llm, f"or:{model.split('/')[1].split(':')[0]}"))
-
-    # 6. Groq
+    # 5. Groq
     for model in ["llama-3.3-70b-versatile", "gemma2-9b-it", "llama-3.1-8b-instant"]:
         llm = _make_groq_llm(model, temperature=0.8)
         if llm:
@@ -306,27 +369,31 @@ def get_agent_fallbacks(max_tokens: int = 300) -> list:
 
 def get_judge_fallbacks() -> list:
     """
-    NVIDIA first (no daily limit, ~40 RPM) → Groq fallbacks (daily limit but fast).
-    Judge: kimi-k2-instruct → llama-3.3-70b-versatile → gemma2-9b-it → llama-3.1-8b-instant
+    Groq first (sub-second on LPU) → Anthropic → OpenAI → NVIDIA fallback.
+    Judge needs low temperature for structured JSON output.
     """
     s = get_settings()
     candidates = [
+        (_make_groq_llm(s.JUDGE_MODEL, temperature=0.1), f"groq:{s.JUDGE_MODEL}"),
+        (_make_anthropic_llm("claude-haiku-4-5-20251001", temperature=0.1, max_tokens=500), "anthropic:haiku"),
+        (_make_openai_llm("gpt-4o-mini", temperature=0.1, max_tokens=500), "openai:gpt-4o-mini"),
         (_make_nvidia_llm(s.NVIDIA_JUDGE_MODEL, temperature=0.1), s.NVIDIA_JUDGE_MODEL),
-        (_make_groq_llm(s.JUDGE_MODEL, temperature=0.1), s.JUDGE_MODEL),
-        (_make_groq_llm("gemma2-9b-it", temperature=0.1), "gemma2-9b-it"),
-        (_make_groq_llm("llama-3.1-8b-instant", temperature=0.1), "llama-3.1-8b-instant"),
+        (_make_groq_llm("gemma2-9b-it", temperature=0.1), "groq:gemma2-9b-it"),
+        (_make_groq_llm("llama-3.1-8b-instant", temperature=0.1), "groq:llama-3.1-8b-instant"),
     ]
     return [(llm, label) for llm, label in candidates if llm is not None]
 
 
 def get_narrator_fallbacks(temperature: float = 0.6) -> list:
     """
-    NVIDIA first (no daily limit) → Groq fallbacks.
-    Narrator: meta/llama-3.3-70b-instruct → llama-3.3-70b-versatile → gemma2-9b-it → llama-3.1-8b-instant
+    NVIDIA → Anthropic → OpenAI → Groq fallbacks.
+    Narrator needs creative temperature for storytelling.
     """
     s = get_settings()
     candidates = [
         (_make_nvidia_llm(s.NVIDIA_NARRATOR_MODEL, temperature=temperature), s.NVIDIA_NARRATOR_MODEL),
+        (_make_anthropic_llm("claude-sonnet-4-20250514", temperature=temperature, max_tokens=2048), "anthropic:sonnet"),
+        (_make_openai_llm("gpt-4o-mini", temperature=temperature, max_tokens=2048), "openai:gpt-4o-mini"),
         (_make_groq_llm(s.NARRATOR_MODEL, temperature=temperature), s.NARRATOR_MODEL),
         (_make_groq_llm("gemma2-9b-it", temperature=temperature), "gemma2-9b-it"),
         (_make_groq_llm("llama-3.1-8b-instant", temperature=temperature), "llama-3.1-8b-instant"),
@@ -335,28 +402,48 @@ def get_narrator_fallbacks(temperature: float = 0.6) -> list:
 
 
 def get_analysis_llm():
-    """Gemini Flash — 1M token context. Story ingestion and chat."""
+    """Gemini Flash (1M context) preferred, falls back to any available provider."""
     s = get_settings()
     key = _key("GEMINI_API_KEY")
-    if not key:
-        raise ValueError("Gemini API key not set. Add it via the ⚙ Settings button.")
-    return ChatGoogleGenerativeAI(model=s.ANALYSIS_MODEL, google_api_key=key, temperature=0.2)
+    if key:
+        return ChatGoogleGenerativeAI(model=s.ANALYSIS_MODEL, google_api_key=key, temperature=0.2)
+    # Soft fallback — try any available provider for analysis role
+    llm = _make_llm_for_role("analysis", temperature=0.2, max_tokens=4096)
+    if llm:
+        return llm
+    raise ValueError("No API key configured. Add any key via the ⚙ Settings button.")
 
 
 def get_analysis_fallbacks() -> list:
     """
-    Gemini primary (1M context) → NVIDIA (91 models, no daily limit) → OpenRouter free.
+    Gemini → Anthropic → OpenAI → NVIDIA → GitHub Models → Cloudflare.
     For story analysis, chat, and any task needing deep story understanding.
     """
     candidates = []
 
     # 1. Gemini — primary (1M context, best for full story analysis)
-    try:
-        candidates.append((get_analysis_llm(), "gemini"))
-    except Exception:
-        pass
+    gemini_key = _key("GEMINI_API_KEY")
+    if gemini_key:
+        try:
+            s = get_settings()
+            candidates.append((
+                ChatGoogleGenerativeAI(model=s.ANALYSIS_MODEL, google_api_key=gemini_key, temperature=0.2),
+                "gemini",
+            ))
+        except Exception:
+            pass
 
-    # 2. NVIDIA — no daily token limit, ~40 RPM, massive models available
+    # 2. Anthropic Claude Sonnet — excellent analysis quality
+    llm = _make_anthropic_llm("claude-sonnet-4-20250514", temperature=0.2, max_tokens=4096)
+    if llm:
+        candidates.append((llm, "anthropic:sonnet"))
+
+    # 3. OpenAI GPT-4o-mini — reliable analysis
+    llm = _make_openai_llm("gpt-4o-mini", temperature=0.2, max_tokens=4096)
+    if llm:
+        candidates.append((llm, "openai:gpt-4o-mini"))
+
+    # 4. NVIDIA — no daily token limit, ~40 RPM, massive models available
     NVIDIA_ANALYSIS_MODELS = [
         "meta/llama-3.1-405b-instruct",                    # 405B — massive
         "mistralai/mistral-large-3-675b-instruct-2512",     # 675B — largest available
@@ -383,12 +470,6 @@ def get_analysis_fallbacks() -> list:
     llm = _make_cloudflare_llm("@cf/meta/llama-3.1-8b-instruct", temperature=0.2, max_tokens=4000)
     if llm:
         candidates.append((llm, "cf:llama-3.1-8b"))
-
-    # 5. OpenRouter (50/day — last resort)
-    for model in ["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free"]:
-        llm = _make_openrouter_llm(model, temperature=0.2, max_tokens=4000)
-        if llm:
-            candidates.append((llm, f"or:{model.split('/')[1].split(':')[0]}"))
 
     return candidates
 
@@ -426,12 +507,16 @@ async def invoke_analysis_with_fallback(messages: list) -> str:
 
 
 def get_agent_llm(max_tokens: int = 180):
-    """Cerebras qwen-3-235b — ultra-fast character agent streaming."""
+    """Cerebras preferred (ultra-fast), falls back to any available provider."""
     s = get_settings()
     key = _key("CEREBRAS_API_KEY")
-    if not key:
-        raise ValueError("Cerebras API key not set. Add it via the ⚙ Settings button.")
-    return ChatCerebras(model=s.CHARACTER_AGENT_MODEL, cerebras_api_key=key, temperature=0.85, max_tokens=max_tokens)
+    if key:
+        return ChatCerebras(model=s.CHARACTER_AGENT_MODEL, cerebras_api_key=key, temperature=0.85, max_tokens=max_tokens)
+    # Soft fallback — try any available provider for character agent role
+    llm = _make_llm_for_role("agent", temperature=0.85, max_tokens=max_tokens)
+    if llm:
+        return llm
+    raise ValueError("No API key configured. Add any key via the ⚙ Settings button.")
 
 
 def get_judge_llm():

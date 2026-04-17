@@ -389,12 +389,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 transcript.append({"character": "Boru", "message": stop_summary, "round": round_number, "phase": "closing", "isOrchestrator": True, "orchestratorEvent": "closing_summary"})
                 break
 
-            # ── 2. End condition ──
-            if await should_end_debate(ledger, current_phase, transcript, characters):
-                break
+            # ── 2. End condition (check every 4th turn, or always in closing phase) ──
+            if (current_phase == "closing" or round_number % 4 == 0) and round_number > 0:
+                if await should_end_debate(ledger, current_phase, transcript, characters):
+                    break
 
-            # ── 3. Phase transition (Boru speaks if phase changes) ──
-            if not is_first_round:
+            # ── 3. Phase transition (check every 3rd turn — phases last 5-8 turns) ──
+            if not is_first_round and round_number % 3 == 0:
                 new_phase = await decide_phase_transition(ledger, current_phase, transcript, characters)
                 if new_phase:
                     transition_msg = await generate_orchestrator_message(
@@ -511,7 +512,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 raw_buffer = ""  # buffer until we extract @target from first line
                 self_declared_target = None
                 first_line_extracted = False
-                _pqs = [q for q in ledger.open_questions if next_speaker_name in q.get("directed_to", [])]
+                _pqs = [q for q in ledger.open_questions
+                        if next_speaker_name in q.get("directed_to", [])
+                        and q.get("_times_injected", 0) < 2]
+                for q in _pqs:
+                    q["_times_injected"] = q.get("_times_injected", 0) + 1
                 async for token in character_respond_stream(
                     character=character,
                     phase=phase_state,
@@ -570,22 +575,6 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     if first_nl != -1 and first_nl < 40:
                         full_response = full_response[first_nl+1:].lstrip()
 
-                # ── 7. Judge evaluates (1 LLM call) — scores + detects target, no regeneration ──
-                traits = phase_state.get("personality_traits", [])
-                last_entry = transcript[-1] if transcript else {}
-                try:
-                    judge_result = await judge_response(
-                        character_name=next_speaker_name,
-                        character_description=character.get("description", ""),
-                        personality_traits=traits,
-                        response_text=full_response,
-                        previous_message=last_entry.get("message", ""),
-                        previous_speaker=last_entry.get("character", ""),
-                        was_directly_addressed=last_entry.get("target_character") == next_speaker_name,
-                    )
-                except Exception:
-                    judge_result = {"score": 7, "in_character": True, "feedback": "", "issue": None, "needs_continuation": False, "continuation_reason": None, "dominant_emotion": "neutral"}
-
             except Exception as e:
                 if _is_rate_limit(e):
                     yield sse("turn_error", {"character": next_speaker_name, "reason": "rate limited — retrying..."})
@@ -605,23 +594,51 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 round_number += 1
                 continue
 
+            # ── 7. Judge + Ledger in PARALLEL (biggest speed win) ──
+            # These are independent: judge scores quality, ledger tracks arguments.
+            # Running them together cuts the gap between speakers by ~50%.
+            traits = phase_state.get("personality_traits", [])
+            last_entry = transcript[-1] if transcript else {}
+            obs_names = [o["name"] for o in active_observers] if active_observers else []
+
+            async def _run_judge():
+                try:
+                    return await judge_response(
+                        character_name=next_speaker_name,
+                        character_description=character.get("description", ""),
+                        personality_traits=traits,
+                        response_text=full_response,
+                        previous_message=last_entry.get("message", ""),
+                        previous_speaker=last_entry.get("character", ""),
+                        was_directly_addressed=last_entry.get("target_character") == next_speaker_name,
+                    )
+                except Exception:
+                    return {"score": 7, "in_character": True, "feedback": "", "issue": None, "needs_continuation": False, "continuation_reason": None, "dominant_emotion": "neutral"}
+
+            async def _run_ledger():
+                if round_number % 2 == 0:
+                    return await update_ledger(ledger, next_speaker_name, full_response, transcript, observer_names=obs_names)
+                return None
+
+            judge_result, ledger_update = await asyncio.gather(_run_judge(), _run_ledger())
+
             # ── 8. Target resolution + emit character_end ──
-            # Priority: self-declared @targets > judge > heuristic
-            # Now supports multiple targets
             judge_addressed = judge_result.get("addressed_targets", [])
+            target_chars = _resolve_targets(
+                speaker_name=next_speaker_name,
+                full_response=full_response,
+                char_names=char_names,
+                transcript=transcript,
+                ledger=ledger,
+                observer_challenge=observer_challenge,
+                was_invited_by_boru=boru_spoke_this_turn,
+                judge_targets=judge_addressed,
+            )
             if self_declared_target and self_declared_target != next_speaker_name:
-                target_chars = [self_declared_target]  # Self-declared takes priority
-            else:
-                target_chars = _resolve_targets(
-                    speaker_name=next_speaker_name,
-                    full_response=full_response,
-                    char_names=char_names,
-                    transcript=transcript,
-                    ledger=ledger,
-                    observer_challenge=observer_challenge,
-                    was_invited_by_boru=boru_spoke_this_turn,
-                    judge_targets=judge_addressed,
-                )
+                if self_declared_target in target_chars:
+                    target_chars.remove(self_declared_target)
+                target_chars.insert(0, self_declared_target)
+            logger.info(f"[TARGETS] {next_speaker_name} → {target_chars} (self_declared={self_declared_target}, judge={judge_addressed})")
 
             yield sse("character_end", {
                 "character": next_speaker_name,
@@ -667,32 +684,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         "isOrchestrator": True, "orchestratorEvent": "call_out_repetition",
                     })
 
-            # ── 10. Ledger update — every 2nd turn (0 or 1 LLM call) ──
-            obs_names = [o["name"] for o in active_observers] if active_observers else []
+            # ── 10. Process ledger result + Boru replies ──
+            # Boru responds if character asked a direct question
+            boru_question = _extract_boru_question(full_response)
 
-            # Immediate Boru response on odd turns if asked directly
-            if round_number % 2 != 0:
-                boru_question = _extract_boru_question(full_response)
-                if boru_question:
-                    boru_reply = await generate_orchestrator_message(
-                        ledger, current_phase, transcript, characters, story.title or "",
-                        event_type="respond_to_character",
-                        context={"speaker": next_speaker_name, "question": boru_question},
-                    )
-                    if boru_reply:
-                        yield sse("orchestrator", {"message": boru_reply, "phase": current_phase, "event": "respond_to_character", "target": next_speaker_name})
-                        transcript.append({
-                            "character": "Boru", "message": boru_reply,
-                            "round": round_number, "phase": current_phase,
-                            "isOrchestrator": True, "orchestratorEvent": "respond_to_character",
-                        })
-
-            if round_number % 2 == 0:
-                ledger_update = await update_ledger(ledger, next_speaker_name, full_response, transcript, observer_names=obs_names)
-
-                # If the character explicitly asks Boru a question, ensure the moderator gets it.
+            if ledger_update:
+                # Ledger ran this turn — check if it detected a Boru question too
                 if not ledger_update.get("addresses_boru") and not ledger_update.get("boru_question"):
-                    boru_question = _extract_boru_question(full_response)
                     if boru_question:
                         ledger_update["addresses_boru"] = True
                         ledger_update["boru_question"] = boru_question
@@ -708,18 +706,22 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
                 # If character addressed Boru directly — Boru responds
                 if ledger_update.get("addresses_boru") and ledger_update.get("boru_question"):
-                    boru_reply = await generate_orchestrator_message(
-                        ledger, current_phase, transcript, characters, story.title or "",
-                        event_type="respond_to_character",
-                        context={"speaker": next_speaker_name, "question": ledger_update["boru_question"]},
-                    )
-                    if boru_reply:
-                        yield sse("orchestrator", {"message": boru_reply, "phase": current_phase, "event": "respond_to_character", "target": next_speaker_name})
-                        transcript.append({
-                            "character": "Boru", "message": boru_reply,
-                            "round": round_number, "phase": current_phase,
-                            "isOrchestrator": True, "orchestratorEvent": "respond_to_character",
-                        })
+                    boru_question = ledger_update["boru_question"]
+
+            # Boru responds if character asked a direct question (regardless of ledger turn)
+            if boru_question:
+                boru_reply = await generate_orchestrator_message(
+                    ledger, current_phase, transcript, characters, story.title or "",
+                    event_type="respond_to_character",
+                    context={"speaker": next_speaker_name, "question": boru_question},
+                )
+                if boru_reply:
+                    yield sse("orchestrator", {"message": boru_reply, "phase": current_phase, "event": "respond_to_character", "target": next_speaker_name})
+                    transcript.append({
+                        "character": "Boru", "message": boru_reply,
+                        "round": round_number, "phase": current_phase,
+                        "isOrchestrator": True, "orchestratorEvent": "respond_to_character",
+                    })
 
             # ── 11. (Reactions removed — they cluttered the debate without adding to the what-if discussion) ──
 

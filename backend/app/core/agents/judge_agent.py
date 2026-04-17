@@ -72,10 +72,11 @@ Evaluate THREE things:
    - A short response IS complete if it's appropriately terse — do not penalise brevity
 
 3. WHO IS THIS CHARACTER ADDRESSING?
-   Read the response carefully. Identify who {character_name} is primarily talking TO.
-   Look for: direct name mentions, "you" directed at someone, questions asked to someone specific.
-   If they address multiple people, pick the PRIMARY addressee — who gets the most weight.
-   If they're making a general statement to no one specific, use null.
+   Read the response carefully. Identify ALL characters being addressed.
+   Look for: direct name mentions, @ mentions, "you" directed at someone, questions asked to someone specific.
+   Return a list of all addressed characters, ordered by prominence (primary first).
+   If addressing multiple people, include them all: ["Boxer", "Napoleon"]
+   If making a general statement to no one specific, use empty list: []
 
 Return JSON only:
 {{
@@ -86,7 +87,8 @@ Return JSON only:
   "needs_continuation": <true/false>,
   "continuation_reason": "<one sentence on what burden is unmet, or null>",
   "dominant_emotion": "<one of: anger, cold_fury, contempt, grief, desperation, pride, guilt, shame, defiance, bitterness, jealousy, longing, righteous_indignation, humiliation, weariness, hope, betrayal, neutral>",
-  "primary_target": "<name of the character being addressed, or null if general statement>"
+  "addressed_targets": ["<character names addressed, or [] if none>"],
+  "primary_target": "<first address target (for backward compat), or null>"
 }}"""
 
     raw = await _invoke_judge(prompt)
@@ -96,7 +98,7 @@ Return JSON only:
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        return {"score": 7, "in_character": True, "feedback": "Parse error, accepted.", "issue": None, "needs_continuation": False, "continuation_reason": None, "dominant_emotion": "neutral"}
+        return {"score": 7, "in_character": True, "feedback": "Parse error, accepted.", "issue": None, "needs_continuation": False, "continuation_reason": None, "dominant_emotion": "neutral", "addressed_targets": [], "primary_target": None}
 
 
 async def should_regenerate(judge_result: dict, threshold: int = 5) -> bool:

@@ -20,7 +20,8 @@ PROVIDER_LIMITS = {
     "cerebras": {"rpm": 30, "daily": 14000},        # ~30 RPM, 14.4K/day
     "groq": {"rpm": 30, "daily": 14000},            # varies by model, ~30 RPM safe
     "gemini": {"rpm": 14, "daily": 490},            # 15 RPM, 500/day (leave margin)
-    "openrouter": {"rpm": 18, "daily": 45},         # 20 RPM, 50/day free
+    "anthropic": {"rpm": 50, "daily": None},          # generous tier-1 limits
+    "openai": {"rpm": 60, "daily": None},             # pay-as-you-go, no daily limit
     "github": {"rpm": 9, "daily": 45},              # 10 RPM, ~50/day per model
     "cloudflare": {"rpm": 50, "daily": 2000},       # generous RPM, ~2K effective daily
 }

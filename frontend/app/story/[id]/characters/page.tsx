@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-
-const API = "http://localhost:8001";
+import { API } from "../../../config";
 
 const ROLE_STYLE: Record<string, { border: string; bg: string; text: string; dot: string }> = {
   protagonist: { border: "border-l-[#c07820]",  bg: "bg-white",  text: "text-[#c07820]",  dot: "bg-[#c07820]"  },
@@ -66,7 +65,7 @@ export default function CharactersPage() {
                   <div className="flex items-start gap-3">
                     {/* Portrait */}
                     {c.portrait ? (
-                      <img src={`http://localhost:8001${c.portrait}`} alt={c.name} loading="lazy"
+                      <img src={`${API}${c.portrait}`} alt={c.name} loading="lazy"
                         className="w-11 h-11 rounded-xl object-cover shrink-0 shadow-sm border border-[#e8e0d5] group-hover:scale-105 transition-transform"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     ) : (

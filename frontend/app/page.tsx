@@ -2,8 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-const API = "http://localhost:8001";
+import { API } from "./config";
 
 const ROLE_CHIP: Record<string, string> = {
   protagonist: "bg-amber-50 border-amber-200 text-amber-900",
@@ -54,7 +53,9 @@ export default function Home() {
     try {
       await fetch(`${API}/stories/${storyId}`, { method: "DELETE" });
       setLibrary(prev => prev.filter(s => s.id !== storyId));
-    } catch {}
+    } catch (e) {
+      console.error("Failed to delete story:", e);
+    }
     setDeletingId(null);
     setConfirmDeleteId(null);
   };
@@ -82,7 +83,7 @@ export default function Home() {
               character_count: Array.isArray(chars)  ? chars.length   : 0,
               debate_count:    Array.isArray(debates) ? debates.length : 0,
             };
-          } catch { return s; }
+          } catch (e) { console.error("Failed to enrich story:", e); return s; }
         }));
         setLibrary(enriched);
         setLibraryLoading(false);
@@ -121,7 +122,7 @@ export default function Home() {
         } else if (data.status !== "error") {
           setTimeout(poll, 2500);
         }
-      } catch { if (!pollStoppedRef.current) setTimeout(poll, 3000); }
+      } catch (e) { console.error("Poll error:", e); if (!pollStoppedRef.current) setTimeout(poll, 3000); }
     };
     poll();
     return () => { pollStoppedRef.current = true; };

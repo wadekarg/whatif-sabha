@@ -4,13 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-
-const API = "http://localhost:8001";
+import { API } from "../../config";
 
 const STAGE_STEPS = ["uploaded", "analyzing", "researching"];
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
-type CharChatMsg = { role: "user" | "assistant"; content: string };
 
 const CHAR_COLORS = [
   "#c07820","#3b82f6","#10b981","#a855f7","#ec4899","#06b6d4","#f97316","#ef4444",
@@ -37,7 +35,7 @@ export default function StoryPage() {
 
   // Character chat state
   const [charChatCharacter, setCharChatCharacter] = useState<any>(null);
-  const [charMessages, setCharMessages] = useState<CharChatMsg[]>([]);
+  const [charMessages, setCharMessages] = useState<ChatMsg[]>([]);
   const [charInput, setCharInput]   = useState("");
   const [charLoading, setCharLoading] = useState(false);
   const [charStreaming, setCharStreaming] = useState("");
@@ -84,14 +82,15 @@ export default function StoryPage() {
               setCharStreaming("");
               gotDone = true;
             }
-          } catch {}
+          } catch (e) { console.error("Failed to parse SSE event:", e); }
         }
       }
       if (!gotDone) {
         setCharMessages(prev => [...prev, { role: "assistant", content: full || "Could not reach this character." }]);
         setCharStreaming("");
       }
-    } catch {
+    } catch (e) {
+      console.error("Character chat error:", e);
       setCharMessages(prev => [...prev, { role: "assistant", content: "Could not reach this character right now." }]);
       setCharStreaming("");
     } finally {
@@ -128,7 +127,7 @@ export default function StoryPage() {
         } else {
           setTimeout(poll, 2500);
         }
-      } catch { setTimeout(poll, 3000); }
+      } catch (e) { console.error("Poll error:", e); setTimeout(poll, 3000); }
     };
     poll();
   }, [id]);
@@ -152,7 +151,8 @@ export default function StoryPage() {
       });
       const data = await res.json();
       setMessages(prev => [...prev, { role: "assistant", content: data.answer }]);
-    } catch {
+    } catch (e) {
+      console.error("Chat error:", e);
       setMessages(prev => [...prev, { role: "assistant", content: "Sorry, something went wrong. Please try again." }]);
     } finally {
       setChatLoading(false);
@@ -272,7 +272,7 @@ export default function StoryPage() {
                       <Link key={`${i}-${char.name}`} href={`/story/${id}/characters/${encodeURIComponent(char.name).replace(/\./g, "%2E")}`}
                         className="flex flex-col items-center gap-1.5 shrink-0 group">
                         {char.portrait ? (
-                          <img src={`http://localhost:8001${char.portrait}`} alt={char.name} loading="lazy"
+                          <img src={`${API}${char.portrait}`} alt={char.name} loading="lazy"
                             className="w-12 h-12 rounded-full object-cover shadow-sm group-hover:scale-110 group-hover:shadow-md transition-all duration-200 ring-2 ring-white"
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                         ) : (
@@ -902,9 +902,9 @@ function DebateList({ debates, storyId, onDelete }: {
   const handleDelete = async (debateId: string) => {
     setDeletingId(debateId);
     try {
-      await fetch(`http://localhost:8001/debates/${debateId}`, { method: "DELETE" });
+      await fetch(`${API}/debates/${debateId}`, { method: "DELETE" });
       onDelete(debateId);
-    } catch {}
+    } catch (e) { console.error("Failed to delete debate:", e); }
     setDeletingId(null);
     setConfirmId(null);
   };

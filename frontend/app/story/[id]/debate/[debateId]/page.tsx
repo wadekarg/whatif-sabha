@@ -38,7 +38,7 @@ const EMOTION_STYLE: Record<string, { bg: string; label: string; dot: string }> 
   neutral:              { bg: "rgba(255,255,255,0.9)",  label: "",             dot: "#c8b89a" },
 };
 
-type DebateEntry = { character: string; message: string; round: number; target?: string; target_character?: string; emotion?: string; isObserver?: boolean; observerEra?: string; };
+type DebateEntry = { character: string; message: string; round: number; target?: string; target_character?: string; target_characters?: string[]; emotion?: string; isObserver?: boolean; observerEra?: string; };
 type GraphNode   = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; };
 type GraphEdge   = { source: string; target: string; count: number; questions: number; };
 

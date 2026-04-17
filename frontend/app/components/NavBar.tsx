@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-
-const API = "http://localhost:8001";
+import { API } from "../config";
 
 function SettingsModal({ onClose }: { onClose: () => void }) {
+  const [anthropic, setAnthropic] = useState("");
+  const [openai, setOpenai] = useState("");
   const [gemini, setGemini] = useState("");
   const [groq, setGroq] = useState("");
   const [cerebras, setCerebras] = useState("");
@@ -13,15 +14,27 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
-  const [envStatus, setEnvStatus] = useState<{gemini:boolean;groq:boolean;cerebras:boolean;nvidia:boolean} | null>(null);
+  const [showMore, setShowMore] = useState(false);
+  const [envStatus, setEnvStatus] = useState<{
+    anthropic:boolean;openai:boolean;gemini:boolean;groq:boolean;cerebras:boolean;nvidia:boolean
+  } | null>(null);
 
   useEffect(() => {
+    setAnthropic(localStorage.getItem("wis_anthropic_key") || "");
+    setOpenai(localStorage.getItem("wis_openai_key") || "");
     setGemini(localStorage.getItem("wis_gemini_key") || "");
     setGroq(localStorage.getItem("wis_groq_key") || "");
     setCerebras(localStorage.getItem("wis_cerebras_key") || "");
     setNvidia(localStorage.getItem("wis_nvidia_key") || "");
     fetch(`${API}/settings/keys/status`).then(r => r.json()).then(setEnvStatus).catch(() => {});
   }, []);
+
+  // Auto-expand "More providers" if any of those keys are already set
+  useEffect(() => {
+    if (envStatus && (envStatus.gemini || envStatus.groq || envStatus.cerebras || envStatus.nvidia)) {
+      setShowMore(true);
+    }
+  }, [envStatus]);
 
   async function save() {
     setSaving(true);
@@ -30,13 +43,24 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
       const res = await fetch(`${API}/settings/keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gemini_key: gemini, groq_key: groq, cerebras_key: cerebras, nvidia_key: nvidia }),
+        body: JSON.stringify({
+          anthropic_key: anthropic, openai_key: openai,
+          gemini_key: gemini, groq_key: groq, cerebras_key: cerebras, nvidia_key: nvidia,
+        }),
       });
       if (!res.ok) throw new Error(await res.text());
-      if (gemini) localStorage.setItem("wis_gemini_key", gemini); else localStorage.removeItem("wis_gemini_key");
-      if (groq) localStorage.setItem("wis_groq_key", groq); else localStorage.removeItem("wis_groq_key");
-      if (cerebras) localStorage.setItem("wis_cerebras_key", cerebras); else localStorage.removeItem("wis_cerebras_key");
-      if (nvidia) localStorage.setItem("wis_nvidia_key", nvidia); else localStorage.removeItem("wis_nvidia_key");
+      // Persist to localStorage
+      const pairs: [string, string, (v: string) => void][] = [
+        ["wis_anthropic_key", anthropic, setAnthropic],
+        ["wis_openai_key", openai, setOpenai],
+        ["wis_gemini_key", gemini, setGemini],
+        ["wis_groq_key", groq, setGroq],
+        ["wis_cerebras_key", cerebras, setCerebras],
+        ["wis_nvidia_key", nvidia, setNvidia],
+      ];
+      for (const [key, val] of pairs) {
+        if (val) localStorage.setItem(key, val); else localStorage.removeItem(key);
+      }
       setSaved(true);
       setTimeout(() => { setSaved(false); onClose(); }, 1200);
     } catch (e) {
@@ -47,8 +71,8 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   const KeyInput = ({
-    label, value, onChange, placeholder, href, configured
-  }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; href: string; configured?: boolean }) => (
+    label, value, onChange, placeholder, href, configured, linkText
+  }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; href: string; configured?: boolean; linkText?: string }) => (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -56,11 +80,11 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           {configured !== undefined && (
             configured
               ? <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-medium">✓ set</span>
-              : <span className="text-xs text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full font-medium">missing</span>
+              : <span className="text-xs text-[#b8a898] bg-[#f7f3ed] border border-[#e8e0d5] px-2 py-0.5 rounded-full font-medium">not set</span>
           )}
         </div>
         <a href={href} target="_blank" rel="noopener noreferrer"
-          className="text-xs text-[#c07820] hover:underline">Get free key →</a>
+          className="text-xs text-[#c07820] hover:underline">{linkText || "Get key →"}</a>
       </div>
       <input
         type="password"
@@ -77,64 +101,107 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[#f7f3ed] rounded-2xl shadow-2xl border border-[#e8e0d5] w-full max-w-md mx-4 overflow-hidden">
+      <div className="relative bg-[#f7f3ed] rounded-2xl shadow-2xl border border-[#e8e0d5] w-full max-w-md mx-4 overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="px-6 pt-5 pb-4 border-b border-[#e8e0d5]">
+        <div className="px-6 pt-5 pb-4 border-b border-[#e8e0d5] shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-bold text-lg text-[#1c1410]">AI Settings</h2>
-              <p className="text-sm text-[#6b5c4e] mt-0.5">Add your API keys. All free tiers work.</p>
+              <p className="text-sm text-[#6b5c4e] mt-0.5">Any <span className="font-semibold">one</span> key is enough to run everything.</p>
             </div>
             <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#e8e0d5] hover:bg-[#d8c8b8] flex items-center justify-center text-[#6b5c4e] text-base transition-colors">✕</button>
           </div>
         </div>
 
-        {/* Keys */}
-        <div className="px-6 py-5 space-y-4">
-          <KeyInput
-            label="Gemini API Key"
-            value={gemini}
-            onChange={setGemini}
-            placeholder="AIza..."
-            href="https://aistudio.google.com/apikey"
-            configured={envStatus?.gemini}
-          />
-          <KeyInput
-            label="Groq API Key"
-            value={groq}
-            onChange={setGroq}
-            placeholder="gsk_..."
-            href="https://console.groq.com/keys"
-            configured={envStatus?.groq}
-          />
-          <KeyInput
-            label="Cerebras API Key"
-            value={cerebras}
-            onChange={setCerebras}
-            placeholder="csk-..."
-            href="https://cloud.cerebras.ai"
-            configured={envStatus?.cerebras}
-          />
-          <KeyInput
-            label="NVIDIA API Key (optional)"
-            value={nvidia}
-            onChange={setNvidia}
-            placeholder="nvapi-..."
-            href="https://build.nvidia.com"
-            configured={envStatus?.nvidia}
-          />
+        {/* Scrollable keys area */}
+        <div className="px-6 py-5 space-y-4 overflow-y-auto">
+          {/* Quick Start — most common providers */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#c07820]">Quick Start</p>
+            <KeyInput
+              label="Anthropic (Claude)"
+              value={anthropic}
+              onChange={setAnthropic}
+              placeholder="sk-ant-..."
+              href="https://console.anthropic.com/settings/keys"
+              configured={envStatus?.anthropic}
+            />
+            <KeyInput
+              label="OpenAI"
+              value={openai}
+              onChange={setOpenai}
+              placeholder="sk-..."
+              href="https://platform.openai.com/api-keys"
+              configured={envStatus?.openai}
+            />
+            <KeyInput
+              label="Google Gemini"
+              value={gemini}
+              onChange={setGemini}
+              placeholder="AIza..."
+              href="https://aistudio.google.com/apikey"
+              configured={envStatus?.gemini}
+              linkText="Get free key →"
+            />
+          </div>
 
-          <div className="pt-1 rounded-xl bg-[#fef9f0] border border-[#f0c060]/40 px-4 py-3">
+          {/* More providers — collapsible */}
+          <div>
+            <button
+              onClick={() => setShowMore(!showMore)}
+              className="text-xs text-[#6b5c4e] hover:text-[#1c1410] flex items-center gap-1.5 transition-colors"
+            >
+              <span className="text-[10px]">{showMore ? "▾" : "▸"}</span>
+              <span className="font-medium">More providers (free tiers)</span>
+              {envStatus && (envStatus.groq || envStatus.cerebras || envStatus.nvidia) && (
+                <span className="text-xs text-emerald-600">● active</span>
+              )}
+            </button>
+            {showMore && (
+              <div className="mt-3 space-y-3">
+                <KeyInput
+                  label="Groq"
+                  value={groq}
+                  onChange={setGroq}
+                  placeholder="gsk_..."
+                  href="https://console.groq.com/keys"
+                  configured={envStatus?.groq}
+                  linkText="Get free key →"
+                />
+                <KeyInput
+                  label="Cerebras"
+                  value={cerebras}
+                  onChange={setCerebras}
+                  placeholder="csk-..."
+                  href="https://cloud.cerebras.ai"
+                  configured={envStatus?.cerebras}
+                  linkText="Get free key →"
+                />
+                <KeyInput
+                  label="NVIDIA NIM"
+                  value={nvidia}
+                  onChange={setNvidia}
+                  placeholder="nvapi-..."
+                  href="https://build.nvidia.com"
+                  configured={envStatus?.nvidia}
+                  linkText="Get free key →"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl bg-[#fef9f0] border border-[#f0c060]/40 px-4 py-3">
             <p className="text-xs text-[#6b5c4e] leading-relaxed">
-              <span className="font-semibold text-[#c07820]">How keys are used:</span>{" "}
-              Gemini · story analysis — Cerebras · character agents — Groq · judge &amp; narrator (with auto-fallback through gemma2, llama-3.1-8b) — NVIDIA · final fallback when Groq limits are hit.
+              <span className="font-semibold text-[#c07820]">Single-key mode:</span>{" "}
+              Any one key runs the full app — upload, analysis, debates, everything.
+              Multiple keys enable optimal model routing per role.
               Keys stored in your browser only.
             </p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-5 flex items-center gap-3">
+        <div className="px-6 pb-5 pt-2 flex items-center gap-3 shrink-0 border-t border-[#e8e0d5]">
           <button
             onClick={save}
             disabled={saving}
@@ -162,21 +229,31 @@ export default function NavBar() {
 
   // Push stored keys to backend on mount, then check status
   useEffect(() => {
+    const anthropic = localStorage.getItem("wis_anthropic_key");
+    const openai = localStorage.getItem("wis_openai_key");
     const gemini = localStorage.getItem("wis_gemini_key");
     const groq = localStorage.getItem("wis_groq_key");
     const cerebras = localStorage.getItem("wis_cerebras_key");
     const nvidia = localStorage.getItem("wis_nvidia_key");
 
     const pushAndCheck = async () => {
-      if (gemini || groq || cerebras || nvidia) {
+      if (anthropic || openai || gemini || groq || cerebras || nvidia) {
         await fetch(`${API}/settings/keys`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ gemini_key: gemini, groq_key: groq, cerebras_key: cerebras, nvidia_key: nvidia }),
+          body: JSON.stringify({
+            anthropic_key: anthropic, openai_key: openai,
+            gemini_key: gemini, groq_key: groq, cerebras_key: cerebras, nvidia_key: nvidia,
+          }),
         }).catch(() => {});
       }
       const status = await fetch(`${API}/settings/keys/status`).then(r => r.json()).catch(() => null);
-      if (status) setKeysConfigured(status.gemini && status.groq && status.cerebras);
+      if (status) {
+        // Any single key is enough
+        setKeysConfigured(
+          status.anthropic || status.openai || status.gemini || status.groq || status.cerebras || status.nvidia
+        );
+      }
     };
     pushAndCheck();
   }, []);
@@ -216,7 +293,7 @@ export default function NavBar() {
               <>
                 {navLink(`/story/${storyId}`, "Story", pathname === `/story/${storyId}`)}
                 {navLink(`/story/${storyId}/characters`, "Characters", pathname.includes("/characters"))}
-                {navLink(`/story/${storyId}/debate`, "Sabha ⚡", pathname.includes("/debate"))}
+                {navLink(`/story/${storyId}/debate`, "Debate ⚡", pathname.includes("/debate"))}
                 <div className="w-px h-4 bg-[#e8e0d5] mx-1" />
               </>
             )}

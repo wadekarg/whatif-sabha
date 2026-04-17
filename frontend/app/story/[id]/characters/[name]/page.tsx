@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-
-const API = "http://localhost:8001";
+import { API } from "../../../../config";
 
 /** Encode a character name for use in URL paths — also encodes dots to prevent
  *  Next.js from treating them as file extensions in dynamic segments. */

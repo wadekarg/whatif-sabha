@@ -136,55 +136,99 @@ async def synthesize_debate_summary_stream(
     debate_transcript: list,
     ledger=None,
 ):
-    """Stream a structured summary of the debate — what was argued, who said what, key moments."""
+    """Stream a detailed debate report — who said what, how they clashed, what was resolved, what the future holds."""
     char_entries = [
         e for e in debate_transcript
         if not e.get("isOrchestrator") and not e.get("isReaction")
         and not e.get("isStageDirection") and not e.get("isAudience")
     ]
 
-    # Character voices — sample across the debate (beginning, middle, end)
+    # Broad sampling — first 6, every 2nd from middle, last 8
     total = len(char_entries)
-    sample_indices = set()
-    if total <= 20:
+    if total <= 30:
         sample_indices = set(range(total))
     else:
-        # First 5, middle 5, last 10
-        sample_indices = set(range(5)) | set(range(total // 2 - 2, total // 2 + 3)) | set(range(total - 10, total))
+        mid_start, mid_end = 6, total - 8
+        mid_indices = set(range(mid_start, mid_end, 2))
+        sample_indices = set(range(6)) | mid_indices | set(range(total - 8, total))
     sampled = [char_entries[i] for i in sorted(sample_indices) if i < total]
 
+    # 350 chars per message — enough to preserve the best lines
     character_voices = "\n".join(
-        f"  {entry['character']}: \"{entry['message'][:200].strip()}\""
-        for entry in sampled
+        f"  [{i+1}/{total}] {entry['character']}: \"{entry['message'][:350].strip()}\""
+        for i, entry in enumerate(sampled)
     )
 
-    positions_text = ""
-    if ledger and ledger.character_positions:
-        positions_text = "\nFINAL POSITIONS:\n" + "\n".join(
-            f"  {name}: {pos}" for name, pos in ledger.character_positions.items()
-        )
+    # Ledger data — claims, positions, questions
+    ledger_text = ""
+    if ledger:
+        parts = []
+        if ledger.character_positions:
+            parts.append("FINAL POSITIONS:\n" + "\n".join(
+                f"  {name}: {pos}" for name, pos in ledger.character_positions.items()
+            ))
+        if ledger.claims:
+            parts.append("KEY CLAIMS MADE:\n" + "\n".join(
+                f"  - {c.get('speaker', '?')}: {c.get('claim', '')[:150]}" for c in ledger.claims[-10:]
+            ))
+        resolved = ledger.resolved_questions[-5:] if ledger.resolved_questions else []
+        open_qs = ledger.open_questions[:5] if ledger.open_questions else []
+        if resolved:
+            parts.append("QUESTIONS ANSWERED:\n" + "\n".join(
+                f"  - \"{q.get('question', '')[:120]}\" (asked by {q.get('asked_by', '?')})" for q in resolved
+            ))
+        if open_qs:
+            parts.append("QUESTIONS LEFT UNANSWERED:\n" + "\n".join(
+                f"  - \"{q.get('question', '')[:120]}\" (asked by {q.get('asked_by', '?')})" for q in open_qs
+            ))
+        if ledger.progress_summary:
+            parts.append(f"DEBATE ARC: {ledger.progress_summary}")
+        ledger_text = "\n\n".join(parts)
 
-    prompt = f"""You are summarizing a WhatIfSabha debate about "{story_title}".
+    prompt = f"""You are writing a detailed report of a WhatIfSabha debate about "{story_title}".
 
 THE QUESTION DEBATED:
 "{divergence_description}"
 
-KEY MOMENTS FROM THE DEBATE ({len(char_entries)} total exchanges):
+THE FULL DEBATE ({total} character exchanges, sampled below):
 {character_voices}
-{positions_text}
 
-Write a compelling summary of this debate (400-600 words). Structure it as:
+{ledger_text}
 
-1. THE QUESTION — What was at stake? Why does this what-if matter?
-2. THE ARGUMENTS — Who argued what? What were the strongest positions? Where did characters clash most fiercely?
-3. KEY MOMENTS — The 2-3 most powerful exchanges. Quote brief fragments that capture the intensity. (Use "..." to abbreviate.)
-4. WHAT EMERGED — What truth or insight surfaced that nobody expected? What remains unresolved?
+Write a DETAILED debate report (800-1200 words). Use this structure:
 
-Write with energy and voice — this should read like a journalist covering a heated parliamentary debate, not like a dry transcript. Name the characters. Show the tension. Make the reader feel they missed something extraordinary.
+### The Question
+What was at stake? Why does this what-if matter for these characters? Set the scene in 2-3 sentences.
 
-THE DEBATE SUMMARY:"""
+### Opening Salvos
+Who spoke first? What positions were staked out immediately? What surprised everyone? Name the characters, quote their sharpest lines (use "..." to abbreviate). Show the reader the first clash.
 
-    fallbacks = get_narrator_fallbacks(temperature=0.6)
+### The Central Fight
+What was the debate's core tension? Who was on which side? Describe the 2-3 fiercest exchanges — not just what was argued, but HOW they fought. Who landed the hardest blow? Who cracked first? Quote the lines that made the room go quiet.
+
+### The Turning Point
+Was there a moment where something shifted — a confession, an admission, an unexpected alliance? Describe it in detail. What did it change about the rest of the debate?
+
+### Questions Asked and Answered
+List the major questions that were posed during the debate and who answered them. Be specific — name the asker, the answerer, and what the answer was.
+
+### Questions Left Unanswered
+What challenges went unmet? What warnings were ignored? These are the cracks in the debate — name them honestly.
+
+### What the Future Looks Like
+Based on everything that was argued — if this what-if came true, what would the world actually look like? Not utopia, not dystopia — the messy, specific, human (or animal) reality. What would the first year look like? The first crisis? Who would thrive, who would struggle? What new dangers would emerge that nobody in the debate foresaw?
+
+WRITING STYLE:
+- Write like a war correspondent who was IN the room, not a professor reading a transcript.
+- Quote the characters directly — their best lines are the proof.
+- Name every character you mention. No "one character said" — say WHO.
+- Show the tension between speakers. The reader should feel the heat.
+- Don't sanitize. If someone said something brutal, report it.
+- The final section (the future) should feel vivid and real — specific days, specific choices, specific consequences.
+
+THE DEBATE REPORT:"""
+
+    fallbacks = get_narrator_fallbacks(temperature=0.7)
     if not fallbacks:
         raise ValueError("No narrator LLM available.")
 

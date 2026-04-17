@@ -2,7 +2,7 @@ import json
 import logging
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.database import get_db
@@ -105,8 +105,8 @@ async def get_relationship_graph(story_id: str, db: AsyncSession = Depends(get_d
 
 
 class CharacterChatRequest(BaseModel):
-    question: str
-    history: list[dict] = []
+    question: str = Field(..., min_length=1, max_length=2000)
+    history: list[dict] = Field(default=[], max_length=50)
 
 
 @router.post("/{story_id}/characters/{character_name}/chat/stream")

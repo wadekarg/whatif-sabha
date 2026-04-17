@@ -65,7 +65,7 @@ async def _invoke_with_fallback(messages: list) -> str:
     NVIDIA_ORCH_MODELS = [
         "meta/llama-3.3-70b-instruct",                      # 70B — proven, clean
         "google/gemma-4-31b-it",                             # 31B — fast
-        "mistralai/mistral-small-3.1-24b-instruct-2503",    # 24B — clean
+        "mistralai/mistral-small-3.2-24b-instruct",           # 24B — clean (3.1 retired 2026-04-15)
         "meta/llama-4-maverick-17b-128e-instruct",           # Llama 4
     ]
     for model in NVIDIA_ORCH_MODELS:
@@ -256,6 +256,7 @@ class ArgumentLedger:
             "answers": {},
             "_asked_at": 0,  # will be set to round_number when tracked in debate loop
             "_deflections": 0,  # how many times the target deflected instead of answering
+            "_times_injected": 0,  # how many times this was pushed to a character's prompt
         })
         return qid
 
@@ -463,11 +464,11 @@ Be concise. Return ONLY valid JSON."""
                     q["_deflections"] = q.get("_deflections", 0) + 1
                     # After 3 deflections, dismiss the question — the character
                     # has made clear they won't/can't answer (e.g. dead characters).
-                    if q["_deflections"] >= 3:
+                    if q["_deflections"] >= 2 or q.get("_times_injected", 0) >= 2:
                         q["status"] = "dismissed"
                         ledger.resolved_questions.append(q)
                         ledger.open_questions.remove(q)
-                        logger.info(f"Question Q{qid} dismissed after {q['_deflections']} deflections")
+                        logger.info(f"Question Q{qid} dismissed after {q['_deflections']} deflections / {q.get('_times_injected', 0)} injections")
                 break
 
     if result.get("position_update"):
@@ -828,12 +829,12 @@ async def generate_orchestrator_message(
         "respond_to_character": (
             f"{context.get('speaker', 'A character')} just addressed YOU directly. "
             f"They said/asked: \"{context.get('question', '')}\" "
-            f"Respond as Boru — in character. You can be: "
-            f"- Deflective with humor: 'I'm the Speaker, not a participant. But since you asked...' "
-            f"- Self-aware: 'An elephant moderating a debate between farm animals. Yes, I see the irony.' "
-            f"- Sharp: 'You're asking ME? Perhaps because none of your friends here will give you the answer you want.' "
-            f"- Warm if it's a genuine question about the process "
-            f"Keep it to 1-2 sentences. Stay in character."
+            f"Respond as Boru — substantively. Either: "
+            f"(a) reframe their question into something HARDER and throw it at a specific other character by name, or "
+            f"(b) point out something two characters said that contradicts each other. "
+            f"Do NOT use any formulaic opening. Do NOT start with the same phrase you've used before. "
+            f"Do NOT deflect or say you're just the Speaker. "
+            f"1-2 sentences. Be specific. Name names."
         ),
         "audience_question": (
             f"Someone from the audience has spoken! "

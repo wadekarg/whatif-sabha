@@ -5,8 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import * as d3 from "d3";
 import ReactMarkdown from "react-markdown";
-
-const API = "http://localhost:8001";
+import { API } from "../../../config";
 
 const CHAR_COLORS = [
   { text: "text-[#c07820]",   bg: "bg-[#c07820]",   ring: "ring-[#f0c060]",   hex: "#c07820" },
@@ -40,7 +39,7 @@ const EMOTION_STYLE: Record<string, { bg: string; label: string; dot: string }> 
   neutral:              { bg: "rgba(255,255,255,0.9)",  label: "",             dot: "#c8b89a" },
 };
 
-type DebateEntry = { character: string; message: string; round: number; target?: string; emotion?: string; judgeScore?: number; isExploration?: boolean; isObserver?: boolean; observerEra?: string; };
+type DebateEntry = { character: string; message: string; round: number; target?: string; target_characters?: string[]; emotion?: string; judgeScore?: number; isExploration?: boolean; isObserver?: boolean; observerEra?: string; };
 type StreamEntry = { character: string; text: string; };
 type DivPoint    = { event_id: string; description: string; affected_characters: string[]; };
 
@@ -55,14 +54,14 @@ export default function DebatePage() {
   const [suggestions, setSuggestions] = useState<DivPoint[]>([]);
   const [transcript, setTranscript] = useState<DebateEntry[]>([]);
   const [streaming, setStreaming] = useState<StreamEntry | null>(null);
-  const [alternateEnding, setAlternateEnding] = useState("");
+  const [, setAlternateEnding] = useState("");
   const [debateSummary, setDebateSummary] = useState("");
   const [streamingSummary, setStreamingSummary] = useState("");
-  const [streamingEnding, setStreamingEnding] = useState("");
+  const [, setStreamingEnding] = useState("");
   const [alternateTimeline, setAlternateTimeline] = useState<any[]>([]);
   const [showConclusion, setShowConclusion] = useState(false);
   const [oracleReady, setOracleReady] = useState(false);
-  const [showOracle, setShowOracle] = useState(false);
+  const [, setShowOracle] = useState(false);
   const [oracleCharacter, setOracleCharacter] = useState("");
   // Conclusion panel
   const [conclusionTab, setConclusionTab] = useState<"oracle"|"story">("oracle");
@@ -121,6 +120,17 @@ export default function DebatePage() {
   const [graphHover, setGraphHover] = useState<{ x: number; y: number; source: string; target: string; count: number; questions: number; snippet: string } | null>(null);
   const transcriptRef = useRef<DebateEntry[]>([]);
   const streamingSummaryRef = useRef("");
+  const esRef = useRef<EventSource | null>(null);
+
+  // Close EventSource on unmount to prevent connection leak
+  useEffect(() => {
+    return () => {
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     fetch(`${API}/stories/${id}`)
@@ -172,7 +182,8 @@ export default function DebatePage() {
             character: entry.character,
             message: entry.message,
             round: entry.round || 0,
-            target: entry.target_character || entry.target || undefined,
+            target_characters: entry.target_characters || entry.targets || (entry.target_character ? [entry.target_character] : undefined) || (entry.target ? [entry.target] : undefined),
+            target: entry.target || entry.target_character || undefined,
             emotion: entry.emotion || "neutral",
             isObserver: entry.isObserver,
             observerEra: entry.observerEra || entry.era,
@@ -316,24 +327,30 @@ export default function DebatePage() {
         lastNode.r = 12;
       }
 
-      // Edge: who is this character responding to?
-      let targetName = last.target;
-      if (!targetName || targetName === "all") {
-        // Lightweight fallback: find previous real character speaker
+      // Edges: who is this character responding to / questioning?
+      // target_characters is an array — create an edge for EACH target
+      let allTargets: string[] = [];
+      if (last.target_characters && last.target_characters.length > 0) {
+        allTargets = last.target_characters.filter(t => t !== last.character && t !== "all");
+      } else if (last.target && last.target !== "all") {
+        allTargets = [last.target];
+      }
+      // Fallback: find previous real character speaker
+      if (allTargets.length === 0) {
         for (let j = globalIdx - 1; j >= Math.max(0, globalIdx - 4); j--) {
           const prev = transcript[j];
           if ((prev as any).isReaction || (prev as any).isStageDirection) continue;
           if ((prev as any).isOrchestrator) continue;
           if (!(prev as any).isObserver && !(prev as any).isAudience && prev.character !== last.character) {
-            targetName = prev.character;
+            allTargets = [prev.character];
             break;
           }
         }
-        if (!targetName || targetName === "all") targetName = "Boru";
+        if (allTargets.length === 0) allTargets = ["Boru"];
       }
-      if (targetName && targetName !== last.character) {
+      const isQuestion = last.message.includes("?");
+      for (const targetName of allTargets) {
         ensureNode(targetName);
-        const isQuestion = last.message.includes("?");
         const existing = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === targetName);
         if (existing) {
           existing.count++;
@@ -470,7 +487,6 @@ export default function DebatePage() {
         const isQ = e.questions > 0;
         const col = isQ ? "#f0c060" : src.color;
         const strandCount = Math.min(e.count, 8); // one thin line per interaction, max 8
-        const spacing = strandCount > 1 ? Math.min(3.5, 24 / (strandCount - 1)) : 0;
 
         const el = d3.select(this);
 
@@ -709,6 +725,7 @@ export default function DebatePage() {
     setStatus("running");
 
     const es = new EventSource(`${API}/debates/${data.debate_id}/stream`);
+    esRef.current = es;
     es.onmessage = (e) => {
       const ev = JSON.parse(e.data);
       if (ev.type === "exploration") {
@@ -729,7 +746,8 @@ export default function DebatePage() {
           character: ev.character,
           message: ev.message,
           round: ev.round || 0,
-          target: ev.target_character || undefined,
+          target_characters: ev.target_characters || (ev.target_character ? [ev.target_character] : undefined) || (ev.target ? [ev.target] : undefined),
+          target: ev.target || (ev.target_character ? ev.target_character : undefined),
           emotion: ev.emotion || "neutral",
           judgeScore: typeof ev.judge_score === "number" ? ev.judge_score : undefined,
           isExploration,
@@ -885,7 +903,7 @@ export default function DebatePage() {
               setOracleStreaming("");
               gotDone = true;
             }
-          } catch {}
+          } catch (e) { console.error("Failed to parse oracle SSE:", e); }
         }
       }
       // Stream closed without a done event (network cut / server error)
@@ -928,11 +946,12 @@ export default function DebatePage() {
             if (ev.type === "token") { full += ev.text; setStoryCharStreaming(full); }
             if (ev.type === "error") { full = ev.message || "Could not reach this character."; }
             if (ev.type === "done") { setStoryCharMsgs(prev => [...prev, { role: "assistant", content: full || "…" }]); setStoryCharStreaming(""); gotDone = true; }
-          } catch {}
+          } catch (e) { console.error("Failed to parse char SSE:", e); }
         }
       }
       if (!gotDone) { setStoryCharMsgs(prev => [...prev, { role: "assistant", content: full || "Could not reach this character." }]); setStoryCharStreaming(""); }
-    } catch {
+    } catch (e) {
+      console.error("Story char chat error:", e);
       setStoryCharMsgs(prev => [...prev, { role: "assistant", content: "Could not reach this character right now." }]);
       setStoryCharStreaming("");
     } finally { setStoryCharLoading(false); }
@@ -948,7 +967,7 @@ export default function DebatePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: audienceName, message: msg }),
       });
-    } catch {}
+    } catch (e) { console.error("Audience message failed:", e); }
   };
 
   const sendDebateChat = async () => {
@@ -1038,7 +1057,7 @@ export default function DebatePage() {
                     {status === "starting" ? (
                       <><span className="animate-breathe">⚡</span> Starting…</>
                     ) : (
-                      <><span>⚡</span> Begin Sabha</>
+                      <><span>⚡</span> Start Sabha (Debate)</>
                     )}
                   </button>
                 </div>
@@ -1264,15 +1283,6 @@ export default function DebatePage() {
 
         {/* Stats bar */}
         {transcript.length > 0 && (() => {
-          // Find the latest round from actual character dialogue (not reactions/orchestrator)
-          let currentRound = 1;
-          for (let j = transcript.length - 1; j >= 0; j--) {
-            const e = transcript[j];
-            if (!(e as any).isOrchestrator && !(e as any).isReaction && !(e as any).isStageDirection && !(e as any).isAudience && !e.isObserver && e.round > 0) {
-              currentRound = e.round;
-              break;
-            }
-          }
           const sorted = [...graphStats].sort((a, b) => b.speeches - a.speeches);
           const total = sorted.reduce((s, n) => s + n.speeches, 0) || 1;
           return (
@@ -1410,21 +1420,6 @@ export default function DebatePage() {
             </div>
 
             {transcript.map((entry, i) => {
-              // Round separator: only show between actual character dialogue turns,
-              // not on reactions/stage-directions/orchestrator/observers
-              const isDialogue = !entry.isObserver && !(entry as any).isOrchestrator && !(entry as any).isReaction && !(entry as any).isStageDirection && !(entry as any).isAudience;
-              const entryRound = entry.round || 0;
-              // Find previous dialogue entry's round
-              let prevDialogueRound: number | null = null;
-              for (let j = i - 1; j >= 0; j--) {
-                const prev = transcript[j];
-                if (!prev.isObserver && !(prev as any).isOrchestrator && !(prev as any).isReaction && !(prev as any).isStageDirection && !(prev as any).isAudience) {
-                  prevDialogueRound = prev.round || 0;
-                  break;
-                }
-              }
-              // Round separators removed — debate flows as a conversation, not discrete rounds
-              const showRoundSep = false;
               const isTwoChar = activeCharacters.length === 2;
               const charIdx = activeCharacters.indexOf(entry.character);
               const isRight = isTwoChar && charIdx === 1;
@@ -1530,19 +1525,12 @@ export default function DebatePage() {
 
               return (
                 <div key={i}>
-                  {showRoundSep && (
-                    <div className="flex items-center gap-3 my-4 px-1">
-                      <div className="flex-1 h-px bg-[#e8e0d5]" />
-                      <span className="text-xs uppercase tracking-[0.2em] text-[#c8b89a] font-semibold">Round {entryRound}</span>
-                      <div className="flex-1 h-px bg-[#e8e0d5]" />
-                    </div>
-                  )}
                   <div className={`flex gap-3 py-1.5 ${isRight ? "flex-row-reverse" : ""}`}>
                     {(() => {
                       const charData = storyCharacters.find((sc: any) => sc.name === entry.character);
                       const portrait = charData?.portrait;
                       return portrait ? (
-                        <img src={`http://localhost:8001${portrait}`} alt={entry.character} loading="lazy"
+                        <img src={`${API}${portrait}`} alt={entry.character} loading="lazy"
                           className="w-8 h-8 rounded-full shrink-0 object-cover mt-0.5 shadow-sm"
                           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                       ) : (
@@ -2143,7 +2131,7 @@ export default function DebatePage() {
                     <div key={name} className="bg-white border border-[#e8e0d5] rounded-xl p-3.5">
                       <div className="flex items-center gap-2.5 mb-2">
                         {charData?.portrait ? (
-                          <img src={`http://localhost:8001${charData.portrait}`} alt={name} loading="lazy"
+                          <img src={`${API}${charData.portrait}`} alt={name} loading="lazy"
                             className="w-8 h-8 rounded-full object-cover shrink-0 shadow-sm" />
                         ) : (
                           <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs"

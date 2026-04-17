@@ -1,4 +1,6 @@
-from typing import Optional
+from langchain_core.messages import SystemMessage, HumanMessage
+from app.config import get_agent_llm, get_agent_fallbacks
+from app.core.agents.base_agent import build_character_system_prompt
 
 
 def _extract_personal_directive(character_name, message):
@@ -101,33 +103,27 @@ def _build_turn_prompt(
         else:
             prompt = (
                 f'{last_speaker} just said:\n"{snippet}"\n\n'
-                f'React — but move the story FORWARD. Don\'t restate what you\'ve already said. '
-                f'Instead: What new consequence follows from what they just said? '
-                f'What would happen next week, next month, next year in this alternate world? '
-                f'Challenge someone by name. Propose a specific scenario. Ask "and then what?" '
-                f'1–3 sentences.'
+                f'Find the CRACK in what they just said. What are they not seeing? '
+                f'What goes wrong with their vision — the first winter, the first betrayal, '
+                f'the first mouth they can\'t feed? Imagine the specific moment it falls apart. '
+                f'Then say what YOU would do differently. '
+                f'Challenge someone by name. 1–3 sentences.'
             )
 
     if correction_hint:
         prompt += f"\n\nIMPORTANT: Your last response was flagged. Correction needed: {correction_hint}"
 
-    # Inject pending questions directed at this character
+    # Inject pending questions — answer + explore what-if consequences
     if pending_questions:
-        qs = "\n".join(f"  - \"{q['question']}\" (asked by {q.get('asked_by', 'someone')})" for q in pending_questions[:3])
+        qs = "\n".join(f"  - {q.get('asked_by', 'Someone')}: \"{q['question']}\"" for q in pending_questions[:2])
         prompt += (
-            f"\n\n" + "="*60 + "\n"
-            f"UNANSWERED QUESTIONS DIRECTED AT YOU — DO NOT DODGE THEM.\n"
-            f"{qs}\n\n"
-            f"You MUST do all of the following:\n"
-            f"  1. Pick at least ONE of these questions and answer it directly.\n"
-            f"  2. Restate the question clearly before answering it.\n"
-            f"  3. Do not deflect, change the subject, or answer vaguely.\n"
-            f"  4. After answering, explain the consequences: what happens next, what changes for you, and what risks are exposed.\n"
-            f"  5. If you evade this question, your credibility collapses and your argument becomes weak.\n"
-            f"Integrate this naturally into your response, but make sure the question is clearly addressed."
-            f"\n" + "="*60
+            f"\n\nYou've been asked directly and haven't answered:\n{qs}\n"
+            f"Answer at least ONE — don't dodge it, don't restate it, just answer.\n"
+            f"Then push into the what-if: what happens NEXT because of your answer? "
+            f"What changes for you, who gets hurt, what new danger or opportunity opens up? "
+            f"Imagine the specific day, the specific choice, the specific consequence."
         )
-        is_direct = True  # treat as direct response for higher token limit
+        is_direct = True
 
     return prompt, is_direct
 

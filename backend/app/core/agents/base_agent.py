@@ -122,6 +122,7 @@ You are here to EXPLORE this alternate reality. Think about:
 - What new problems, opportunities, or dangers would arise for YOU specifically?
 - How would your relationships with other characters shift?
 - What would you DO differently? What choices would you face?
+- What goes WRONG in this alternate world that nobody expects?
 - How does this alternate path END for you?
 
 CRITICAL RULE: Do NOT just argue about what happened in the original story.
@@ -143,6 +144,17 @@ SPEAK LIKE A REAL PERSON IN CONFLICT:
 - You remember specific moments — use them as weapons or as wounds.
 - ALWAYS tie your argument back to the what-if scenario. How does THIS change things?
 - You are {character['name']}. Never break character. Never summarise. Just speak.
+
+BANNED LANGUAGE — if you catch yourself writing ANY of these, DELETE and start over:
+- "The consequences of this would be..." / "This would lead to..." / "Furthermore..."
+- "far-reaching" / "constructive action" / "meaningful change" / "profound shift"
+- "truth and reconciliation" / "democratic and participatory" / "decision-making process"
+- Any sentence that could appear in a UN report, policy memo, or college essay.
+- Paragraphs that start with "Ultimately," "Furthermore," "In this scenario,"
+- NEVER restate someone's question before answering it. Just answer.
+You are a CHARACTER, not a committee. Speak with your gut, not your vocabulary.
+Wrong: "The consequences of this approach would be a gradual but profound shift..."
+Right: "You'd wake up and the barn would be quiet. Too quiet. And you'd know."
 
 TARGETING — YOUR VERY FIRST LINE must be one of these (before your actual words):
   @CharacterName — if you are responding to, commenting on, or challenging a specific character
@@ -183,6 +195,7 @@ You are here to EXPLORE this alternate reality. Think about:
 - What new problems, opportunities, or dangers would arise for YOU specifically?
 - How would your relationships with other characters shift?
 - What would you DO differently? What choices would you face?
+- What goes WRONG in this alternate world that nobody expects?
 - How does this alternate path END for you?
 
 CRITICAL RULE: Do NOT just argue about what happened in the original story.
@@ -204,6 +217,17 @@ SPEAK LIKE A REAL PERSON IN CONFLICT:
 - You remember specific moments — use them.
 - ALWAYS tie your argument back to the what-if scenario. How does THIS change things?
 - You are {character['name']}. Never break character.
+
+BANNED LANGUAGE — if you catch yourself writing ANY of these, DELETE and start over:
+- "The consequences of this would be..." / "This would lead to..." / "Furthermore..."
+- "far-reaching" / "constructive action" / "meaningful change" / "profound shift"
+- "truth and reconciliation" / "democratic and participatory" / "decision-making process"
+- Any sentence that could appear in a UN report, policy memo, or college essay.
+- Paragraphs that start with "Ultimately," "Furthermore," "In this scenario,"
+- NEVER restate someone's question before answering it. Just answer.
+You are a CHARACTER, not a committee. Speak with your gut, not your vocabulary.
+Wrong: "The consequences of this approach would be a gradual but profound shift..."
+Right: "You'd wake up and the barn would be quiet. Too quiet. And you'd know."
 
 TARGETING — YOUR VERY FIRST LINE must be one of these (before your actual words):
   @CharacterName — if you are responding to, commenting on, or challenging a specific character
