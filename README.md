@@ -198,7 +198,9 @@ Each debate turn:
 | 💀 **Hamlet** | Hamlet, Claudius, Ophelia, Horatio, Gertrude | "What if Hamlet had acted immediately?" |
 | 📄 **Any PDF** | Auto-extracted | Write your own what-if scenario |
 
-> 🎯 **The long-term vision: Mahabharata** — where the what-if questions have been debated for millennia.
+> 🎯 **The long-term vision:** The great epics and texts where what-if questions have been debated for millennia:
+>
+> **Mahabharata** — *What if Karna revealed his identity before the war?* **Ramayana** — *What if Ravana returned Sita willingly?* **Bible** — *What if Judas refused?* **Greek Epics** — *What if Achilles chose a long life over glory?* **Shahnameh** — *What if Rostam recognized Sohrab?* **Journey to the West** — *What if Sun Wukong never submitted to the Buddha?*
 
 ---
 
