@@ -65,6 +65,7 @@ def _score_candidates(
     characters: list,
     last_speaker: str,
     last_message: str,
+    last_entry: dict = None,
 ) -> dict:
     """
     Compute a priority score for each candidate speaker.
@@ -99,6 +100,20 @@ def _score_candidates(
     msg_lower = last_message.lower()
     question_target = _detect_question_target(last_message, char_names, last_speaker)
 
+    # Also check target_characters from the last entry (multi-target support)
+    last_targets = set()
+    if isinstance(last_entry.get("target_characters"), list):
+        last_targets = set(last_entry["target_characters"])
+
+    # Boru's authority: if the MOST RECENT entry is from Boru and names a character,
+    # that character MUST speak next (Boru's word is law in the Sabha)
+    boru_called = set()
+    if debate_history and debate_history[-1].get("isOrchestrator"):
+        boru_msg = debate_history[-1].get("message", "").lower()
+        for cn in char_names:
+            if cn.lower() in boru_msg:
+                boru_called.add(cn)
+
     # Count appearances in recent turns for recency penalty
     recent_turns = [e["character"] for e in debate_history[-4:]]
 
@@ -120,13 +135,21 @@ def _score_candidates(
         recent_count = recent_turns.count(name)
         score -= recent_count * 1.0
 
-        # Direct question reward — strongest signal
-        if question_target == name:
-            score += 3.0
+        # Boru called this character by name — absolute priority (Boru's word is law)
+        if name in boru_called:
+            score += 15.0
+
+        # Direct question reward — VERY strong, overrides almost everything
+        elif question_target == name:
+            score += 8.0
+
+        # Named as a target by the speaker — strong signal (must respond)
+        elif name in last_targets:
+            score += 6.0
 
         # Named in message (addressed) — moderate signal
         elif name.lower() in msg_lower:
-            score += 2.0
+            score += 4.0
 
         # Relevance reward — does character have something to say about this topic?
         traits_text = char_traits.get(name, "")
@@ -186,7 +209,7 @@ def pick_next_speaker_with_scores(
     last_message = last_entry["message"]
 
     scores = _score_candidates(
-        debate_history, char_names, characters, last_speaker, last_message
+        debate_history, char_names, characters, last_speaker, last_message, last_entry
     )
 
     best = max(scores, key=lambda n: scores[n])

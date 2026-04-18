@@ -34,6 +34,10 @@ class Debate(Base):
     # Controls how often a character's hidden dimensions surface during debate
     character_exploration = Column(JSON, default=dict)
 
+    # Ledger snapshot — saved at debate end for replay
+    # {positions: {}, claims: [], open_questions: [], resolved_questions: [], progress: ""}
+    ledger_snapshot = Column(JSON, nullable=True)
+
     # "pending" | "running" | "completed" | "error"
     status = Column(String, default="pending")
 

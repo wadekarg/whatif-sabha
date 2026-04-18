@@ -92,7 +92,7 @@ export default function DebatePage() {
   const isDraggingRef = useRef(false);
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(false);
+  const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(true);
   const pendingExplorationRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
@@ -159,6 +159,19 @@ export default function DebatePage() {
     }
     setTtsPlaying(null);
     setTtsLoading(null);
+  };
+
+  // Toggle single message — stop if playing, play if not (clears queue)
+  const toggleTTS = (turnIndex: number) => {
+    if (ttsPlaying === turnIndex) {
+      stopAllAudio();
+      ttsQueueRef.current = [];
+      return;
+    }
+    // Stop everything, clear queue, play just this one
+    stopAllAudio();
+    ttsQueueRef.current = [];
+    playTTS(turnIndex);
   };
 
   // Play one turn — checks generation to prevent stale plays
@@ -682,34 +695,65 @@ export default function DebatePage() {
         const baseCurve = hasMirror ? 35 : 20;
 
         const isQ = e.questions > 0;
-        const col = isQ ? "#f0c060" : src.color;
-        const strandCount = Math.min(e.count, 8); // one thin line per interaction, max 8
+        const hasResponses = e.count > e.questions;
+        const col = src.color;  // always source node color
+        const strandCount = Math.min(e.count, 8);
 
         const el = d3.select(this);
 
-        // Build multiple thin strands — each with progressively more curve
-        // 1st line: slight curve, 2nd: more, 3rd: even more (fan out)
+        // Build strands — response strands are solid, question strands are dotted
         let pathsData = "";
         const mirrorOff = hasMirror ? 4 : 0;
-        for (let si = 0; si < strandCount; si++) {
-          // Progressive curve: each strand gets 12px more curve than the last
+        const responseCount = Math.min(e.count - e.questions, 6);
+        const questionCount = Math.min(e.questions, 4);
+
+        // Draw response strands (solid)
+        for (let si = 0; si < responseCount; si++) {
           const curveMult = baseCurve + si * 12;
-          // Start/end points stay at the node edges
           const sxi = src.x + ux * (src.r + 2) + px * mirrorOff;
           const syi = src.y + uy * (src.r + 2) + py * mirrorOff;
           const txi = tgt.x - ux * (tgt.r + 6) + px * mirrorOff;
           const tyi = tgt.y - uy * (tgt.r + 6) + py * mirrorOff;
-          // Control point moves further out with each strand
           const cpXi = (src.x + tgt.x) / 2 + px * curveMult;
           const cpYi = (src.y + tgt.y) / 2 + py * curveMult;
           pathsData += `M${sxi},${syi} Q${cpXi},${cpYi} ${txi},${tyi} `;
         }
 
         el.select("path")
-          .attr("d", pathsData.trim())
+          .attr("d", pathsData.trim() || `M${src.x},${src.y} L${tgt.x},${tgt.y}`)
           .attr("stroke", col)
           .attr("stroke-width", 1.2)
-          .attr("opacity", Math.min(0.35 + strandCount * 0.06, 0.75));
+          .attr("stroke-dasharray", "none")
+          .attr("opacity", hasResponses ? Math.min(0.35 + responseCount * 0.06, 0.75) : 0);
+
+        // Draw question strands (dotted, slightly offset)
+        if (questionCount > 0) {
+          let qPathsData = "";
+          const qOffset = mirrorOff + (hasResponses ? 6 : 0);
+          for (let qi = 0; qi < questionCount; qi++) {
+            const curveMult = baseCurve + (responseCount + qi) * 12 + 8;
+            const sxi = src.x + ux * (src.r + 2) + px * qOffset;
+            const syi = src.y + uy * (src.r + 2) + py * qOffset;
+            const txi = tgt.x - ux * (tgt.r + 6) + px * qOffset;
+            const tyi = tgt.y - uy * (tgt.r + 6) + py * qOffset;
+            const cpXi = (src.x + tgt.x) / 2 + px * curveMult;
+            const cpYi = (src.y + tgt.y) / 2 + py * curveMult;
+            qPathsData += `M${sxi},${syi} Q${cpXi},${cpYi} ${txi},${tyi} `;
+          }
+          // Use a second path element for dotted question lines
+          let qPath: any = el.select("path.q-strand");
+          if (qPath.empty()) {
+            qPath = el.append("path").attr("class", "q-strand").attr("fill", "none");
+          }
+          qPath
+            .attr("d", qPathsData.trim())
+            .attr("stroke", col)
+            .attr("stroke-width", 1.2)
+            .attr("stroke-dasharray", "4,3")
+            .attr("opacity", Math.min(0.4 + questionCount * 0.1, 0.8));
+        } else {
+          el.select("path.q-strand").remove();
+        }
 
         // Arrowhead on the central strand
         const sx0 = src.x + ux * (src.r + 2) + px * (hasMirror ? 4 : 0);
@@ -1032,13 +1076,18 @@ export default function DebatePage() {
       } else if (ev.type === "interrogator_token") {
         setStreaming(prev => prev ? { ...prev, text: prev.text + ev.text } : null);
       } else if (ev.type === "interrogator_end") {
-        setTranscript(prev => [...prev, {
+        const interrogatorEntry = {
           character: "The Interrogator",
           message: ev.message,
           round: 0,
           isObserver: true,
           observerEra: "structural voice",
-        }]);
+        };
+        setTranscript(prev => {
+          const idx = prev.length;
+          queueTTS(idx, interrogatorEntry);
+          return [...prev, interrogatorEntry];
+        });
         setStreaming(null);
       } else if (ev.type === "observer_challenge") {
         setPendingChallenge({ character: ev.character, observerName: ev.observer_name, question: ev.question });
@@ -1047,14 +1096,19 @@ export default function DebatePage() {
       } else if (ev.type === "observer_token") {
         setStreaming(prev => prev ? { ...prev, text: prev.text + ev.text } : null);
       } else if (ev.type === "observer_end") {
-        setTranscript(prev => [...prev, {
+        const observerEntry = {
           character: ev.observer_name,
           message: ev.message,
           round: 0,
           target: ev.question_target || undefined,
           isObserver: true,
           observerEra: ev.era || "",
-        }]);
+        };
+        setTranscript(prev => {
+          const idx = prev.length;
+          queueTTS(idx, observerEntry);
+          return [...prev, observerEntry];
+        });
         setStreaming(null);
       } else if (ev.type === "turn_error") {
         // One turn failed — debate continues, just log it silently
@@ -1590,6 +1644,75 @@ export default function DebatePage() {
         <div className="flex flex-col overflow-hidden"
           style={{ width: maximize === "right" ? "0px" : maximize === "left" ? "100%" : `${splitPct}%`, display: maximize === "right" ? "none" : "flex" }}>
 
+          {/* Fixed toolbar — status + emotions + auto-play — single line */}
+          <div className="shrink-0 border-b border-[#e8e0d5] bg-white/90 px-5 py-1.5 flex items-center gap-3 min-h-[36px]">
+            {/* Emotion legend toggle */}
+            <button
+              onClick={() => setShowLegend(v => !v)}
+              className="flex items-center gap-1.5 text-[10px] text-[#a09282] hover:text-[#6b5c4e] uppercase tracking-widest font-medium transition-colors shrink-0"
+            >
+              <span>{showLegend ? "▾" : "▸"}</span>
+              Emotions
+            </button>
+            {/* Status — centered, shows both writing + speaking side by side */}
+            <div className="flex-1 flex items-center justify-center gap-3 min-w-0">
+              {streaming && (
+                <span className="flex items-center gap-1.5 text-xs truncate">
+                  <span className="w-2 h-2 rounded-full animate-pulse shrink-0" style={{ backgroundColor: CHAR_COLORS[activeCharacters.indexOf(streaming.character) % CHAR_COLORS.length]?.hex || "#c07820" }} />
+                  <span className="font-semibold truncate" style={{ color: CHAR_COLORS[activeCharacters.indexOf(streaming.character) % CHAR_COLORS.length]?.hex || "#c07820" }}>
+                    {streaming.character}
+                  </span>
+                  <span className="text-[#a09282] shrink-0">writing...</span>
+                </span>
+              )}
+              {ttsPlaying !== null && transcript[ttsPlaying] && (
+                <span className="flex items-center gap-1.5 text-xs truncate">
+                  <span className="w-2 h-2 rounded-full bg-[#c07820] animate-pulse shrink-0" />
+                  <span className="font-semibold truncate" style={{ color: CHAR_COLORS[activeCharacters.indexOf(transcript[ttsPlaying].character) % CHAR_COLORS.length]?.hex || "#c07820" }}>
+                    {transcript[ttsPlaying].character}
+                  </span>
+                  <span className="text-[#a09282] shrink-0">speaking 🔊</span>
+                </span>
+              )}
+              {!streaming && ttsPlaying === null && status === "running" && (
+                <span className="text-[10px] text-[#c8b89a]">waiting...</span>
+              )}
+            </div>
+            {/* Auto-play toggle */}
+            <button
+              onClick={() => {
+                const newVal = !ttsAutoPlay;
+                setTtsAutoPlay(newVal);
+                ttsAutoPlayRef.current = newVal;
+                if (!newVal) { stopAllAudio(); ttsQueueRef.current = []; }
+              }}
+              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors shrink-0 ${
+                ttsAutoPlay
+                  ? "bg-[#c07820] text-white border-[#c07820]"
+                  : "text-[#6b5c4e] border-[#e8e0d5] hover:border-[#c07820] hover:text-[#c07820]"
+              }`}
+              title={ttsAutoPlay ? "Mute" : "Auto-play"}
+            >
+              {ttsAutoPlay ? "🔊 Auto-Play On" : "🔇 Auto-Play Off"}
+            </button>
+          </div>
+          {/* Emotion legend dropdown */}
+          {showLegend && (
+            <div className="shrink-0 px-5 py-2 border-b border-[#f0ebe4] bg-white/80">
+              <div className="grid grid-cols-3 gap-x-4 gap-y-1">
+                {Object.entries(EMOTION_STYLE)
+                  .filter(([key]) => key !== "neutral")
+                  .map(([key, em]) => (
+                    <div key={key} className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
+                      <span className="text-[10px] text-[#6b5c4e]">{em.label}</span>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+
           {/* Scrollable transcript */}
           <div
             ref={transcriptScrollRef}
@@ -1603,47 +1726,6 @@ export default function DebatePage() {
             }}
           >
 
-            {/* Emotion legend + Auto-play */}
-            <div className="mb-3">
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setShowLegend(v => !v)}
-                  className="flex items-center gap-2 text-xs text-[#a09282] hover:text-[#6b5c4e] uppercase tracking-widest font-medium transition-colors"
-                >
-                  <span>{showLegend ? "▾" : "▸"}</span>
-                  Emotion colours
-                </button>
-                <button
-                  onClick={() => {
-                    const newVal = !ttsAutoPlay;
-                    setTtsAutoPlay(newVal);
-                    ttsAutoPlayRef.current = newVal;
-                    if (!newVal) { stopAllAudio(); ttsQueueRef.current = []; }
-                  }}
-                  className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                    ttsAutoPlay
-                      ? "bg-[#c07820] text-white border-[#c07820]"
-                      : "text-[#6b5c4e] border-[#e8e0d5] hover:border-[#c07820] hover:text-[#c07820]"
-                  }`}
-                  title={ttsAutoPlay ? "Mute — stop auto-playing" : "Auto-play — read messages aloud"}
-                >
-                  {ttsAutoPlay ? "🔊 Auto-Play On" : "🔇 Auto-Play Off"}
-                </button>
-              </div>
-              {showLegend && (
-                <div className="mt-2 bg-white border border-[#e8e0d5] rounded-xl px-4 py-3 grid grid-cols-3 gap-x-4 gap-y-1.5">
-                  {Object.entries(EMOTION_STYLE)
-                    .filter(([key]) => key !== "neutral")
-                    .map(([key, em]) => (
-                      <div key={key} className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
-                        <span className="text-xs text-[#6b5c4e]">{em.label}</span>
-                      </div>
-                    ))
-                  }
-                </div>
-              )}
-            </div>
 
             {transcript.map((entry, i) => {
               const isTwoChar = activeCharacters.length === 2;
@@ -1692,7 +1774,7 @@ export default function DebatePage() {
                       {debateId && (
                         <div className="ml-auto flex items-center gap-0.5">
                           <button
-                            onClick={() => playTTS(i)}
+                            onClick={() => toggleTTS(i)}
                             disabled={ttsLoading === i}
                             className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${
                               ttsPlaying === i
@@ -1736,7 +1818,7 @@ export default function DebatePage() {
                         <span className="text-xs text-zinc-600 italic">· structural voice</span>
                         {debateId && (
                           <div className="ml-auto flex items-center gap-0.5">
-                            <button onClick={() => playTTS(i)} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${ttsPlaying === i ? "bg-zinc-500 text-white" : "text-zinc-600 hover:text-zinc-300"}`} title={ttsPlaying === i ? "Stop" : "Play"}>
+                            <button onClick={() => toggleTTS(i)} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${ttsPlaying === i ? "bg-zinc-500 text-white" : "text-zinc-600 hover:text-zinc-300"}`} title={ttsPlaying === i ? "Stop" : "Play"}>
                               {ttsPlaying === i ? "■" : "▶"}
                             </button>
                             <button onClick={() => playFromHere(i)} className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-zinc-600 hover:text-zinc-300 transition-all" title="Play from here">▶▶</button>
@@ -1759,7 +1841,7 @@ export default function DebatePage() {
                         <span className="text-xs text-slate-400 font-medium ml-1">{entry.character}</span>
                         {debateId && (
                           <div className="ml-auto flex items-center gap-0.5">
-                            <button onClick={() => playTTS(i)} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${ttsPlaying === i ? "bg-slate-500 text-white" : "text-slate-600 hover:text-slate-300"}`} title={ttsPlaying === i ? "Stop" : "Play"}>
+                            <button onClick={() => toggleTTS(i)} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${ttsPlaying === i ? "bg-slate-500 text-white" : "text-slate-600 hover:text-slate-300"}`} title={ttsPlaying === i ? "Stop" : "Play"}>
                               {ttsPlaying === i ? "■" : "▶"}
                             </button>
                             <button onClick={() => playFromHere(i)} className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-slate-600 hover:text-slate-300 transition-all" title="Play from here">▶▶</button>
@@ -1823,7 +1905,7 @@ export default function DebatePage() {
                         {debateId && (
                           <div className="ml-auto flex items-center gap-0.5">
                             <button
-                              onClick={() => playTTS(i)}
+                              onClick={() => toggleTTS(i)}
                               disabled={ttsLoading === i}
                               className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${
                                 ttsPlaying === i
@@ -2282,9 +2364,10 @@ export default function DebatePage() {
                 </button>
                 {!graphLegendCollapsed && (
                   <div className="px-3 pb-2.5 space-y-1.5 border-t border-[#e8e0d5]">
-                    <div className="flex items-center gap-2 pt-1.5"><div className="w-8 h-px bg-[#8a7260]/50" /><span className="text-[#8a7260] text-xs">Replied</span></div>
-                    <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#c07820]/70" /><span className="text-[#c07820]/80 text-xs">Asked question</span></div>
+                    <div className="flex items-center gap-2 pt-1.5"><div className="w-8 h-px bg-[#8a7260]/50" /><span className="text-[#8a7260] text-xs">Response (solid)</span></div>
+                    <div className="flex items-center gap-2"><div className="w-8 border-t border-dashed border-[#8a7260]/70" /><span className="text-[#8a7260] text-xs">Question (dotted)</span></div>
                     <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#8a7260]/40 border border-[#8a7260]/40" /><span className="text-[#a09282] text-xs">Node size = speeches</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-0.5 bg-[#8a7260]/50" /><span className="text-[#a09282] text-xs">Color = speaker</span></div>
                   </div>
                 )}
               </div>

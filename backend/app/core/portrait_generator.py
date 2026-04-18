@@ -98,7 +98,7 @@ async def generate_single_portrait(
     )
 
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=45)) as resp:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=90)) as resp:
             if resp.status == 200:
                 data = await resp.read()
                 if len(data) > 1000:  # sanity check — not an error page
@@ -141,20 +141,19 @@ async def generate_all_portraits(
     async with aiohttp.ClientSession() as session:
         async def _generate_bounded(char: dict):
             async with semaphore:
-                # First attempt
-                path = await generate_single_portrait(char, story_id, story_title, session)
-                if path:
-                    results[char["name"]] = path
-                    if log_fn:
-                        await log_fn(f"🎨 Portrait ready: {char['name']}")
-                    return
-                # Retry once after backoff
-                await asyncio.sleep(5)
-                path = await generate_single_portrait(char, story_id, story_title, session)
-                if path:
-                    results[char["name"]] = path
-                    if log_fn:
-                        await log_fn(f"🎨 Portrait ready (retry): {char['name']}")
+                # Try up to 3 times with increasing backoff
+                for attempt in range(3):
+                    path = await generate_single_portrait(char, story_id, story_title, session)
+                    if path:
+                        results[char["name"]] = path
+                        if log_fn:
+                            await log_fn(f"🎨 Portrait ready: {char['name']}")
+                        return
+                    if attempt < 2:
+                        backoff = (attempt + 1) * 8  # 8s, 16s
+                        logger.info(f"Portrait retry {attempt + 2}/3 for {char['name']} in {backoff}s")
+                        await asyncio.sleep(backoff)
+                logger.warning(f"Portrait failed after 3 attempts: {char['name']}")
 
         await asyncio.gather(*[_generate_bounded(c) for c in characters])
 

@@ -799,6 +799,14 @@ async def generate_orchestrator_message(
                 f"2 sentences. Absolute authority. No negotiation."
             )
         ),
+        "break_duel": (
+            f"{' and '.join(context.get('duelers', ['Two characters']))} have been going back and forth "
+            f"for too long — the debate is becoming a private argument. "
+            f"Break it up. Be witty and authoritative. Summarize what they've been circling around in ONE line. "
+            f"Then turn to {context.get('next_speaker', 'someone else')} and pull them in with a sharp question "
+            f"or observation that connects to what the duelists were arguing but from a DIFFERENT angle. "
+            f"2 sentences. First sentence breaks the duel. Second sentence invites the new voice."
+        ),
         "phase_transition": (
             f"The debate is moving from '{context.get('from_phase', '')}' to '{context.get('to_phase', '')}'. "
             f"Summarize what was accomplished — be honest about what was productive and what was hot air. "
@@ -882,6 +890,21 @@ async def generate_orchestrator_message(
             f"- Rambling: 'I'm an elephant. Even MY attention span has limits. Get to the point.' "
             f"The wit should STING but not wound. Make them want to do better, not leave. "
             f"1-2 sentences."
+        ),
+        "defend_sabha": (
+            f"{context.get('observer_name', 'An observer')} from {context.get('observer_era', 'another time')} "
+            f"just spoke dismissively about the debate or its participants. "
+            f"They said: \"{context.get('observer_message', '')[:150]}\"\n\n"
+            f"You are Boru. This is YOUR Sabha. DEFEND IT.\n"
+            f"Throw their own history back at them. Their known blindspot: "
+            f"\"{context.get('observer_blindspot', 'unknown')}\"\n\n"
+            f"Remind them what THEIR era produced — the failures, the atrocities, the hypocrisy. "
+            f"If they mock the animals, ask what their sophisticated governance achieved. "
+            f"If they lecture about order, remind them whose order it was and who bled for it.\n\n"
+            f"Be devastating. Be specific to THEIR era and THEIR failures. "
+            f"Then tell them they're welcome to stay — but in this Sabha, we earn our seat with honesty, "
+            f"not with the comfort of hindsight.\n"
+            f"2-3 sentences. Make it burn."
         ),
         "observer_tension": (
             f"Two observers have contradicting views. "

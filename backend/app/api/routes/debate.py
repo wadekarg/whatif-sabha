@@ -66,6 +66,31 @@ from app.db.database import get_session_maker
 router = APIRouter(prefix="/debates", tags=["debates"])
 
 
+def _trim_to_complete_sentence(text: str) -> str:
+    """Trim text to the last complete sentence — prevents mid-word cutoffs from token limits."""
+    text = text.rstrip()
+    if not text:
+        return text
+    # Already ends cleanly
+    if text[-1] in '.!?"\u201d':
+        return text
+    # Find the last sentence-ending punctuation
+    for i in range(len(text) - 1, max(len(text) - 200, -1), -1):
+        if text[i] in '.!?':
+            # Make sure it's not mid-abbreviation (e.g. "Mr.")
+            if i + 1 < len(text) and text[i + 1] == ' ':
+                return text[:i + 1]
+            elif i == len(text) - 1:
+                return text
+    # No sentence end found — try em dash or ellipsis as natural break
+    for end in [' —', '—', '...', '\n']:
+        pos = text.rfind(end)
+        if pos > len(text) // 2:
+            return text[:pos].rstrip()
+    # Last resort — return as-is rather than losing everything
+    return text
+
+
 def _resolve_targets(
     speaker_name: str,
     full_response: str,
@@ -418,12 +443,49 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 transcript, characters, current_phase, round_number,
             )
 
+            # Detect back-and-forth duels — if same 2 characters talked for 3+ turns, break it up
+            recent_speakers = [e["character"] for e in transcript[-6:]
+                               if not e.get("isOrchestrator") and not e.get("isReaction")
+                               and not e.get("isStageDirection") and not e.get("isObserver")]
+            duel_detected = False
+            if len(recent_speakers) >= 4:
+                last_two = set(recent_speakers[-4:])
+                if len(last_two) <= 2 and next_speaker_name in last_two:
+                    duel_detected = True
+                    # Pick the best scorer EXCLUDING the two duelists
+                    alt_scores = {k: v for k, v in scores.items() if k not in last_two and v > -100}
+                    if alt_scores:
+                        next_speaker_name = max(alt_scores, key=lambda k: alt_scores[k])
+
+            # Pick a second speaker for dual-speaker turns (every 4th turn, or after duel break)
+            second_speaker_name = None
+            if (round_number % 4 == 3 or duel_detected) and len(characters) > 2:
+                remaining = {k: v for k, v in scores.items() if k != next_speaker_name and v > -100}
+                if remaining:
+                    second_speaker_name = max(remaining, key=lambda k: remaining[k])
+
             character = next((c for c in characters if c["name"] == next_speaker_name), None)
             if not character:
                 break
 
             # ── 5. Boru speaks ONLY when needed ──
             boru_spoke_this_turn = False
+
+            # Boru breaks up duels with a witty interjection
+            if duel_detected:
+                duel_msg = await generate_orchestrator_message(
+                    ledger, current_phase, transcript, characters, story.title or "",
+                    event_type="break_duel",
+                    context={
+                        "duelers": list(last_two),
+                        "next_speaker": next_speaker_name,
+                    },
+                )
+                if duel_msg:
+                    yield sse("orchestrator", {"message": duel_msg, "phase": current_phase, "event": "break_duel", "target": next_speaker_name})
+                    transcript.append({"character": "Boru", "message": duel_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "break_duel"})
+                    boru_spoke_this_turn = True
+
             if is_first_round:
                 # Grand opening — introduce himself + topic
                 opening_msg = await generate_orchestrator_message(
@@ -436,8 +498,8 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     transcript.append({"character": "Boru", "message": opening_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "opening_with_invite"})
                     boru_spoke_this_turn = True
                 is_first_round = False
-            else:
-                # Stall detection: if all scores are flat, Boru intervenes
+            elif not boru_spoke_this_turn:
+                # Stall detection: if all scores are flat, Boru intervenes (skip if duel already handled)
                 valid_scores = [v for v in scores.values() if v > -100]
                 is_stalling = max(valid_scores) < 1.0 and round_number > len(characters)
                 if is_stalling:
@@ -576,6 +638,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     first_nl = full_response.find("\n")
                     if first_nl != -1 and first_nl < 40:
                         full_response = full_response[first_nl+1:].lstrip()
+
+                # Trim to last complete sentence — prevents mid-word cutoffs
+                full_response = _trim_to_complete_sentence(full_response)
 
             except Exception as e:
                 if _is_rate_limit(e):
@@ -743,7 +808,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             # ── 11. (Reactions removed — they cluttered the debate without adding to the what-if discussion) ──
 
             # ── 12. World observer — every 5 character turns ──
-            if active_observers and should_invite_observer(transcript, last_observer_at, observer_interval=5):
+            if active_observers and should_invite_observer(transcript, last_observer_at, observer_interval=10):
                 observer = random.choice(active_observers)
                 obs_has_spoken = any(
                     e.get("isObserver") and e["character"] == observer["name"]
@@ -797,10 +862,124 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             "message": obs_response,
                             "question_target": q_target,
                         })
+                        transcript.append({
+                            "character": observer["name"], "message": obs_response,
+                            "round": round_number, "phase": current_phase,
+                            "isObserver": True, "observerEra": observer.get("era", ""),
+                        })
+
+                        # Boru defends the Sabha — if observer is dismissive or mocking, fire back
+                        dismissive_signals = ["naive", "naivety", "laughable", "absurd", "pathetic",
+                            "foolish", "amusing", "quaint", "primitive", "savage", "uncivilized",
+                            "beneath", "incompetent", "hopeless", "deluded", "children", "playing"]
+                        obs_lower = obs_response.lower()
+                        is_dismissive = sum(1 for w in dismissive_signals if w in obs_lower) >= 2
+                        if is_dismissive:
+                            boru_defense = await generate_orchestrator_message(
+                                ledger, current_phase, transcript, characters, story.title or "",
+                                event_type="defend_sabha",
+                                context={
+                                    "observer_name": observer["name"],
+                                    "observer_era": observer.get("era", "unknown era"),
+                                    "observer_message": obs_response[:200],
+                                    "observer_blindspot": observer.get("blindspot", ""),
+                                },
+                            )
+                            if boru_defense:
+                                yield sse("orchestrator", {"message": boru_defense, "phase": current_phase, "event": "defend_sabha", "target": observer["name"]})
+                                transcript.append({
+                                    "character": "Boru", "message": boru_defense,
+                                    "round": round_number, "phase": current_phase,
+                                    "isOrchestrator": True, "orchestratorEvent": "defend_sabha",
+                                })
+
                         last_observer_at = len(transcript)
                 except Exception as obs_exc:
                     logger.warning(f"Observer failed (non-fatal): {obs_exc}")
                     last_observer_at = len(transcript)  # reset timer even on failure
+
+            # ── 12b. Second speaker (dual turn — brings in sidelined characters) ──
+            if second_speaker_name:
+                second_char = next((c for c in characters if c["name"] == second_speaker_name), None)
+                if second_char:
+                    second_phases = second_char.get("phases", [])
+                    second_phase = second_phases[-1] if second_phases else {}
+                    yield sse("character_start", {
+                        "character": second_speaker_name,
+                        "round": round_number,
+                        "phase": current_phase,
+                        "drama_score": orch_drama_score(transcript),
+                    })
+                    second_response = ""
+                    try:
+                        _pqs2 = [q for q in ledger.open_questions
+                                if second_speaker_name in q.get("directed_to", [])
+                                and q.get("_times_injected", 0) < 2]
+                        for q in _pqs2:
+                            q["_times_injected"] = q.get("_times_injected", 0) + 1
+                        second_raw = ""
+                        second_target = None
+                        second_first_line = False
+                        async for token in character_respond_stream(
+                            character=second_char,
+                            phase=second_phase,
+                            divergence=debate.divergence_description,
+                            debate_history=transcript,
+                            story_title=story.title or "",
+                            correction_hint=correction_hints.pop(second_speaker_name, None),
+                            pending_questions=_pqs2,
+                            debate_progress=ledger.progress_summary if ledger.progress_summary else None,
+                        ):
+                            if not second_first_line:
+                                second_raw += token
+                                if "\n" in second_raw:
+                                    first_line, remainder = second_raw.split("\n", 1)
+                                    if first_line.strip().startswith("@"):
+                                        tname = first_line.strip()[1:].strip().rstrip(".,!?:;")
+                                        if tname in char_names or tname == "Boru":
+                                            second_target = tname
+                                        second_response += remainder
+                                        if remainder:
+                                            yield sse("token", {"character": second_speaker_name, "text": remainder})
+                                    else:
+                                        second_response += second_raw
+                                        yield sse("token", {"character": second_speaker_name, "text": second_raw})
+                                    second_first_line = True
+                            else:
+                                second_response += token
+                                yield sse("token", {"character": second_speaker_name, "text": token})
+                        if not second_first_line and second_raw:
+                            second_response += second_raw
+                            yield sse("token", {"character": second_speaker_name, "text": second_raw})
+
+                        if second_response:
+                            second_targets = _resolve_targets(
+                                speaker_name=second_speaker_name,
+                                full_response=second_response,
+                                char_names=char_names,
+                                transcript=transcript,
+                                ledger=ledger,
+                            )
+                            if second_target and second_target not in second_targets:
+                                second_targets.insert(0, second_target)
+                            yield sse("character_end", {
+                                "character": second_speaker_name,
+                                "message": second_response,
+                                "round": round_number,
+                                "judge_score": 7,
+                                "target_characters": second_targets,
+                                "emotion": "neutral",
+                            })
+                            transcript.append({
+                                "character": second_speaker_name,
+                                "message": second_response,
+                                "round": round_number,
+                                "phase": current_phase,
+                                "target_characters": second_targets,
+                            })
+                    except Exception as e2:
+                        logger.warning(f"Second speaker {second_speaker_name} failed: {e2}")
+                        yield sse("turn_error", {"character": second_speaker_name, "reason": str(e2)[:100]})
 
             # ── 13. Audience messages ──
             queue = _audience_queues.get(debate_id)
@@ -916,8 +1095,17 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             db_debate.alternate_timeline = alternate_timeline or db_debate.alternate_timeline
             if alternate_world_state:
                 db_debate.alternate_world_state = alternate_world_state
+            # Save ledger snapshot for replay
+            db_debate.ledger_snapshot = {
+                "positions": ledger.character_positions,
+                "claims": ledger.claims[-20:],
+                "open_questions": ledger.open_questions,
+                "resolved_questions": ledger.resolved_questions,
+                "progress": ledger.progress_summary or "",
+            }
             db_debate.status = "completed" if alternate_ending else "interrupted"
             db_debate.round_count = round_number
+            db_debate.transcript = transcript  # save final transcript too
             await db.commit()
 
 
@@ -1236,4 +1424,5 @@ async def get_debate(debate_id: str, db: AsyncSession = Depends(get_db)):
         "alternate_timeline": debate.alternate_timeline or [],
         "status": debate.status,
         "round_count": debate.round_count,
+        "ledger_snapshot": debate.ledger_snapshot,
     }

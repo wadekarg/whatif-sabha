@@ -35,6 +35,45 @@ async def list_characters(story_id: str, db: AsyncSession = Depends(get_db)):
     ]
 
 
+@router.post("/{story_id}/characters/regenerate-portraits")
+async def regenerate_missing_portraits(story_id: str, db: AsyncSession = Depends(get_db)):
+    """Retry portrait generation for characters that are missing portraits."""
+    import asyncio, copy, os
+    from sqlalchemy.orm.attributes import flag_modified
+    from app.core.portrait_generator import generate_all_portraits
+
+    result = await db.execute(select(Story).where(Story.id == story_id))
+    story = result.scalar_one_or_none()
+    if not story or not story.analysis:
+        raise HTTPException(status_code=404, detail="Story analysis not ready.")
+
+    characters = story.analysis.get("characters", [])
+    missing = [c for c in characters if not c.get("portrait")]
+
+    if not missing:
+        return {"ok": True, "message": "All characters already have portraits", "generated": 0}
+
+    portraits = await generate_all_portraits(
+        missing, story_id, story.title or "Unknown", max_concurrent=2,
+    )
+
+    if portraits:
+        analysis = copy.deepcopy(story.analysis)
+        for char in analysis.get("characters", []):
+            if char["name"] in portraits:
+                char["portrait"] = f"/portraits/{os.path.basename(portraits[char['name']])}"
+        story.analysis = analysis
+        flag_modified(story, "analysis")
+        await db.commit()
+
+    return {
+        "ok": True,
+        "message": f"Generated {len(portraits)}/{len(missing)} missing portraits",
+        "generated": len(portraits),
+        "still_missing": [c["name"] for c in missing if c["name"] not in portraits],
+    }
+
+
 @router.get("/{story_id}/characters/{character_name}")
 async def get_character(
     story_id: str, character_name: str, db: AsyncSession = Depends(get_db)

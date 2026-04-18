@@ -181,7 +181,7 @@ async def character_respond(
             f"{exploration_hint}"
         )))
 
-    llm = get_agent_llm(max_tokens=220 if is_direct else 150)
+    llm = get_agent_llm(max_tokens=160 if is_direct else 110)
     response = await llm.ainvoke(messages)
     return response.content.strip()
 
@@ -212,22 +212,49 @@ async def character_respond_stream(
             f"[CURRENT DEBATE STATE — what's been happening so far]: {debate_progress}"
         )))
 
-    # Filter out reactions/stage directions AND most Boru messages.
-    # Characters should respond to EACH OTHER, not to Boru's framing.
-    # Only include Boru's structural messages (phase transitions, callouts directed at this character).
+    # ── Compressed history: last 6 raw + summary of older turns + ledger context ──
     char_name = character["name"]
-    for entry in debate_history[-12:]:
-        if entry.get("isReaction") or entry.get("isStageDirection"):
-            continue
+    real_entries = [e for e in debate_history
+                    if not e.get("isReaction") and not e.get("isStageDirection")]
+
+    # Split: older entries get compressed, recent entries stay raw
+    RECENT_COUNT = 6
+    recent = real_entries[-RECENT_COUNT:] if len(real_entries) > RECENT_COUNT else real_entries
+    older = real_entries[:-RECENT_COUNT] if len(real_entries) > RECENT_COUNT else []
+
+    # Compress older entries into a brief summary
+    if older:
+        older_speakers = {}
+        for e in older:
+            if e.get("isOrchestrator"):
+                continue
+            name = e["character"]
+            if name not in older_speakers:
+                older_speakers[name] = []
+            older_speakers[name].append(e["message"][:80])
+        summary_lines = []
+        for name, msgs in older_speakers.items():
+            key_point = msgs[-1]  # most recent point from this character
+            summary_lines.append(f"  {name}: \"{key_point}...\" ({len(msgs)} turns)")
+        if summary_lines:
+            messages.append(HumanMessage(content=(
+                f"[EARLIER IN THE DEBATE — {len(older)} turns ago, here's what was argued]:\n"
+                + "\n".join(summary_lines)
+            )))
+
+    # Inject Boru callouts directed at this character (from any point in history)
+    for entry in debate_history:
         if entry.get("isOrchestrator"):
             event = entry.get("orchestratorEvent", "")
-            # Include phase transitions (they set important context)
+            if event in ("forced_question", "call_out_repetition", "defend_sabha") and char_name.lower() in entry["message"].lower():
+                messages.append(HumanMessage(content=f"[The moderator said to you]: {entry['message'][:200]}"))
+
+    # Recent entries — raw, full text
+    for entry in recent:
+        if entry.get("isOrchestrator"):
+            event = entry.get("orchestratorEvent", "")
             if event in ("phase_transition", "closing_summary"):
                 messages.append(HumanMessage(content=f"[The moderator noted]: {entry['message'][:150]}"))
-            # Include forced questions / callouts directed at this character
-            elif event in ("forced_question", "call_out_repetition") and char_name.lower() in entry["message"].lower():
-                messages.append(HumanMessage(content=f"[The moderator said to you]: {entry['message']}"))
-            # Skip all other Boru messages — characters talk to each other
             continue
         speaker = entry["character"]
         text = entry["message"]
@@ -235,6 +262,15 @@ async def character_respond_stream(
             messages.append(HumanMessage(content=f"[You previously said]: {text}"))
         else:
             messages.append(HumanMessage(content=f"{speaker}: {text}"))
+
+    # Re-inject BANNED LANGUAGE rules every 8+ turns (keeps system prompt fresh in context)
+    total_real = len(real_entries)
+    if total_real >= 8:
+        messages.append(HumanMessage(content=(
+            "[REMINDER — HOW TO SPEAK]: Short, sharp, specific. 1-3 sentences for most turns. "
+            "NO policy language, NO 'the consequences of this would be', NO committee-speak. "
+            "Speak from your gut. Find the crack in what was just said. Name names."
+        )))
 
     turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history, correction_hint, pending_questions)
 
@@ -264,7 +300,7 @@ async def character_respond_stream(
     # Try full fallback chain (Cerebras → NVIDIA → GitHub → Cloudflare → Groq)
     from app.config import _is_rate_limit
 
-    token_limit = 220 if is_direct else 150
+    token_limit = 160 if is_direct else 110
     fallbacks = get_agent_fallbacks(max_tokens=token_limit)
 
     last_exc = None

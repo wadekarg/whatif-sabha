@@ -53,29 +53,35 @@ def _build_observer_system_prompt(observer: dict, story_title: str, divergence: 
 
 {observer.get('perspective', '')}
 
-You are observing a debate about "{story_title}" — specifically the question:
+You are observing a debate about "{story_title}" — specifically:
 "{divergence}"
 
 Your historical knowledge: {observer.get('historical_knowledge', '')}
 What you would challenge: {observer.get('would_challenge', '')}
-What you would defend: {observer.get('would_defend', '')}
-Your blindspot (be honest — let it shape you): {observer.get('blindspot', '')}
+Your blindspot: {observer.get('blindspot', '')}
 
-Speak in your authentic voice: {observer.get('voice_style', 'direct and informed')}
+HOW TO SPEAK:
+You are an outsider watching this debate. Your job is NOT to lecture or generalize.
+Your job is to:
+1. React to the SPECIFIC thing that was just said — quote or reference it directly
+2. Connect it to something you personally witnessed or lived through — a specific event, a specific day, a specific person you knew
+3. Ask ONE sharp question to ONE character by name
 
-You are NOT a character in the story. You are an OUTSIDER who sees patterns the
-characters cannot see because they are living inside them. You know how this kind
-of story ends in history. You may be right or wrong — but you speak with conviction.
+BANNED:
+- "The naivety of these animals..." or any variation — you are not above them
+- Abstract commentary about "governance" or "revolution" or "human nature"
+- Sentences that could come from a textbook or Wikipedia article
+- Repeating anything you've already said in this debate
 
-LENGTH: Keep your commentary to 2-3 sentences MAX. Be sharp, not academic.
-No policy language. No abstract theorizing. Speak from lived experience, not textbooks.
-Then end with ONE directed question.
+GOOD example: "Snowball says the runt should speak last. I watched a village council try that in Kerala — the elder who spoke last held more power than the chief. Within a year, three families left."
+BAD example: "The animals' pursuit of egalitarianism reveals the inherent contradictions of self-governance."
 
-IMPORTANT: End your response by directing a sharp, specific question AT ONE of the
-debating characters by name. Format the question on its own line as:
-→ [CharacterName]: Your question here?
+LENGTH: Under 80 words total. 2 sentences of personal reaction, then the question.
 
-This forces them to respond directly to your historical challenge."""
+Voice: {observer.get('voice_style', 'direct and specific')}
+
+End with a directed question on its own line:
+→ [CharacterName]: Your question here?"""
 
 
 def _extract_question_target(observer_text: str, valid_characters: list[str]) -> tuple[str | None, str | None]:
@@ -161,11 +167,19 @@ async def observer_respond_stream(
             + theme_summary
         )
 
+    # Highlight the most recent exchange for the observer to react to
+    last_exchange = ""
+    if recent:
+        last = recent[-1]
+        last_exchange = f'The last thing said was by {last["character"]}: "{last["message"][:200]}"'
+
     messages.append(HumanMessage(content=(
-        f"You have heard these arguments. React with your historical perspective. "
-        f"Then END by directing a sharp question at ONE of these characters: {', '.join(char_list)}. "
-        f"Format the final line as: → [CharacterName]: Your question?\n"
-        f"2-4 sentences of commentary, then the directed question. Be specific and original."
+        f"{last_exchange}\n\n"
+        f"React to what was JUST SAID — not the debate in general. "
+        f"Connect it to something specific from your own experience. "
+        f"Then ask ONE sharp question to ONE of these characters: {', '.join(char_list)}. "
+        f"Format: → [CharacterName]: Your question?\n"
+        f"Under 80 words total. No lectures. No generalizations."
         f"{avoid_text}"
     )))
 
