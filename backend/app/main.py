@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -27,12 +29,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
+origins = [o.strip() for o in origins if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(upload.router)
@@ -44,7 +49,6 @@ app.include_router(settings.router)
 
 # Serve character portraits as static files
 from fastapi.staticfiles import StaticFiles
-import os
 os.makedirs("./uploads/portraits", exist_ok=True)
 app.mount("/portraits", StaticFiles(directory="./uploads/portraits"), name="portraits")
 
