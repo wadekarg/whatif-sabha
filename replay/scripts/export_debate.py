@@ -68,6 +68,17 @@ def build_replay_json(db_path: Path, debate_id: str) -> dict:
         participating = _parse_json(debate.get("participating_characters"), [])
         participating_set = set(participating) if participating else None
 
+        # If the DB didn't record participants explicitly, derive them from
+        # the transcript — that's "who actually spoke" minus the orchestrator.
+        if participating_set is None:
+            transcript_for_participants = _parse_json(debate.get("transcript"), [])
+            speakers = {
+                t.get("character") for t in transcript_for_participants
+                if t.get("character") and not t.get("isOrchestrator")
+            }
+            if speakers:
+                participating_set = speakers
+
         # Build character list — filter to participants, add colors + portraits
         chars_out = []
         for ch in all_chars:

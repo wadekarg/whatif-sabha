@@ -1,3 +1,4 @@
+import ReactMarkdown from "react-markdown";
 import type { ReplayTimelineEvent } from "@/lib/types";
 
 interface Props {
@@ -22,8 +23,8 @@ export function AlternateEnding({
         </h1>
 
         <article className="prose prose-lg font-serif text-[color:var(--ink)]
-                             leading-relaxed whitespace-pre-wrap">
-          {ending}
+                             leading-relaxed">
+          <ReactMarkdown>{ending}</ReactMarkdown>
         </article>
 
         {timeline.length > 0 && (

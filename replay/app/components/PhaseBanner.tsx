@@ -7,6 +7,7 @@ const PHASE_LABELS: Record<string, string> = {
   cross_examination: "Cross-Examination",
   deepening: "Deepening",
   reckoning: "Reckoning",
+  closing: "Closing",
 };
 
 export function PhaseBanner({ phase }: Props) {
