@@ -271,6 +271,12 @@ If something breaks, please open an issue with the story you uploaded and the wh
 
 ---
 
+## Replay site (static demo)
+
+A standalone static page that replays one completed debate — see [`replay/`](./replay/README.md). Built to host on Cloudflare Pages for free so you can share a debate without running the full stack.
+
+---
+
 ## 📄 License
 
 MIT — do whatever you want with it.
