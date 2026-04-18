@@ -38,3 +38,11 @@ character_souls.kuzu.wal
 test_souls.kuzu
 *.kuzu
 *.kuzu.wal
+
+# Hardening
+.next/
+out/
+*.tsbuildinfo
+chroma_db/
+kuzu_graph/
+uploads/
