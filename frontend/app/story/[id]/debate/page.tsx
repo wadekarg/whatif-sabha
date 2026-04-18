@@ -273,16 +273,20 @@ export default function DebatePage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
 
   const playSummaryTTS = async () => {
+    if (summaryPlaying) { stopAllAudio(); setSummaryPlaying(false); return; }
     stopAllAudio();
-    if (summaryPlaying) { setSummaryPlaying(false); return; }
     if (!debateSummary) return;
+    const did = debateIdRef.current || debateId;
+    if (!did) return;
     const myGen = ttsGenRef.current;
     setSummaryLoading(true);
     try {
-      const res = await fetch(`${API}/debates/${debateIdRef.current}/tts`, {
+      // Trim summary to ~2000 chars to avoid Edge TTS timeout on very long text
+      const text = debateSummary.length > 2000 ? debateSummary.slice(0, 2000) + "..." : debateSummary;
+      const res = await fetch(`${API}/debates/${did}/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: debateSummary, character_name: "Boru", emotion: "neutral", is_orchestrator: true }),
+        body: JSON.stringify({ text, character_name: "Boru", emotion: "neutral", is_orchestrator: true }),
       });
       if (myGen !== ttsGenRef.current) return;
       if (!res.ok) throw new Error(`Summary TTS ${res.status}`);
@@ -2661,7 +2665,7 @@ export default function DebatePage() {
                     <div className="flex-1 h-px bg-[#e8e0d5]" />
                   </div>
                   <div className="text-xs uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Debate</div>
-                  {debateId && (
+                  {(debateId || debateIdRef.current) && debateSummary && (
                     <button
                       onClick={playSummaryTTS}
                       disabled={summaryLoading}
