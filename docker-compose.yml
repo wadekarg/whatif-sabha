@@ -4,7 +4,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "8001:8001"
     volumes:
       - ./backend:/app
       - uploads:/app/uploads
@@ -13,7 +13,7 @@ services:
       - ./backend/.env
     depends_on:
       - redis
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
   frontend:
     build: ./frontend
@@ -23,7 +23,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
     command: npm run dev
 
   redis:
