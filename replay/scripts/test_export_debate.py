@@ -78,3 +78,12 @@ def test_missing_debate_raises(tmp_path):
     import pytest
     with pytest.raises(ValueError, match="not found"):
         build_replay_json(db_path=db, debate_id="nope")
+
+
+def test_boru_color_does_not_collide_with_first_character(tmp_path):
+    db = _fake_db(tmp_path)
+    data = build_replay_json(db_path=db, debate_id="d1")
+    chars = {c["name"]: c for c in data["characters"]}
+    assert chars["Boru"]["color"] != chars["Napoleon"]["color"], (
+        "Boru must not share a color with the first analysis character"
+    )

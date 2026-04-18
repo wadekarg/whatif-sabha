@@ -1,7 +1,7 @@
 {
   "version": "1",
   "debate_id": "1b03e8ed-ae93-485c-a962-481e97dc8596",
-  "exported_at": "2026-04-18T22:26:51.976375+00:00",
+  "exported_at": "2026-04-18T22:33:16.046493+00:00",
   "disclaimer": "This is an AI-generated alternate-ending exploration. All dialogue is synthetic and does not appear in the source work.",
   "story": {
     "title": "Animal Farm",
@@ -15,7 +15,7 @@
       "role": "orchestrator",
       "short_description": "Your wise and witty elephant host.",
       "portrait_url": "/portraits/boru.png",
-      "color": "#c07820"
+      "color": "#8a6a1f"
     },
     {
       "name": "Mr. Jones",

@@ -70,7 +70,7 @@ def build_replay_json(db_path: Path, debate_id: str) -> dict:
 
         # Build character list — filter to participants, add colors + portraits
         chars_out = []
-        for idx, ch in enumerate(all_chars):
+        for ch in all_chars:
             name = ch.get("name", "")
             if participating_set is not None and name not in participating_set:
                 continue
@@ -79,7 +79,7 @@ def build_replay_json(db_path: Path, debate_id: str) -> dict:
                 "role": ch.get("role", ""),
                 "short_description": (ch.get("description") or "")[:200],
                 "portrait_url": f"/portraits/{_safe_name(name)}.png",
-                "color": CHAR_PALETTE[idx % len(CHAR_PALETTE)],
+                "color": CHAR_PALETTE[len(chars_out) % len(CHAR_PALETTE)],
             })
 
         # Always include Boru (orchestrator) if he appears in transcript
@@ -91,7 +91,7 @@ def build_replay_json(db_path: Path, debate_id: str) -> dict:
                     "role": "orchestrator",
                     "short_description": "Your wise and witty elephant host.",
                     "portrait_url": "/portraits/boru.png",
-                    "color": "#c07820",
+                    "color": "#8a6a1f",
                 })
 
         return {
@@ -125,14 +125,25 @@ def _now_iso() -> str:
 
 def _copy_portraits(chars: list[dict], source_dir: Path) -> None:
     PORTRAIT_DIR.mkdir(parents=True, exist_ok=True)
+    copied = 0
     for ch in chars:
         target = PORTRAIT_DIR / Path(ch["portrait_url"]).name
         candidate = source_dir / target.name
         if candidate.exists() and not target.exists():
             shutil.copy2(candidate, target)
+            copied += 1
+    if copied == 0:
+        print(
+            f"note: no portraits copied from {source_dir} "
+            f"(expected filenames like {[Path(c['portrait_url']).name for c in chars[:3]]} ... ). "
+            f"Replay UI will show initials fallback.",
+            file=sys.stderr,
+        )
+    else:
+        print(f"copied {copied} portraits to {PORTRAIT_DIR}", file=sys.stderr)
 
 
-def _find_latest_completed(db_path: Path) -> str | None:
+def _find_debate_with_most_turns(db_path: Path) -> str | None:
     conn = sqlite3.connect(str(db_path))
     try:
         cur = conn.cursor()
@@ -164,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
 
     debate_id = args.debate_id
     if args.latest or not debate_id:
-        debate_id = _find_latest_completed(db_path)
+        debate_id = _find_debate_with_most_turns(db_path)
         if not debate_id:
             print("error: no debates found", file=sys.stderr)
             return 2
