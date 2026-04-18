@@ -252,6 +252,17 @@ See `backend/.env.example` for all available settings:
 
 ---
 
+## Known Limitations
+
+This is an early prototype:
+
+- **Narrator prose quality** — the alternate-ending narrator currently produces analytical summaries rather than narrative prose. Prompt rewrite in progress.
+- **Mahabharata three-pass extraction** is implemented but not yet end-to-end tested on the full text.
+- **No RL reward signal** — character objective vectors are inferred after each debate, but there is no true policy-gradient training loop yet.
+- **No automated tests** — manual verification only.
+
+---
+
 ## 🤝 Contributing
 
 This is an early-stage project. Issues, ideas, and PRs are welcome.
