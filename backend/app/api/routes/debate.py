@@ -698,11 +698,40 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                          "turns": dispute["turns_unresolved"]},
                             )
                             if confront_msg:
-                                yield sse("orchestrator", {"message": confront_msg, "phase": current_phase, "event": "force_confrontation", "target": char_a, "target_characters": [char_a, char_b], "intended_speaker": intended})
-                                transcript.append({
-                                    "character": "Boru", "message": confront_msg, "round": round_number,
-                                    "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "force_confrontation",
+                                # Validate: did the LLM actually address the intended dispute pair?
+                                # If not, treat this as an invite_speaker event with the vocative target.
+                                message_mentions_both = (
+                                    char_a.lower() in confront_msg.lower() and char_b.lower() in confront_msg.lower()
+                                )
+                                effective_targets = [char_a, char_b]
+                                effective_event = "force_confrontation"
+
+                                if not message_mentions_both and intended:
+                                    # LLM went off-script; re-tag as invite_speaker targeting the parsed vocative
+                                    effective_targets = [intended]
+                                    effective_event = "invite_speaker"
+                                    logger.info(
+                                        f"[FORCE] LLM skipped dispute {char_a} vs {char_b}, message addresses "
+                                        f"{intended} instead — re-tagging as invite_speaker"
+                                    )
+
+                                yield sse("orchestrator", {
+                                    "message": confront_msg,
+                                    "phase": current_phase,
+                                    "event": effective_event,
+                                    "target": effective_targets[0] if effective_targets else "all",
+                                    "target_characters": effective_targets,
                                     "intended_speaker": intended,
+                                })
+                                transcript.append({
+                                    "character": "Boru",
+                                    "message": confront_msg,
+                                    "round": round_number,
+                                    "phase": current_phase,
+                                    "isOrchestrator": True,
+                                    "orchestratorEvent": effective_event,
+                                    "intended_speaker": intended,
+                                    "target_characters": effective_targets,
                                 })
                                 if intended:
                                     pending_invitee = intended
@@ -758,11 +787,41 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                      "turns": dispute["turns_unresolved"]},
                         )
                         if callout_msg:
-                            yield sse("orchestrator", {"message": callout_msg, "phase": current_phase, "event": "dispute_callout", "target": "all", "intended_speaker": intended})
-                            transcript.append({
-                                "character": "Boru", "message": callout_msg, "round": round_number,
-                                "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "dispute_callout",
+                            # Validate: did the LLM actually address the intended dispute pair?
+                            # If not, treat this as an invite_speaker event with the vocative target.
+                            callout_mentions_both = (
+                                callout_char_a.lower() in callout_msg.lower()
+                                and callout_char_b.lower() in callout_msg.lower()
+                            )
+                            effective_targets = [callout_char_a, callout_char_b]
+                            effective_event = "dispute_callout"
+
+                            if not callout_mentions_both and intended:
+                                # LLM went off-script; re-tag as invite_speaker targeting the parsed vocative
+                                effective_targets = [intended]
+                                effective_event = "invite_speaker"
+                                logger.info(
+                                    f"[CALLOUT] LLM skipped dispute {callout_char_a} vs {callout_char_b}, "
+                                    f"message addresses {intended} instead — re-tagging as invite_speaker"
+                                )
+
+                            yield sse("orchestrator", {
+                                "message": callout_msg,
+                                "phase": current_phase,
+                                "event": effective_event,
+                                "target": effective_targets[0] if effective_targets else "all",
+                                "target_characters": effective_targets,
                                 "intended_speaker": intended,
+                            })
+                            transcript.append({
+                                "character": "Boru",
+                                "message": callout_msg,
+                                "round": round_number,
+                                "phase": current_phase,
+                                "isOrchestrator": True,
+                                "orchestratorEvent": effective_event,
+                                "intended_speaker": intended,
+                                "target_characters": effective_targets,
                             })
                             if intended:
                                 pending_invitee = intended
