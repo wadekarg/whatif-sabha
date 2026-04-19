@@ -493,6 +493,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     window_turn_count: int = 0           # character turns since Boru last spoke
     last_force_confrontation_round: int = -999   # global cooldown for force_confrontation events
 
+    # Pair cooldown after break_duel / pair_duel rotation — prevents immediate
+    # re-engagement. When a duel between two characters is broken, block that
+    # exact pair from the character-question enforcement path for N rounds so
+    # they can't simply re-duel two turns later.
+    last_broken_pair: tuple[str, str] | None = None
+    last_broken_pair_round: int = -999
+
     try:
         # ── Main debate loop — heuristic-driven, Boru intervenes only when needed ──
         while round_number < max_rounds:
@@ -653,6 +660,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "break_duel",
                             "intended_speaker": intended,
                         })
+                        # Record the broken pair so they can't immediately re-duel
+                        # via the character-question enforcement path.
+                        if len(last_two) == 2:
+                            _pair_list = sorted(last_two)
+                            last_broken_pair = (_pair_list[0], _pair_list[1])
+                            last_broken_pair_round = round_number
                         if intended:
                             pending_invitee = intended
                             # Pivot this turn's speaker to the invitee so Boru's word takes effect
@@ -950,6 +963,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             f"[PAIR_DUEL] last 5 turns by {set(recent_char_turns[-5:])} — "
                             f"invited {pair_duel_target}"
                         )
+                        # Record the broken pair so they can't immediately re-duel
+                        # via the character-question enforcement path.
+                        if len(unique) == 2:
+                            _pair_list = sorted(unique)
+                            last_broken_pair = (_pair_list[0], _pair_list[1])
+                            last_broken_pair_round = round_number
                         if intended:
                             pending_invitee = intended
                             if intended != next_speaker_name:
@@ -1328,6 +1347,21 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                  if t and t != "Boru" and any(c["name"] == t for c in characters)),
                                 None,
                             )
+                        # Pair cooldown: if q_target is in the recently-broken pair AND
+                        # the asker is also in that pair, block the enforcement so the
+                        # pair doesn't immediately re-duel after Boru broke them up.
+                        if (
+                            q_target
+                            and last_broken_pair
+                            and round_number - last_broken_pair_round < 6
+                            and q_target in last_broken_pair
+                            and next_speaker_name in last_broken_pair
+                        ):
+                            logger.info(
+                                f"[PAIR-COOLDOWN] Blocking {next_speaker_name}->{q_target} re-engagement "
+                                f"(pair broken at round {last_broken_pair_round}, current {round_number})"
+                            )
+                            q_target = None   # skip enforcement, let picker find someone else
                         if q_target:
                             pending_invitee = q_target
                             logger.info(
