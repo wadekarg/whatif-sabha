@@ -170,13 +170,11 @@ def pick_next_speaker(
     current_phase: str,
     round_number: int,
 ) -> str:
-    """
-    Reward-shaped speaker selection.
-    Maximizes: engagement diversity + responsiveness to direct questions + relevance.
-    """
-    _, scores = pick_next_speaker_with_scores(debate_history, characters, current_phase, round_number)
-    best = max(scores, key=lambda n: scores[n])
-    return best
+    """Reward-shaped speaker selection."""
+    name, _forced, _scores = pick_next_speaker_with_scores(
+        debate_history, characters, current_phase, round_number
+    )
+    return name
 
 
 def pick_next_speaker_with_scores(
@@ -184,20 +182,32 @@ def pick_next_speaker_with_scores(
     characters: list,
     current_phase: str,
     round_number: int,
-) -> tuple[str, dict]:
-    """
-    Heuristic speaker selection — returns (chosen_speaker, all_scores).
-    The scores dict lets the caller detect stalls (flat scores = nobody is
-    particularly motivated to respond → Boru should intervene).
+) -> tuple[str, bool, dict]:
+    """Heuristic speaker selection — returns (chosen_speaker, forced, all_scores).
+
+    When the most-recent orchestrator turn has an ``intended_speaker`` field,
+    that speaker is returned immediately with ``forced=True`` — all other
+    scoring is skipped. This is how Boru's direct invitations become law.
+
+    Otherwise the normal scoring runs as before, and ``forced=False``.
     """
     char_names = [c["name"] for c in characters]
 
     if not debate_history:
         scores = {n: (3.0 if i == 0 else 0.0) for i, n in enumerate(char_names)}
-        return char_names[0], scores
+        return char_names[0], False, scores
 
-    # Find last REAL speaker (skip Boru/observers/reactions for scoring)
+    # ── Forced-speaker short-circuit ──
     last_entry = debate_history[-1]
+    if last_entry.get("isOrchestrator"):
+        intended = last_entry.get("intended_speaker")
+        if intended and intended in char_names:
+            # Boru's word is law — score dict still returned for diagnostics
+            flat_scores = {n: (99.0 if n == intended else 0.0) for n in char_names}
+            return intended, True, flat_scores
+
+    # ── Normal scoring path ──
+    # Find last REAL speaker (skip Boru/observers/reactions for scoring)
     for entry in reversed(debate_history):
         if (not entry.get("isOrchestrator") and not entry.get("isObserver")
                 and not entry.get("isReaction") and not entry.get("isStageDirection")
@@ -213,7 +223,7 @@ def pick_next_speaker_with_scores(
     )
 
     best = max(scores, key=lambda n: scores[n])
-    return best, scores
+    return best, False, scores
 
 
 def should_synthesize(
