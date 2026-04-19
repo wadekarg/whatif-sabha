@@ -30,6 +30,40 @@ interface ExportOptions {
   filename?: string;
 }
 
+/**
+ * Replace or strip characters that jsPDF's Helvetica can't render.
+ * jsPDF ships with a Latin-1 subset; anything outside breaks text layout
+ * and triggers per-character rendering (garbled output, truncated lines).
+ */
+function sanitizeForPdf(s: string | undefined | null): string {
+  if (!s) return "";
+  return s
+    // Arrows → ASCII
+    .replace(/→/g, "-> ")
+    .replace(/←/g, "<- ")
+    .replace(/↑/g, "^ ")
+    .replace(/↓/g, "v ")
+    // Em/en dashes → hyphens
+    .replace(/[—–]/g, " -- ")
+    // Smart quotes → plain
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    // Ellipsis → three dots
+    .replace(/\u2026/g, "...")
+    // Bullet → dash
+    .replace(/[•]/g, "- ")
+    // Non-breaking space → regular
+    .replace(/\u00A0/g, " ")
+    // Strip emojis and other high-plane characters
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
+    .replace(/[\u{2600}-\u{27BF}]/gu, "")
+    // Any remaining non-Latin-1 char → space (prevents per-char render fallback)
+    .replace(/[^\x00-\xFF]/g, " ")
+    // Collapse repeated spaces
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+
 export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
   // Lazy-load to keep initial bundle small — libs only pull on click
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
@@ -49,14 +83,14 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.setTextColor(40, 30, 20);
-  doc.text(opts.meta.storyTitle, margin, margin + 10);
+  doc.text(sanitizeForPdf(opts.meta.storyTitle), margin, margin + 10);
 
   // Author line
   if (opts.meta.storyAuthor) {
     doc.setFont("helvetica", "italic");
     doc.setFontSize(11);
     doc.setTextColor(100, 85, 65);
-    doc.text(`by ${opts.meta.storyAuthor}`, margin, margin + 30);
+    doc.text(`by ${sanitizeForPdf(opts.meta.storyAuthor)}`, margin, margin + 30);
   }
 
   // Divergence block
@@ -67,7 +101,7 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(13);
   doc.setTextColor(40, 30, 20);
-  const divergenceLines = doc.splitTextToSize(opts.meta.divergence, contentW);
+  const divergenceLines = doc.splitTextToSize(sanitizeForPdf(opts.meta.divergence), contentW);
   doc.text(divergenceLines, margin, margin + 80);
 
   let y = margin + 80 + divergenceLines.length * 16 + 20;
@@ -80,23 +114,38 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
 
       if (opts.graphElement instanceof HTMLCanvasElement) {
         // Already a canvas — use directly at 2× scale for sharpness
-        imgData = opts.graphElement.toDataURL("image/png");
-        imgW = opts.graphElement.width;
-        imgH = opts.graphElement.height;
+        const canvas = opts.graphElement;
+        if (canvas.width < 10 || canvas.height < 10) {
+          console.warn("graph canvas is blank — skipping");
+        } else {
+          imgData = canvas.toDataURL("image/png");
+          imgW = canvas.width;
+          imgH = canvas.height;
+        }
       } else {
-        // DOM element — capture via html2canvas
-        const capture = await html2canvas(opts.graphElement, {
-          backgroundColor: "#ffffff",
-          scale: 2,
-          logging: false,
-          useCORS: true,
-        });
-        imgData = capture.toDataURL("image/png");
-        imgW = capture.width;
-        imgH = capture.height;
+        // DOM element — capture via html2canvas. Guard against zero-size
+        // elements (SVG wrappers with no layout often return 0×0).
+        const el = opts.graphElement;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 10) {
+          console.warn(`graph element has no size (${rect.width}x${rect.height}) — skipping`);
+        } else {
+          const capture = await html2canvas(el, {
+            backgroundColor: "#ffffff",
+            scale: 2,
+            logging: false,
+            useCORS: true,
+            // Force a size in case the element itself is weird
+            width: rect.width,
+            height: rect.height,
+          });
+          imgData = capture.toDataURL("image/png");
+          imgW = capture.width;
+          imgH = capture.height;
+        }
       }
 
-      if (imgData) {
+      if (imgData && imgW > 10 && imgH > 10) {
         // Fit graph into the remaining space on page 1 (with room for cast strip below)
         const maxImgH = pageH - y - margin - 120; // reserve 120pt for cast strip
         const scale = Math.min(contentW / imgW, maxImgH / imgH);
@@ -124,7 +173,7 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
     const colGap = 8;
     let x = margin;
     for (const c of opts.meta.cast) {
-      const label = c.name;
+      const label = sanitizeForPdf(c.name);
       const labelW = doc.getTextWidth(label);
       const dotSize = 8;
       const chipW = dotSize + 4 + labelW;
@@ -183,6 +232,8 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
     else if (turn.target_characters?.length) nameLine += ` -> ${turn.target_characters.join(", ")}`;
     if (turn.emotion && turn.emotion !== "neutral") nameLine += `  (${turn.emotion})`;
 
+    nameLine = sanitizeForPdf(nameLine);
+
     // Page-break check for name line
     if (ty > pageH - margin - 40) {
       doc.addPage();
@@ -195,7 +246,8 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(60, 50, 40);
-    const bodyLines = doc.splitTextToSize(turn.message || "", contentW);
+    const cleanBody = sanitizeForPdf(turn.message);
+    const bodyLines = doc.splitTextToSize(cleanBody, contentW);
     for (const line of bodyLines) {
       if (ty > pageH - margin) {
         doc.addPage();
@@ -220,7 +272,7 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
     doc.setTextColor(40, 30, 20);
-    const endingLines = doc.splitTextToSize(opts.meta.alternateEnding, contentW);
+    const endingLines = doc.splitTextToSize(sanitizeForPdf(opts.meta.alternateEnding), contentW);
     for (const line of endingLines) {
       if (ey > pageH - margin) {
         doc.addPage();
