@@ -401,19 +401,29 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     is_first_round = True
     previous_phase = None
 
+    # Boru authority state (Task 4b)
+    pending_invitee: str | None = None   # character Boru just named; cleared when they speak
+    window_turn_count: int = 0           # character turns since Boru last spoke
+
     try:
         # ── Main debate loop — heuristic-driven, Boru intervenes only when needed ──
         while round_number < max_rounds:
             # ── 1. Stop signal ──
             if _stop_signals.pop(debate_id, False):
-                stop_summary, _intended = await generate_orchestrator_message(
+                stop_summary, intended = await generate_orchestrator_message(
                     ledger, "closing", transcript, characters, story.title or "",
                     event_type="closing_summary",
                 )
                 if not stop_summary:
                     stop_summary = "The Sabha is concluded. What was said here will not be forgotten."
-                yield sse("orchestrator", {"message": stop_summary, "phase": "closing", "event": "user_stop", "target": "all"})
-                transcript.append({"character": "Boru", "message": stop_summary, "round": round_number, "phase": "closing", "isOrchestrator": True, "orchestratorEvent": "closing_summary"})
+                yield sse("orchestrator", {"message": stop_summary, "phase": "closing", "event": "user_stop", "target": "all", "intended_speaker": intended})
+                transcript.append({
+                    "character": "Boru", "message": stop_summary, "round": round_number,
+                    "phase": "closing", "isOrchestrator": True, "orchestratorEvent": "closing_summary",
+                    "intended_speaker": intended,
+                })
+                if intended:
+                    pending_invitee = intended
                 break
 
             # ── 2. End condition (check every 4th turn, or always in closing phase) ──
@@ -425,42 +435,68 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             if not is_first_round and round_number % 3 == 0:
                 new_phase = await decide_phase_transition(ledger, current_phase, transcript, characters)
                 if new_phase:
-                    transition_msg, _intended = await generate_orchestrator_message(
+                    transition_msg, intended = await generate_orchestrator_message(
                         ledger, new_phase, transcript, characters, story.title or "",
                         event_type="phase_transition",
                         context={"from_phase": current_phase, "to_phase": new_phase},
                     )
                     if transition_msg:
-                        yield sse("orchestrator", {"message": transition_msg, "phase": new_phase, "event": "phase_transition", "target": "all"})
-                        transcript.append({"character": "Boru", "message": transition_msg, "round": round_number, "phase": new_phase, "isOrchestrator": True, "orchestratorEvent": "phase_transition"})
+                        yield sse("orchestrator", {"message": transition_msg, "phase": new_phase, "event": "phase_transition", "target": "all", "intended_speaker": intended})
+                        transcript.append({
+                            "character": "Boru", "message": transition_msg, "round": round_number,
+                            "phase": new_phase, "isOrchestrator": True, "orchestratorEvent": "phase_transition",
+                            "intended_speaker": intended,
+                        })
+                        if intended:
+                            pending_invitee = intended
                     previous_phase = current_phase
                     current_phase = new_phase
                     if current_phase == "closing" and await should_end_debate(ledger, current_phase, transcript, characters):
                         break
 
-            # ── 4. Pick speaker (HEURISTIC — 0 LLM calls) ──
-            next_speaker_name, forced, scores = pick_next_speaker_with_scores(
-                transcript, characters, current_phase, round_number,
-            )
-            _ = forced  # consumed in Task 4b
+            # ── ENFORCEMENT: if Boru has a pending invitation, that character MUST speak next ──
+            next_speaker_name = None
+            forced = False
+            scores: dict[str, float] = {}
+            if pending_invitee:
+                next_speaker_name = pending_invitee
+                forced = True
+                character = next((c for c in characters if c["name"] == pending_invitee), None)
+                if character is None:
+                    # Invitee not in cast (shouldn't happen) — fall through to normal pick
+                    pending_invitee = None
+                    forced = False
+                    next_speaker_name = None
+                else:
+                    # Compute scores only for diagnostics; nothing uses them while forced
+                    scores = {n: (99.0 if n == next_speaker_name else 0.0)
+                              for n in [c["name"] for c in characters]}
+
+            if not pending_invitee:
+                # ── 4. Pick speaker (HEURISTIC — 0 LLM calls) ──
+                next_speaker_name, forced, scores = pick_next_speaker_with_scores(
+                    transcript, characters, current_phase, round_number,
+                )
 
             # Detect back-and-forth duels — if same 2 characters talked for 3+ turns, break it up
-            recent_speakers = [e["character"] for e in transcript[-6:]
-                               if not e.get("isOrchestrator") and not e.get("isReaction")
-                               and not e.get("isStageDirection") and not e.get("isObserver")]
             duel_detected = False
-            if len(recent_speakers) >= 4:
-                last_two = set(recent_speakers[-4:])
-                if len(last_two) <= 2 and next_speaker_name in last_two:
-                    duel_detected = True
-                    # Pick the best scorer EXCLUDING the two duelists
-                    alt_scores = {k: v for k, v in scores.items() if k not in last_two and v > -100}
-                    if alt_scores:
-                        next_speaker_name = max(alt_scores, key=lambda k: alt_scores[k])
+            last_two: set[str] = set()
+            if not forced:
+                recent_speakers = [e["character"] for e in transcript[-6:]
+                                   if not e.get("isOrchestrator") and not e.get("isReaction")
+                                   and not e.get("isStageDirection") and not e.get("isObserver")]
+                if len(recent_speakers) >= 4:
+                    last_two = set(recent_speakers[-4:])
+                    if len(last_two) <= 2 and next_speaker_name in last_two:
+                        duel_detected = True
+                        # Pick the best scorer EXCLUDING the two duelists
+                        alt_scores = {k: v for k, v in scores.items() if k not in last_two and v > -100}
+                        if alt_scores:
+                            next_speaker_name = max(alt_scores, key=lambda k: alt_scores[k])
 
             # Pick a second speaker for dual-speaker turns (every 4th turn, or after duel break)
             second_speaker_name = None
-            if (round_number % 4 == 3 or duel_detected) and len(characters) > 2:
+            if not forced and (round_number % 4 == 3 or duel_detected) and len(characters) > 2:
                 remaining = {k: v for k, v in scores.items() if k != next_speaker_name and v > -100}
                 if remaining:
                     second_speaker_name = max(remaining, key=lambda k: remaining[k])
@@ -472,95 +508,126 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             # ── 5. Boru speaks ONLY when needed ──
             boru_spoke_this_turn = False
 
-            # Boru breaks up duels with a witty interjection
-            if duel_detected:
-                duel_msg, _intended = await generate_orchestrator_message(
-                    ledger, current_phase, transcript, characters, story.title or "",
-                    event_type="break_duel",
-                    context={
-                        "duelers": list(last_two),
-                        "next_speaker": next_speaker_name,
-                    },
-                )
-                if duel_msg:
-                    yield sse("orchestrator", {"message": duel_msg, "phase": current_phase, "event": "break_duel", "target": next_speaker_name})
-                    transcript.append({"character": "Boru", "message": duel_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "break_duel"})
-                    boru_spoke_this_turn = True
-
-            # ── 5b. Dispute escalation — Boru forces confrontation on long-unresolved disputes ──
-            if not boru_spoke_this_turn and round_number > 6:
-                escalated = ledger.get_escalated_disputes(round_number)
-
-                if escalated["tier3"]:
-                    # Tier 3: FORCE confrontation — override speakers
-                    dispute = escalated["tier3"][0]
-                    char_a = dispute["claim_a"]["character"]
-                    char_b = dispute["claim_b"]["character"]
-                    # Override next speaker to be one of the dispute parties
-                    if next_speaker_name not in (char_a, char_b):
-                        next_speaker_name = char_a
-                        character = next((c for c in characters if c["name"] == next_speaker_name), character)
-                    second_speaker_name = char_b if next_speaker_name == char_a else char_a
-                    confront_msg, _intended = await generate_orchestrator_message(
+            if not forced:
+                # Boru breaks up duels with a witty interjection
+                if duel_detected:
+                    duel_msg, intended = await generate_orchestrator_message(
                         ledger, current_phase, transcript, characters, story.title or "",
-                        event_type="force_confrontation",
-                        context={"char_a": char_a, "char_b": char_b,
-                                 "claim_a": dispute["claim_a"]["claim"][:120],
-                                 "claim_b": dispute["claim_b"]["claim"][:120],
-                                 "turns": dispute["turns_unresolved"]},
+                        event_type="break_duel",
+                        context={
+                            "duelers": list(last_two),
+                            "next_speaker": next_speaker_name,
+                        },
                     )
-                    if confront_msg:
-                        yield sse("orchestrator", {"message": confront_msg, "phase": current_phase, "event": "force_confrontation", "target": f"{char_a},{char_b}"})
-                        transcript.append({"character": "Boru", "message": confront_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "force_confrontation"})
+                    if duel_msg:
+                        yield sse("orchestrator", {"message": duel_msg, "phase": current_phase, "event": "break_duel", "target": next_speaker_name, "intended_speaker": intended})
+                        transcript.append({
+                            "character": "Boru", "message": duel_msg, "round": round_number,
+                            "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "break_duel",
+                            "intended_speaker": intended,
+                        })
+                        if intended:
+                            pending_invitee = intended
                         boru_spoke_this_turn = True
-                    dispute["_last_escalation_turn"] = round_number
 
-                elif escalated["tier2"]:
-                    # Tier 2: Boru calls it out
-                    dispute = escalated["tier2"][0]
-                    callout_msg, _intended = await generate_orchestrator_message(
-                        ledger, current_phase, transcript, characters, story.title or "",
-                        event_type="dispute_callout",
-                        context={"char_a": dispute["claim_a"]["character"],
-                                 "char_b": dispute["claim_b"]["character"],
-                                 "claim_a": dispute["claim_a"]["claim"][:120],
-                                 "claim_b": dispute["claim_b"]["claim"][:120],
-                                 "turns": dispute["turns_unresolved"]},
-                    )
-                    if callout_msg:
-                        yield sse("orchestrator", {"message": callout_msg, "phase": current_phase, "event": "dispute_callout", "target": "all"})
-                        transcript.append({"character": "Boru", "message": callout_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "dispute_callout"})
-                        boru_spoke_this_turn = True
-                    dispute["_last_escalation_turn"] = round_number
+                # ── 5b. Dispute escalation — Boru forces confrontation on long-unresolved disputes ──
+                if not boru_spoke_this_turn and round_number > 6:
+                    escalated = ledger.get_escalated_disputes(round_number)
+
+                    if escalated["tier3"]:
+                        # Tier 3: FORCE confrontation — override speakers
+                        dispute = escalated["tier3"][0]
+                        char_a = dispute["claim_a"]["character"]
+                        char_b = dispute["claim_b"]["character"]
+                        # Override next speaker to be one of the dispute parties
+                        if next_speaker_name not in (char_a, char_b):
+                            next_speaker_name = char_a
+                            character = next((c for c in characters if c["name"] == next_speaker_name), character)
+                        second_speaker_name = char_b if next_speaker_name == char_a else char_a
+                        confront_msg, intended = await generate_orchestrator_message(
+                            ledger, current_phase, transcript, characters, story.title or "",
+                            event_type="force_confrontation",
+                            context={"char_a": char_a, "char_b": char_b,
+                                     "claim_a": dispute["claim_a"]["claim"][:120],
+                                     "claim_b": dispute["claim_b"]["claim"][:120],
+                                     "turns": dispute["turns_unresolved"]},
+                        )
+                        if confront_msg:
+                            yield sse("orchestrator", {"message": confront_msg, "phase": current_phase, "event": "force_confrontation", "target": f"{char_a},{char_b}", "intended_speaker": intended})
+                            transcript.append({
+                                "character": "Boru", "message": confront_msg, "round": round_number,
+                                "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "force_confrontation",
+                                "intended_speaker": intended,
+                            })
+                            if intended:
+                                pending_invitee = intended
+                            boru_spoke_this_turn = True
+                        dispute["_last_escalation_turn"] = round_number
+
+                    elif escalated["tier2"]:
+                        # Tier 2: Boru calls it out
+                        dispute = escalated["tier2"][0]
+                        callout_msg, intended = await generate_orchestrator_message(
+                            ledger, current_phase, transcript, characters, story.title or "",
+                            event_type="dispute_callout",
+                            context={"char_a": dispute["claim_a"]["character"],
+                                     "char_b": dispute["claim_b"]["character"],
+                                     "claim_a": dispute["claim_a"]["claim"][:120],
+                                     "claim_b": dispute["claim_b"]["claim"][:120],
+                                     "turns": dispute["turns_unresolved"]},
+                        )
+                        if callout_msg:
+                            yield sse("orchestrator", {"message": callout_msg, "phase": current_phase, "event": "dispute_callout", "target": "all", "intended_speaker": intended})
+                            transcript.append({
+                                "character": "Boru", "message": callout_msg, "round": round_number,
+                                "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "dispute_callout",
+                                "intended_speaker": intended,
+                            })
+                            if intended:
+                                pending_invitee = intended
+                            boru_spoke_this_turn = True
+                        dispute["_last_escalation_turn"] = round_number
 
             if is_first_round:
                 # Grand opening — introduce himself + topic
-                opening_msg, _intended = await generate_orchestrator_message(
+                opening_msg, intended = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="opening_with_invite",
                     context={"speakers": char_names, "divergence": debate.divergence_description},
                 )
                 if opening_msg:
-                    yield sse("orchestrator", {"message": opening_msg, "phase": current_phase, "event": "opening", "target": "all"})
-                    transcript.append({"character": "Boru", "message": opening_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "opening_with_invite"})
+                    yield sse("orchestrator", {"message": opening_msg, "phase": current_phase, "event": "opening", "target": "all", "intended_speaker": intended})
+                    transcript.append({
+                        "character": "Boru", "message": opening_msg, "round": round_number,
+                        "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "opening_with_invite",
+                        "intended_speaker": intended,
+                    })
+                    if intended:
+                        pending_invitee = intended
                     boru_spoke_this_turn = True
                 is_first_round = False
-            elif not boru_spoke_this_turn:
+            elif not forced and not boru_spoke_this_turn:
                 # Stall detection: if all scores are flat, Boru intervenes (skip if duel already handled)
                 valid_scores = [v for v in scores.values() if v > -100]
-                is_stalling = max(valid_scores) < 1.0 and round_number > len(characters)
+                is_stalling = valid_scores and max(valid_scores) < 1.0 and round_number > len(characters)
                 if is_stalling:
                     # Pick a forced question from the ledger or redirect
                     open_qs = ledger.open_questions[:1]
                     if open_qs:
-                        forced_msg, _intended = await generate_orchestrator_message(
+                        forced_msg, intended = await generate_orchestrator_message(
                             ledger, current_phase, transcript, characters, story.title or "",
                             event_type="forced_question",
                             context={"target": next_speaker_name, "question": open_qs[0]["question"]},
                         )
                         if forced_msg:
-                            yield sse("orchestrator", {"message": forced_msg, "phase": current_phase, "event": "forced_question", "target": next_speaker_name})
-                            transcript.append({"character": "Boru", "message": forced_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "forced_question"})
+                            yield sse("orchestrator", {"message": forced_msg, "phase": current_phase, "event": "forced_question", "target": next_speaker_name, "intended_speaker": intended})
+                            transcript.append({
+                                "character": "Boru", "message": forced_msg, "round": round_number,
+                                "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "forced_question",
+                                "intended_speaker": intended,
+                            })
+                            if intended:
+                                pending_invitee = intended
                             boru_spoke_this_turn = True
 
             # ── 6. Character speaks (1 LLM call — live streaming) ──
@@ -774,6 +841,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "emotion": judge_result.get("dominant_emotion", "neutral"),
             })
 
+            # Clear pending invitee if satisfied
+            if pending_invitee and pending_invitee == next_speaker_name:
+                pending_invitee = None
+                window_turn_count = 0
+            else:
+                window_turn_count += 1
+
             # Save to character soul memory (tracked, not fire-and-forget)
             _track_task(debate_id, save_debate_turn(
                 story_id=debate.story_id,
@@ -791,7 +865,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 repetition_counts[next_speaker_name] = repetition_counts.get(next_speaker_name, 0) + 1
                 strike = repetition_counts[next_speaker_name]
 
-                callout_msg, _intended = await generate_orchestrator_message(
+                callout_msg, intended = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="call_out_repetition",
                     context={
@@ -800,12 +874,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     },
                 )
                 if callout_msg:
-                    yield sse("orchestrator", {"message": callout_msg, "phase": current_phase, "event": "call_out_repetition", "target": next_speaker_name})
+                    yield sse("orchestrator", {"message": callout_msg, "phase": current_phase, "event": "call_out_repetition", "target": next_speaker_name, "intended_speaker": intended})
                     transcript.append({
                         "character": "Boru", "message": callout_msg,
                         "round": round_number, "phase": current_phase,
                         "isOrchestrator": True, "orchestratorEvent": "call_out_repetition",
+                        "intended_speaker": intended,
                     })
+                    if intended:
+                        pending_invitee = intended
 
                 # Store correction hint — injected into this character's NEXT turn
                 correction_hints[next_speaker_name] = (
@@ -841,23 +918,26 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             # Boru responds if character asked a direct question (regardless of ledger turn)
             if boru_question:
-                boru_reply, _intended = await generate_orchestrator_message(
+                boru_reply, intended = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="respond_to_character",
                     context={"speaker": next_speaker_name, "question": boru_question},
                 )
                 if boru_reply:
-                    yield sse("orchestrator", {"message": boru_reply, "phase": current_phase, "event": "respond_to_character", "target": next_speaker_name})
+                    yield sse("orchestrator", {"message": boru_reply, "phase": current_phase, "event": "respond_to_character", "target": next_speaker_name, "intended_speaker": intended})
                     transcript.append({
                         "character": "Boru", "message": boru_reply,
                         "round": round_number, "phase": current_phase,
                         "isOrchestrator": True, "orchestratorEvent": "respond_to_character",
+                        "intended_speaker": intended,
                     })
+                    if intended:
+                        pending_invitee = intended
 
             # ── 11. (Reactions removed — they cluttered the debate without adding to the what-if discussion) ──
 
             # ── 12. World observer — every 5 character turns ──
-            if active_observers and should_invite_observer(transcript, last_observer_at, observer_interval=10):
+            if not forced and active_observers and should_invite_observer(transcript, last_observer_at, observer_interval=10):
                 observer = random.choice(active_observers)
                 obs_has_spoken = any(
                     e.get("isObserver") and e["character"] == observer["name"]
@@ -865,13 +945,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 )
                 # Only introduce if this is their first appearance — returning observers just speak
                 if not obs_has_spoken:
-                    obs_intro, _intended = await generate_orchestrator_message(
+                    obs_intro, intended = await generate_orchestrator_message(
                         ledger, current_phase, transcript, characters, story.title or "",
                         event_type="observer_intro",
                         context={"observer_name": observer["name"], "is_returning": False},
                     )
                     if obs_intro:
-                        yield sse("orchestrator", {"message": obs_intro, "phase": current_phase, "event": "observer_intro", "target": observer["name"]})
+                        yield sse("orchestrator", {"message": obs_intro, "phase": current_phase, "event": "observer_intro", "target": observer["name"], "intended_speaker": intended})
 
                 obs_response = ""
                 try:
@@ -924,7 +1004,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         obs_lower = obs_response.lower()
                         is_dismissive = sum(1 for w in dismissive_signals if w in obs_lower) >= 2
                         if is_dismissive:
-                            boru_defense, _intended = await generate_orchestrator_message(
+                            boru_defense, intended = await generate_orchestrator_message(
                                 ledger, current_phase, transcript, characters, story.title or "",
                                 event_type="defend_sabha",
                                 context={
@@ -935,12 +1015,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                 },
                             )
                             if boru_defense:
-                                yield sse("orchestrator", {"message": boru_defense, "phase": current_phase, "event": "defend_sabha", "target": observer["name"]})
+                                yield sse("orchestrator", {"message": boru_defense, "phase": current_phase, "event": "defend_sabha", "target": observer["name"], "intended_speaker": intended})
                                 transcript.append({
                                     "character": "Boru", "message": boru_defense,
                                     "round": round_number, "phase": current_phase,
                                     "isOrchestrator": True, "orchestratorEvent": "defend_sabha",
+                                    "intended_speaker": intended,
                                 })
+                                if intended:
+                                    pending_invitee = intended
 
                         last_observer_at = len(transcript)
                 except Exception as obs_exc:
@@ -1048,14 +1131,20 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     yield sse("audience", {"name": audience_name, "message": audience_text, "directed_to": directed_to})
                     transcript.append({"character": audience_name, "message": audience_text, "round": round_number, "phase": current_phase, "isAudience": True})
 
-                    boru_response, _intended = await generate_orchestrator_message(
+                    boru_response, intended = await generate_orchestrator_message(
                         ledger, current_phase, transcript, characters, story.title or "",
                         event_type="audience_question",
                         context={"audience_name": audience_name, "audience_message": audience_text, "directed_to": directed_to or ""},
                     )
                     if boru_response:
-                        yield sse("orchestrator", {"message": boru_response, "phase": current_phase, "event": "audience_question", "target": directed_to or "all"})
-                        transcript.append({"character": "Boru", "message": boru_response, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "audience_question"})
+                        yield sse("orchestrator", {"message": boru_response, "phase": current_phase, "event": "audience_question", "target": directed_to or "all", "intended_speaker": intended})
+                        transcript.append({
+                            "character": "Boru", "message": boru_response, "round": round_number,
+                            "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "audience_question",
+                            "intended_speaker": intended,
+                        })
+                        if intended:
+                            pending_invitee = intended
 
                     targets = [directed_to] if directed_to else char_names[:3]
                     ledger.add_question(audience_text, audience_name, targets)
@@ -1077,13 +1166,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
         # ── Closing summary from Boru — with structured verdict ──
         verdict = ledger.generate_closing_verdict()
-        closing_msg, _intended = await generate_orchestrator_message(
+        closing_msg, intended = await generate_orchestrator_message(
             ledger, current_phase, transcript, characters, story.title or "",
             event_type="closing_summary",
             context=verdict,
         )
         if closing_msg:
-            yield sse("orchestrator", {"message": closing_msg, "phase": "closing", "event": "closing_summary", "target": "all"})
+            yield sse("orchestrator", {"message": closing_msg, "phase": "closing", "event": "closing_summary", "target": "all", "intended_speaker": intended})
             transcript.append({
                 "character": "Boru",
                 "message": closing_msg,
@@ -1091,6 +1180,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "phase": "closing",
                 "isOrchestrator": True,
                 "orchestratorEvent": "closing_summary",
+                "intended_speaker": intended,
             })
 
         # Synthesize debate summary first
