@@ -6,6 +6,7 @@ import Link from "next/link";
 import * as d3 from "d3";
 import ReactMarkdown from "react-markdown";
 import { API } from "../../../config";
+import { exportDebateToPdf } from "../../../lib/exportDebate";
 
 const CHAR_COLORS = [
   { text: "text-[#c07820]",   bg: "bg-[#c07820]",   ring: "ring-[#f0c060]",   hex: "#c07820" },
@@ -74,7 +75,7 @@ export default function DebatePage() {
   const [suggestions, setSuggestions] = useState<DivPoint[]>([]);
   const [transcript, setTranscript] = useState<DebateEntry[]>([]);
   const [streaming, setStreaming] = useState<StreamEntry | null>(null);
-  const [, setAlternateEnding] = useState("");
+  const [alternateEnding, setAlternateEnding] = useState("");
   const [debateSummary, setDebateSummary] = useState("");
   const [streamingSummary, setStreamingSummary] = useState("");
   const [, setStreamingEnding] = useState("");
@@ -341,6 +342,7 @@ export default function DebatePage() {
 
   // Interaction graph (SVG + D3)
   const graphSvgRef         = useRef<SVGSVGElement>(null);
+  const graphWrapperRef     = useRef<HTMLDivElement>(null);
   const graphNodesRef       = useRef<GraphNode[]>([]);
   const graphEdgesRef       = useRef<GraphEdge[]>([]);
   const activeNodeRef       = useRef<string | null>(null);
@@ -1733,14 +1735,34 @@ export default function DebatePage() {
             >
               {ttsAutoPlay ? "🔊 Auto-Play On" : "🔇 Auto-Play Off"}
             </button>
-            {/* Print / Save as PDF — sits beside auto-play */}
+            {/* Export debate to PDF — sits beside auto-play */}
             <button
-              onClick={() => window.print()}
+              onClick={async () => {
+                try {
+                  await exportDebateToPdf({
+                    graphElement: graphWrapperRef.current,
+                    turns: transcript as any,
+                    meta: {
+                      storyTitle: storyTitle || "Debate",
+                      divergence: divergence || "",
+                      exportedAt: new Date(),
+                      cast: activeCharacters.map((name, i) => ({
+                        name,
+                        color: CHAR_COLORS[i % CHAR_COLORS.length]?.hex,
+                      })),
+                      alternateEnding: alternateEnding || undefined,
+                    },
+                  });
+                } catch (e) {
+                  console.error("Export failed:", e);
+                  alert("Export failed — see console for details.");
+                }
+              }}
               className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[#f0c060]/60 bg-[#fef3e2] text-[#1c1410] hover:bg-[#fde9c9] transition-colors shrink-0 print:hidden"
-              aria-label="Save debate as PDF"
-              title="Save as PDF — opens your browser's print dialog"
+              aria-label="Export debate as PDF"
+              title="Export debate as PDF — includes title, graph, and full transcript"
             >
-              🖨 PDF
+              📥 Export
             </button>
           </div>
           {/* Emotion legend dropdown */}
@@ -2381,7 +2403,7 @@ export default function DebatePage() {
           {/* Canvas layers */}
           <div className="flex-1 relative min-h-0">
             {/* Graph */}
-            <div style={{ position:"absolute", inset:0, opacity: rightTab==="graph" ? 1 : 0, pointerEvents: rightTab==="graph" ? "auto" : "none", transition:"opacity 0.15s" }}>
+            <div ref={graphWrapperRef} style={{ position:"absolute", inset:0, opacity: rightTab==="graph" ? 1 : 0, pointerEvents: rightTab==="graph" ? "auto" : "none", transition:"opacity 0.15s", background: "#ffffff" }}>
               <svg ref={graphSvgRef} style={{ display:"block", width:"100%", height:"100%" }} />
               {graphHover && (
                 <div className="absolute pointer-events-none z-10 max-w-[220px]"

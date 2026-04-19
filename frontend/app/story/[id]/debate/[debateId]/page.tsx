@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { API } from "../../../../config";
+import { exportDebateToPdf } from "../../../../lib/exportDebate";
 
 const CHAR_COLORS = [
   { text: "text-[#c07820]",   bg: "bg-[#c07820]",   ring: "ring-[#f0c060]",   hex: "#c07820" },
@@ -538,6 +539,29 @@ export default function DebateViewPage() {
   const chars: string[] = debate.participating_characters || [];
   const transcript: DebateEntry[] = debate.transcript || [];
 
+  const handleExport = async () => {
+    try {
+      await exportDebateToPdf({
+        graphElement: graphCanvasRef.current,
+        turns: transcript as any,
+        meta: {
+          storyTitle: debate.story_title || debate.divergence_description || "Debate",
+          storyAuthor: debate.story_author,
+          divergence: debate.divergence_description || "",
+          exportedAt: new Date(),
+          cast: chars.map((name, i) => ({
+            name,
+            color: CHAR_COLORS[i % CHAR_COLORS.length]?.hex,
+          })),
+          alternateEnding: debate.alternate_ending || undefined,
+        },
+      });
+    } catch (e) {
+      console.error("Export failed:", e);
+      alert("Export failed — see console for details.");
+    }
+  };
+
   return (
     <main className="relative flex flex-col bg-[#f7f3ed] overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
       {/* Sub-header */}
@@ -565,12 +589,12 @@ export default function DebateViewPage() {
           )}
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => window.print()}
+              onClick={handleExport}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#1c1410] text-xs font-medium border border-[#f0c060]/60 hover:bg-[#fde9c9] transition-colors print:hidden"
-              aria-label="Save debate as PDF"
-              title="Save as PDF — opens your browser's print dialog"
+              aria-label="Export debate as PDF"
+              title="Export debate as PDF — includes title, graph, and full transcript"
             >
-              🖨 Save as PDF
+              📥 Export PDF
             </button>
             <span className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
               debate.status === "completed"
@@ -928,11 +952,11 @@ export default function DebateViewPage() {
               <span className="text-[#f0c060] font-bold text-sm tracking-wider">✦ WhatIfSabha</span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={handleExport}
                   className="text-xs text-white/70 hover:text-white border border-[#f0c060]/40 hover:border-[#f0c060]/70 px-3 py-1.5 rounded-lg transition-colors print:hidden"
-                  aria-label="Save alternate ending as PDF"
+                  aria-label="Export debate and alternate ending as PDF"
                 >
-                  🖨 Save as PDF
+                  📥 Export PDF
                 </button>
                 <Link href={`/story/${id}/debate`} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">New debate →</Link>
                 <button onClick={() => setShowConclusion(false)} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">← Back</button>
