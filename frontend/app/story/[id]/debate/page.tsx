@@ -1741,9 +1741,28 @@ export default function DebatePage() {
             {/* Export debate to PDF — sits beside auto-play */}
             <button
               onClick={async () => {
+                // Ensure the graph tab is active so graphWrapperRef is rendered
+                // with opacity:1 (it's opacity:0 + pointerEvents:none when inactive).
+                const prevTab = rightTab;
+                if (rightTab !== "graph") {
+                  setRightTab("graph");
+                  // Wait for re-render
+                  await new Promise<void>(r => requestAnimationFrame(() => r()));
+                  await new Promise<void>(r => setTimeout(r, 150));  // extra tick for D3 to settle
+                }
+
                 // Before export: force the graph wrapper to have explicit dimensions
                 // so html2canvas captures it at a meaningful size.
                 const gw = graphWrapperRef.current;
+                console.info("[PDF] pre-export graph state:", {
+                  exists: !!gw,
+                  rect: gw?.getBoundingClientRect(),
+                  innerHtml_preview: gw?.innerHTML.slice(0, 200),
+                  childCount: gw?.childElementCount,
+                  rightTab,
+                  prevTab,
+                });
+
                 let undoStyle: (() => void) | null = null;
                 if (gw) {
                   const rect = gw.getBoundingClientRect();
@@ -1782,6 +1801,8 @@ export default function DebatePage() {
                   alert("Export failed — see console for details.");
                 } finally {
                   if (undoStyle) undoStyle();
+                  // Restore previous tab
+                  if (prevTab !== "graph") setRightTab(prevTab);
                 }
               }}
               className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[#f0c060]/60 bg-[#fef3e2] text-[#1c1410] hover:bg-[#fde9c9] transition-colors shrink-0 print:hidden"
