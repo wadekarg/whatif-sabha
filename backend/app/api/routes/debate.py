@@ -520,12 +520,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         if alt_scores:
                             next_speaker_name = max(alt_scores, key=lambda k: alt_scores[k])
 
-            # Pick a second speaker for dual-speaker turns (every 4th turn, or after duel break)
-            second_speaker_name = None
-            if not forced and (round_number % 4 == 3 or duel_detected) and len(characters) > 2:
-                remaining = {k: v for k, v in scores.items() if k != next_speaker_name and v > -100}
-                if remaining:
-                    second_speaker_name = max(remaining, key=lambda k: remaining[k])
+            # (Bug G fix: removed dual-speaker second_speaker_name selection — the
+            # re-entry/enforcement/dispute logic rotates speakers well enough, and
+            # the dual-turn path caused back-to-back repetition.)
 
             character = next((c for c in characters if c["name"] == next_speaker_name), None)
             if not character:
@@ -579,7 +576,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         if next_speaker_name not in (char_a, char_b):
                             next_speaker_name = char_a
                             character = next((c for c in characters if c["name"] == next_speaker_name), character)
-                        second_speaker_name = char_b if next_speaker_name == char_a else char_a
+                        # (Bug G fix: removed second_speaker_name assignment. The opposing
+                        # dispute party will be the natural next speaker via Boru's invitation
+                        # / enforcement on the following turn.)
                         confront_msg, intended = await generate_orchestrator_message(
                             ledger, current_phase, transcript, characters, story.title or "",
                             event_type="force_confrontation",
@@ -1139,90 +1138,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     logger.warning(f"Observer failed (non-fatal): {obs_exc}")
                     last_observer_at = len(transcript)  # reset timer even on failure
 
-            # ── 12b. Second speaker (dual turn — brings in sidelined characters) ──
-            if second_speaker_name:
-                second_char = next((c for c in characters if c["name"] == second_speaker_name), None)
-                if second_char:
-                    second_phases = second_char.get("phases", [])
-                    second_phase = second_phases[-1] if second_phases else {}
-                    yield sse("character_start", {
-                        "character": second_speaker_name,
-                        "round": round_number,
-                        "phase": current_phase,
-                        "drama_score": orch_drama_score(transcript),
-                    })
-                    second_response = ""
-                    try:
-                        _pqs2 = [q for q in ledger.open_questions
-                                if second_speaker_name in q.get("directed_to", [])
-                                and q.get("_times_injected", 0) < 2]
-                        for q in _pqs2:
-                            q["_times_injected"] = q.get("_times_injected", 0) + 1
-                        second_raw = ""
-                        second_target = None
-                        second_first_line = False
-                        async for token in character_respond_stream(
-                            character=second_char,
-                            phase=second_phase,
-                            divergence=debate.divergence_description,
-                            debate_history=transcript,
-                            story_title=story.title or "",
-                            correction_hint=correction_hints.pop(second_speaker_name, None),
-                            pending_questions=_pqs2,
-                            ledger=ledger,
-                            current_phase=current_phase,
-                            round_number=round_number,
-                        ):
-                            if not second_first_line:
-                                second_raw += token
-                                if "\n" in second_raw:
-                                    first_line, remainder = second_raw.split("\n", 1)
-                                    if first_line.strip().startswith("@"):
-                                        tname = first_line.strip()[1:].strip().rstrip(".,!?:;")
-                                        if tname in char_names or tname == "Boru":
-                                            second_target = tname
-                                        second_response += remainder
-                                        if remainder:
-                                            yield sse("token", {"character": second_speaker_name, "text": remainder})
-                                    else:
-                                        second_response += second_raw
-                                        yield sse("token", {"character": second_speaker_name, "text": second_raw})
-                                    second_first_line = True
-                            else:
-                                second_response += token
-                                yield sse("token", {"character": second_speaker_name, "text": token})
-                        if not second_first_line and second_raw:
-                            second_response += second_raw
-                            yield sse("token", {"character": second_speaker_name, "text": second_raw})
-
-                        if second_response:
-                            second_targets = _resolve_targets(
-                                speaker_name=second_speaker_name,
-                                full_response=second_response,
-                                char_names=char_names,
-                                transcript=transcript,
-                                ledger=ledger,
-                            )
-                            if second_target and second_target not in second_targets:
-                                second_targets.insert(0, second_target)
-                            yield sse("character_end", {
-                                "character": second_speaker_name,
-                                "message": second_response,
-                                "round": round_number,
-                                "judge_score": 7,
-                                "target_characters": second_targets,
-                                "emotion": "neutral",
-                            })
-                            transcript.append({
-                                "character": second_speaker_name,
-                                "message": second_response,
-                                "round": round_number,
-                                "phase": current_phase,
-                                "target_characters": second_targets,
-                            })
-                    except Exception as e2:
-                        logger.warning(f"Second speaker {second_speaker_name} failed: {e2}")
-                        yield sse("turn_error", {"character": second_speaker_name, "reason": str(e2)[:100]})
+            # ── 12b. (Bug G fix: removed dual-speaker consumer block — caused
+            # back-to-back repetition when second speaker was the same as or adjacent
+            # to the primary speaker.) ──
 
             # ── 13. Audience messages ──
             queue = _audience_queues.get(debate_id)
