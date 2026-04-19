@@ -517,7 +517,11 @@ export default function DebatePage() {
           boruNode.r = Math.min(26 + boruNode.speeches * 0.3, 34);
         }
         const allTargets: string[] = [];
-        if ((last as any).targets && Array.isArray((last as any).targets)) {
+        // Prefer target_characters (array) — avoids phantom "A,B" nodes when
+        // backend used to emit target: f"{a},{b}". Fall back to `targets` then `target`.
+        if ((last as any).target_characters && Array.isArray((last as any).target_characters)) {
+          allTargets.push(...((last as any).target_characters as string[]).filter(t => t !== "Boru" && t !== "all"));
+        } else if ((last as any).targets && Array.isArray((last as any).targets)) {
           allTargets.push(...(last as any).targets);
         } else if (last.target && last.target !== "Boru" && last.target !== "all") {
           allTargets.push(last.target);
@@ -1046,6 +1050,7 @@ export default function DebatePage() {
           round: 0,
           target: ev.target || undefined,
           targets: ev.targets || undefined,
+          target_characters: ev.target_characters || undefined,
           isOrchestrator: true,
           orchestratorEvent: ev.event,
           phase: ev.phase,
