@@ -1096,6 +1096,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 target_chars.insert(0, self_declared_target)
             logger.info(f"[TARGETS] {next_speaker_name} → {target_chars} (self_declared={self_declared_target}, judge={judge_addressed})")
 
+            # If this character was just forced to respond to a Boru invitation
+            # (pending_invitee was set for them and they're now speaking), inject Boru
+            # into target_characters so the interaction graph draws a response arrow to him.
+            # This runs BEFORE pending_invitee is cleared later in the cycle.
+            responded_to_boru = False
+            if forced and next_speaker_name == pending_invitee:
+                responded_to_boru = True
+                if "Boru" not in target_chars:
+                    target_chars = list(target_chars) + ["Boru"]
+
             yield sse("character_end", {
                 "character": next_speaker_name,
                 "message": full_response,
@@ -1103,6 +1113,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "judge_score": judge_result.get("score", 7),
                 "target_characters": target_chars,
                 "emotion": judge_result.get("dominant_emotion", "neutral"),
+                "responded_to_boru": responded_to_boru,
             })
 
             transcript.append({
@@ -1112,6 +1123,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "phase": current_phase,
                 "target_characters": target_chars,
                 "emotion": judge_result.get("dominant_emotion", "neutral"),
+                "responded_to_boru": responded_to_boru,
             })
 
             # Clear pending invitee if satisfied. If a secondary invitee is
