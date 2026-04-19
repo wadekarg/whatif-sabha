@@ -93,6 +93,31 @@ def _extract_recent_boru_openers(transcript: list[dict], limit: int = 5) -> list
     return openers   # most recent first
 
 
+def _extract_recent_dispute_subjects(transcript: list[dict], limit: int = 5) -> list[str]:
+    """Return one-line summaries of the last N Boru orchestrator turns that
+    referenced disputes or contradictions. Used to inject into respond_to_character
+    prompts as 'do NOT re-raise these' context.
+    """
+    subjects: list[str] = []
+    seen_pairs: set[tuple[str, ...]] = set()
+    for e in reversed(transcript):
+        if len(subjects) >= limit:
+            break
+        if not e.get("isOrchestrator"):
+            continue
+        ev = e.get("orchestratorEvent", "")
+        if ev not in ("respond_to_character", "dispute_callout",
+                      "force_confrontation", "break_duel"):
+            continue
+        msg = (e.get("message") or "").strip()
+        if len(msg) < 20:
+            continue
+        # Truncate to one-line summary
+        single = msg.replace("\n", " ")[:180]
+        subjects.append(single)
+    return subjects   # most recent first
+
+
 def _get_orchestrator_llm():
     """Get an LLM for Boru — tries Gemini first, falls back to NVIDIA/Groq."""
     # Try Gemini first
@@ -1355,6 +1380,18 @@ async def generate_orchestrator_message(
         )
     else:
         anti_rep_block = ""
+
+    # For dispute-surfacing events, show what's already been said so we don't
+    # re-raise the same contradiction
+    if event_type in ("respond_to_character", "force_confrontation", "dispute_callout", "break_duel"):
+        recent_subjects = _extract_recent_dispute_subjects(transcript, limit=5)
+        if recent_subjects:
+            anti_rep_block += (
+                "\n\nYOU HAVE ALREADY RAISED THESE CONTRADICTIONS (do NOT restate or "
+                "rephrase any of them — move to a DIFFERENT pairing or a DIFFERENT angle):\n"
+                + "\n".join(f"  - \"{s[:150]}...\"" for s in recent_subjects)
+                + "\n\nSurface a FRESH pairing or DIFFERENT substantive angle this turn."
+            )
 
     prompt = f"""You are Boru the Elephant — the witty, sharp host of the WhatIfSabha debate about "{story_title}".
 
