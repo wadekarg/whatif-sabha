@@ -404,6 +404,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     # Boru authority state (Task 4b)
     pending_invitee: str | None = None   # character Boru just named; cleared when they speak
     window_turn_count: int = 0           # character turns since Boru last spoke
+    last_force_confrontation_round: int = -999   # global cooldown for force_confrontation events
 
     try:
         # ── Main debate loop — heuristic-driven, Boru intervenes only when needed ──
@@ -568,46 +569,52 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     escalated = ledger.get_escalated_disputes(round_number)
 
                     if escalated["tier3"]:
-                        # Tier 3: FORCE confrontation — override speakers
-                        dispute = escalated["tier3"][0]
-                        char_a = dispute["claim_a"]["character"]
-                        char_b = dispute["claim_b"]["character"]
-                        # Override next speaker to be one of the dispute parties
-                        if next_speaker_name not in (char_a, char_b):
-                            next_speaker_name = char_a
-                            character = next((c for c in characters if c["name"] == next_speaker_name), character)
-                        # (Bug G fix: removed second_speaker_name assignment. The opposing
-                        # dispute party will be the natural next speaker via Boru's invitation
-                        # / enforcement on the following turn.)
-                        confront_msg, intended = await generate_orchestrator_message(
-                            ledger, current_phase, transcript, characters, story.title or "",
-                            event_type="force_confrontation",
-                            context={"char_a": char_a, "char_b": char_b,
-                                     "claim_a": dispute["claim_a"]["claim"][:120],
-                                     "claim_b": dispute["claim_b"]["claim"][:120],
-                                     "turns": dispute["turns_unresolved"]},
-                        )
-                        if confront_msg:
-                            yield sse("orchestrator", {"message": confront_msg, "phase": current_phase, "event": "force_confrontation", "target": char_a, "target_characters": [char_a, char_b], "intended_speaker": intended})
-                            transcript.append({
-                                "character": "Boru", "message": confront_msg, "round": round_number,
-                                "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "force_confrontation",
-                                "intended_speaker": intended,
-                            })
-                            if intended:
-                                pending_invitee = intended
-                                # Pivot this turn's speaker to the invitee so Boru's word takes effect
-                                # immediately, not on the next cycle.
-                                if intended != next_speaker_name:
-                                    candidate = next((c for c in characters if c["name"] == intended), None)
-                                    if candidate:
-                                        next_speaker_name = intended
-                                        character = candidate
-                                        forced = True
-                                        # Clear second_speaker — we're now on Boru's floor
-                                        second_speaker_name = None
-                            boru_spoke_this_turn = True
-                        dispute["_last_escalation_turn"] = round_number
+                        # Global cooldown — don't fire force_confrontation more than once per N turns
+                        from app.core.agents.sabha_orchestrator import DISPUTE_GLOBAL_COOLDOWN_TURNS
+                        if round_number - last_force_confrontation_round < DISPUTE_GLOBAL_COOLDOWN_TURNS:
+                            pass  # skip — still cooling down from previous force_confrontation
+                        else:
+                            # Tier 3: FORCE confrontation — override speakers
+                            dispute = escalated["tier3"][0]
+                            char_a = dispute["claim_a"]["character"]
+                            char_b = dispute["claim_b"]["character"]
+                            # Override next speaker to be one of the dispute parties
+                            if next_speaker_name not in (char_a, char_b):
+                                next_speaker_name = char_a
+                                character = next((c for c in characters if c["name"] == next_speaker_name), character)
+                            # (Bug G fix: removed second_speaker_name assignment. The opposing
+                            # dispute party will be the natural next speaker via Boru's invitation
+                            # / enforcement on the following turn.)
+                            confront_msg, intended = await generate_orchestrator_message(
+                                ledger, current_phase, transcript, characters, story.title or "",
+                                event_type="force_confrontation",
+                                context={"char_a": char_a, "char_b": char_b,
+                                         "claim_a": dispute["claim_a"]["claim"][:120],
+                                         "claim_b": dispute["claim_b"]["claim"][:120],
+                                         "turns": dispute["turns_unresolved"]},
+                            )
+                            if confront_msg:
+                                yield sse("orchestrator", {"message": confront_msg, "phase": current_phase, "event": "force_confrontation", "target": char_a, "target_characters": [char_a, char_b], "intended_speaker": intended})
+                                transcript.append({
+                                    "character": "Boru", "message": confront_msg, "round": round_number,
+                                    "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "force_confrontation",
+                                    "intended_speaker": intended,
+                                })
+                                if intended:
+                                    pending_invitee = intended
+                                    # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                                    # immediately, not on the next cycle.
+                                    if intended != next_speaker_name:
+                                        candidate = next((c for c in characters if c["name"] == intended), None)
+                                        if candidate:
+                                            next_speaker_name = intended
+                                            character = candidate
+                                            forced = True
+                                            # Clear second_speaker — we're now on Boru's floor
+                                            second_speaker_name = None
+                                boru_spoke_this_turn = True
+                            dispute["_last_escalation_turn"] = round_number
+                            last_force_confrontation_round = round_number
 
                     elif escalated["tier2"]:
                         # Tier 2: Boru calls it out

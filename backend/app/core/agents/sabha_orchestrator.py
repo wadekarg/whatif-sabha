@@ -191,6 +191,14 @@ PHASE_CONFIG = {
 
 # ── Argument Ledger ────────────────────────────────────────────────────────────
 
+# Dispute escalation thresholds — tuned to prevent force_confrontation
+# from firing more than ~1 in 10 turns.
+DISPUTE_PER_DISPUTE_COOLDOWN_TURNS = 6     # was 3 — time between re-escalations of the SAME dispute
+DISPUTE_GLOBAL_COOLDOWN_TURNS = 8          # NEW — time between ANY force_confrontation events
+DISPUTE_TIER3_THRESHOLD_TURNS = 10         # was 7 — how long a dispute must stay unresolved before Boru forces it
+DISPUTE_TIER2_THRESHOLD_TURNS = 7          # was 5 — Boru calls it out (softer) before forcing
+
+
 class ArgumentLedger:
     """
     Live state of the debate — what's been claimed, questioned, resolved.
@@ -274,18 +282,23 @@ class ArgumentLedger:
         return qid
 
     def get_escalated_disputes(self, round_number: int = 0) -> dict:
-        """Return disputes bucketed by escalation tier."""
-        tier2 = []  # Boru calls it out
-        tier3 = []  # Forced confrontation
+        """Return disputes bucketed by escalation tier.
+
+        Tuned thresholds prevent escalation thrashing in large-cast debates.
+        Caller additionally tracks last_global_force_round to enforce
+        DISPUTE_GLOBAL_COOLDOWN_TURNS across all force_confrontation events.
+        """
+        tier2 = []
+        tier3 = []
         for d in self.disputes:
             if d["status"] != "unresolved":
                 continue
-            # Cooldown: don't re-escalate within 3 turns of last escalation
-            if round_number - d.get("_last_escalation_turn", 0) < 3:
+            # Per-dispute cooldown (don't hammer the same pair of characters)
+            if round_number - d.get("_last_escalation_turn", 0) < DISPUTE_PER_DISPUTE_COOLDOWN_TURNS:
                 continue
-            if d["turns_unresolved"] >= 7:
+            if d["turns_unresolved"] >= DISPUTE_TIER3_THRESHOLD_TURNS:
                 tier3.append(d)
-            elif d["turns_unresolved"] >= 5:
+            elif d["turns_unresolved"] >= DISPUTE_TIER2_THRESHOLD_TURNS:
                 tier2.append(d)
         return {"tier2": tier2, "tier3": tier3}
 
