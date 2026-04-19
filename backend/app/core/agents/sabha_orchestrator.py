@@ -980,34 +980,70 @@ _BROADCAST_EVENTS = frozenset({
 
 
 def extract_first_cast_name(message: str, cast_names: list[str]) -> str | None:
-    """Find the FIRST cast-member name mentioned in the message text.
+    """Find the cast-member name Boru is MOST LIKELY addressing.
 
-    Matches case-insensitively on word boundaries. When two cast names overlap
-    (e.g., "Jones" and "Mr. Jones"), the longer match wins at that position.
+    Uses weighted position scoring rather than pure first-mention:
+    - +10 for vocative address (name followed by comma, colon, bang, question-mark)
+    - +8 for prepositional target ("for X", "to X", "from X", "ask X")
+    - +6 for name at very start of message
+    - +1 for plain / possessive mention (weakest signal — talking about someone, not to them)
 
-    Returns the cast name in its original casing, or None if no match.
+    Highest score wins; tie broken by earliest position. Returns cast name
+    in its original casing, or None if no match.
     """
     import re
     if not message or not cast_names:
         return None
 
-    # Sort by length descending so longer names are checked first at any position.
+    # Sort by length desc so "Mr. Jones" matches before "Jones".
     sorted_names = sorted(cast_names, key=len, reverse=True)
 
-    # Build a single regex with word-boundary anchors and case-insensitive flag.
-    # Escape each name; join with | (alternation). Python's re is leftmost-first,
-    # so with the longest-name-first ordering, overlapping matches resolve correctly.
-    pattern = r"\b(?:" + "|".join(re.escape(n) for n in sorted_names) + r")\b"
-    match = re.search(pattern, message, flags=re.IGNORECASE)
-    if not match:
+    candidates: list[tuple[int, int, str]] = []  # (score, position, canonical_name)
+
+    for name in sorted_names:
+        pattern = r"\b" + re.escape(name) + r"\b"
+        for m in re.finditer(pattern, message, flags=re.IGNORECASE):
+            pos = m.start()
+            after_end = m.end()
+            # Look at the character immediately after the match
+            next_char = message[after_end:after_end + 1] if after_end < len(message) else ""
+            # Look at the 1-2 chars after
+            next_two = message[after_end:after_end + 2] if after_end < len(message) else ""
+            # Look at the window BEFORE the match (up to 10 chars)
+            pre_window = message[max(0, pos - 12):pos].lower()
+
+            score = 1  # baseline — plain/possessive mention
+
+            # +10: vocative — name immediately followed by punctuation that signals address
+            if next_char in (",", ":", "!") or next_two.startswith(",") or next_two.startswith("?"):
+                score = max(score, 10)
+
+            # +8: prepositional target ("for Napoleon", "to Boxer", "ask Squealer")
+            if re.search(r"\b(for|to|from|ask|tell|invite|call)\s+$", pre_window):
+                score = max(score, 8)
+
+            # +6: name at the very start of the message (within first 3 chars of significant text)
+            # Trim leading whitespace/quotes first
+            leading_stripped = message[:pos].strip()
+            if len(leading_stripped) == 0:
+                score = max(score, 6)
+
+            # Penalty: possessive form (Name's) — this is usually "about" not "to"
+            if next_two.startswith("'s") or next_char == "'":
+                # Only penalize if we haven't already matched a vocative/prepositional signal
+                if score <= 1:
+                    score = 1  # explicit baseline
+
+            # Canonical casing
+            canonical = next((n for n in cast_names if n.lower() == m.group(0).lower()), m.group(0))
+            candidates.append((score, pos, canonical))
+
+    if not candidates:
         return None
 
-    matched_text = match.group(0)
-    # Map back to the original cast casing.
-    for name in cast_names:
-        if name.lower() == matched_text.lower():
-            return name
-    return None
+    # Highest score wins; tiebreak by earliest position
+    candidates.sort(key=lambda t: (-t[0], t[1]))
+    return candidates[0][2]
 
 
 def intended_speaker_from_result(

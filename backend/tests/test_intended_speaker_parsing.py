@@ -15,11 +15,15 @@ def test_extract_single_name():
     assert extract_first_cast_name("Napoleon, answer this.", CAST) == "Napoleon"
 
 
-def test_extract_first_of_multiple():
-    """First name mentioned wins."""
+def test_vocative_wins_over_possessive_or_mention():
+    """Vocative address (name followed by comma) beats plain/possessive mention.
+
+    Under the new weighted scorer: "Squealer," is a vocative (+10) while
+    "Napoleon and" is just a plain mention (+1). Squealer wins.
+    """
     assert extract_first_cast_name(
         "Napoleon and Squealer, settle this now.", CAST
-    ) == "Napoleon"
+    ) == "Squealer"
 
 
 def test_extract_multi_word_name():
@@ -70,6 +74,71 @@ def test_extract_empty_message_returns_none():
     assert extract_first_cast_name("", CAST) is None
 
 
+def test_vocative_beats_possessive():
+    """'Napoleon's X is weak, Snowball, tell me your view' → Snowball (vocative)."""
+    cast = ["Napoleon", "Snowball"]
+    assert extract_first_cast_name(
+        "Napoleon's claim is weak, Snowball, tell me your view.",
+        cast,
+    ) == "Snowball"
+
+
+def test_prepositional_target_beats_possessive():
+    """'Napoleon's plan raises a question for Mrs. Jones' → Mrs. Jones."""
+    cast = ["Napoleon", "Mrs. Jones"]
+    assert extract_first_cast_name(
+        "Napoleon's plan raises a question for Mrs. Jones.",
+        cast,
+    ) == "Mrs. Jones"
+
+
+def test_vocative_at_start_wins():
+    """'Mrs. Jones, as one who has seen...' → Mrs. Jones (vocative + start position)."""
+    cast = ["Napoleon", "Mrs. Jones"]
+    assert extract_first_cast_name(
+        "Mrs. Jones, as one who has seen the farm, what do you make of Napoleon's plan?",
+        cast,
+    ) == "Mrs. Jones"
+
+
+def test_multiple_vocatives_first_wins():
+    """Two vocatives — earliest position wins among equal-score candidates."""
+    cast = ["Napoleon", "Snowball"]
+    assert extract_first_cast_name(
+        "Napoleon, and also Snowball, what do you say?",
+        cast,
+    ) == "Napoleon"
+
+
+def test_prepositional_after_said():
+    """'Hunger reveals loyalty, Napoleon said; Mrs. Jones, does that mean...' → Mrs. Jones.
+
+    'Napoleon said' is not a vocative; 'Mrs. Jones,' is. Mrs. Jones wins."""
+    cast = ["Napoleon", "Mrs. Jones"]
+    assert extract_first_cast_name(
+        "Hunger reveals loyalty, Napoleon said; Mrs. Jones, does that mean...",
+        cast,
+    ) == "Mrs. Jones"
+
+
+def test_pure_possessive_still_picks_that_name_if_alone():
+    """When the message only mentions someone possessively, that's still the best match."""
+    cast = ["Napoleon", "Snowball"]
+    assert extract_first_cast_name(
+        "Napoleon's claim about hunger is interesting.",
+        cast,
+    ) == "Napoleon"
+
+
+def test_plain_mention_no_punctuation():
+    """'I'll let Napoleon speak next' — no vocative, but 'let Napoleon' suggests prepositional — Napoleon."""
+    cast = ["Napoleon"]
+    assert extract_first_cast_name(
+        "I'll let Napoleon speak next.",
+        cast,
+    ) == "Napoleon"
+
+
 # ── intended_speaker_from_result ──────────────────────────────────────
 
 def test_broadcast_events_always_return_none():
@@ -106,16 +175,20 @@ def test_falls_back_to_message_parse_when_context_has_no_target():
     assert result == "Snowball"
 
 
-def test_dispute_callout_parses_first_disputant():
-    """dispute_callout context has char_a/char_b — use char_a if present,
-    else fall back to message parse."""
+def test_dispute_callout_parses_vocative_disputant():
+    """dispute_callout has no explicit target in intended_speaker_for, so it
+    falls back to the weighted message parser. Under the new rules, the
+    vocative (name immediately before the comma) wins: in
+    "Napoleon and Mr. Jones, settle this now." — "Mr. Jones," is the
+    vocative (+10) while "Napoleon and" is a plain mention (+1).
+    """
     result = intended_speaker_from_result(
         event_type="dispute_callout",
         context={"char_a": "Napoleon", "char_b": "Mr. Jones"},
         message="Napoleon and Mr. Jones, settle this now.",
         cast_names=CAST,
     )
-    assert result == "Napoleon"
+    assert result == "Mr. Jones"
 
 
 def test_context_target_not_in_cast_falls_through_to_message():
