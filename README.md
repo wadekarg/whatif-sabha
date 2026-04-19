@@ -21,7 +21,7 @@ WhatIfSabha is a side project born from that itch. You upload a story, type a "w
 
 ## 📖 What it does
 
-Upload a PDF. The app pulls out the characters, gives each of them a little brain and some context from the book, and then hands the floor to Boru. You give Boru a divergence point — the "what if" — and the debate begins.
+Upload a PDF. The app pulls out the characters, gives each of them a little brain and some context from the book, generates a portrait for each (via [Pollinations](https://pollinations.ai)), and then hands the floor to Boru. You give Boru a divergence point — the "what if" — and the debate begins.
 
 Boru runs the room: calls on people, forces confrontations between contradictions, drags silent characters in, closes the session when things have been said. A narrator at the end writes an alternate ending based on everything that was argued.
 
@@ -144,6 +144,7 @@ Once the debate ends, a few things happen:
 - ⚛️ **Frontend** — Next.js 16, TypeScript, Tailwind 4, D3 / force-graph
 - 💾 **State** — SQLite (debates, turns, characters) + ChromaDB (per-character RAG over story text). Optional Graphiti + Kuzu for persistent character "soul memory".
 - 🤖 **LLMs** — a provider router across **Gemini · Cerebras · NVIDIA NIM · Groq**, with role-based routing (character / judge / narrator / analysis) and automatic failover on rate-limit. Anthropic/OpenAI work as optional paid fallbacks.
+- 🖼️ **Character portraits** — generated via [Pollinations](https://pollinations.ai) during upload. Free, no API key.
 
 **Subprojects:**
 
