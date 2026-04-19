@@ -387,7 +387,6 @@ export default function Home() {
                 { icon: "💬", n: "05", title: "Chat with any character — before or after", body: "Oracle mode lets you sit down with any character one-on-one. Interrogate their position, their regrets, their reasoning — all in their own voice." },
                 { icon: "🌐", n: "06", title: "See the web form", body: "A live interaction graph shows who's arguing with whom, which arrows are questions vs responses, and where the heat lives. Click any node to focus on a character's thread." },
                 { icon: "✍️", n: "07", title: "A new ending is written", body: "After the debate concludes, an alternate ending is narrated — grounded in the characters' own choices from the debate, not a generic rewrite." },
-                { icon: "📥", n: "08", title: "Export or share", body: "Download the full debate as a PDF (title page, graph, transcript, alternate ending). Or host it as a static replay site anyone can scroll through — no backend needed." },
               ].map(s => (
                 <div key={s.n} className="flex gap-4">
                   <div className="w-10 h-10 rounded-xl bg-[#fef3e2] border border-[#f0c060]/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
