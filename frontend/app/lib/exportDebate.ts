@@ -142,6 +142,26 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
           imgData = capture.toDataURL("image/png");
           imgW = capture.width;
           imgH = capture.height;
+
+          // Retry once with explicit scrollWidth/scrollHeight when first capture is tiny.
+          // SVG-heavy wrappers often yield 0×0 images on the first pass.
+          if (imgW < 50 || imgH < 50) {
+            console.warn(`first capture was tiny (${imgW}x${imgH}) — retrying with explicit size`);
+            const retry = await html2canvas(el, {
+              backgroundColor: "#ffffff",
+              scale: 2,
+              logging: false,
+              useCORS: true,
+              width: el.scrollWidth || 800,
+              height: el.scrollHeight || 600,
+            });
+            if (retry.width >= 50 && retry.height >= 50) {
+              imgData = retry.toDataURL("image/png");
+              imgW = retry.width;
+              imgH = retry.height;
+            }
+          }
+          console.info(`[PDF] graph captured: ${imgW}x${imgH}`);
         }
       }
 

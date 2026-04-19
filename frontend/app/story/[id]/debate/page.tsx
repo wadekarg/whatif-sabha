@@ -1741,9 +1741,30 @@ export default function DebatePage() {
             {/* Export debate to PDF — sits beside auto-play */}
             <button
               onClick={async () => {
+                // Before export: force the graph wrapper to have explicit dimensions
+                // so html2canvas captures it at a meaningful size.
+                const gw = graphWrapperRef.current;
+                let undoStyle: (() => void) | null = null;
+                if (gw) {
+                  const rect = gw.getBoundingClientRect();
+                  if (rect.width < 50 || rect.height < 50) {
+                    // Force explicit size temporarily
+                    const savedStyle = gw.getAttribute("style") || "";
+                    gw.setAttribute(
+                      "style",
+                      `${savedStyle}; width: 800px; height: 600px; background: #ffffff;`,
+                    );
+                    undoStyle = () => gw.setAttribute("style", savedStyle);
+                    // Wait a tick for the browser to relayout
+                    await new Promise<void>(r => requestAnimationFrame(() => r()));
+                  } else {
+                    // Even with real size, add background so html2canvas doesn't capture transparent
+                    gw.style.background = "#ffffff";
+                  }
+                }
                 try {
                   await exportDebateToPdf({
-                    graphElement: graphWrapperRef.current,
+                    graphElement: gw,
                     turns: transcript as any,
                     meta: {
                       storyTitle: storyTitle || "Debate",
@@ -1759,6 +1780,8 @@ export default function DebatePage() {
                 } catch (e) {
                   console.error("Export failed:", e);
                   alert("Export failed — see console for details.");
+                } finally {
+                  if (undoStyle) undoStyle();
                 }
               }}
               className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[#f0c060]/60 bg-[#fef3e2] text-[#1c1410] hover:bg-[#fde9c9] transition-colors shrink-0 print:hidden"
