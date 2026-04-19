@@ -530,6 +530,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             second_speaker_name = None
                 break
 
+            # Retire disputes that have gone stale — keeps ledger context fresh
+            if round_number > 0 and round_number % 5 == 0:
+                retired_count = ledger.retire_stale_disputes(round_number, stale_threshold=10)
+                if retired_count:
+                    logger.info(f"[DISPUTE] retired {retired_count} stale disputes at round {round_number}")
+
             # ── 2. End condition (check every 4th turn, or always in closing phase) ──
             if (current_phase == "closing" or round_number % 4 == 0) and round_number > 0:
                 if await should_end_debate(ledger, current_phase, transcript, characters):

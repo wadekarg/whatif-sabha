@@ -451,6 +451,24 @@ class ArgumentLedger:
                 return d
         return None
 
+    def retire_stale_disputes(self, current_round: int, stale_threshold: int = 10) -> int:
+        """Retire disputes that have been unresolved but untouched for `stale_threshold`
+        turns since last escalation/mention. Returns count of disputes retired.
+
+        Unlike 'resolved_by_escalation' (after 2 force_confrontations), this fires
+        for disputes that simply aged out of relevance — the debate moved on."""
+        retired = 0
+        for d in self.disputes:
+            if d.get("status") != "unresolved":
+                continue
+            last_touched = d.get("_last_escalation_turn", 0)
+            # Also consider turns_unresolved as a proxy for age
+            age_proxy = d.get("turns_unresolved", 0)
+            if current_round - last_touched >= stale_threshold and age_proxy >= 5:
+                d["status"] = "resolved_stale"
+                retired += 1
+        return retired
+
     def _pair_recently_retired(self, char_a: str, char_b: str, current_round: int, window: int = 10) -> bool:
         """Return True if this pair has a retired (resolved_by_escalation) dispute
         within the last `window` turns."""
