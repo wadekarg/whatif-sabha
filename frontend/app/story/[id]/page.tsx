@@ -326,7 +326,7 @@ export default function StoryPage() {
               />
             </div>
             <div className={`px-6 pb-3 flex flex-wrap gap-2 ${showSuggestions ? "" : "hidden"}`}>
-              {suggestions.map((s: any, i: number) => (
+              {suggestions.slice(0, 5).map((s: any, i: number) => (
                 <button key={s.event_id || i} onClick={() => setWhatIf(s.description)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                     whatIf === s.description
