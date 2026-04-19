@@ -505,6 +505,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     # the turn loop otherwise runs without blocking on the ledger LLM call.
     pending_ledger_tasks: list[asyncio.Task] = []
 
+    # ── Resolution-round state ──
+    # Before letting the debate end with a pile of unanswered questions, we
+    # allow Boru to force-ask the top-priority open questions and let the
+    # normal turn loop force the target to answer. This caps how many such
+    # forced rounds we run so it can't loop forever on impossible questions.
+    RESOLUTION_QUESTION_CAP = 3   # trigger if more than this many open Qs remain
+    MAX_RESOLUTION_ROUNDS = 4     # force up to this many answers before closing
+    resolution_rounds_used: int = 0
+
     async def _flush_pending_ledger() -> None:
         """Wait for in-flight ledger updates to finish, then clear the list.
 
@@ -522,6 +531,72 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         prompt sees an up-to-date ledger."""
         await _flush_pending_ledger()
         return await generate_orchestrator_message(*args, **kwargs)
+
+    async def _should_run_resolution() -> bool:
+        """Return True if we should fire a resolution round instead of closing.
+
+        Resolution kicks in when the debate is about to end but the ledger
+        still carries more than RESOLUTION_QUESTION_CAP open questions that
+        are directed to a participating character (i.e. actually resolvable).
+        Caps at MAX_RESOLUTION_ROUNDS to prevent infinite loops on questions
+        a character simply refuses/cannot answer.
+        """
+        if resolution_rounds_used >= MAX_RESOLUTION_ROUNDS:
+            return False
+        await _flush_pending_ledger()
+        # Only count open questions with at least one valid participating target
+        cast_names = {c["name"] for c in characters}
+        open_count = sum(
+            1 for q in ledger.open_questions
+            if not q.get("_resolution_attempted")
+            and any(d in cast_names for d in (q.get("directed_to") or []))
+        )
+        return open_count > RESOLUTION_QUESTION_CAP
+
+    async def _prepare_resolution_question() -> dict | None:
+        """Pick the top-priority open question and generate Boru's forced_question
+        message for it. Does NOT yield SSE or append to transcript — the caller
+        does that inline so yields happen from the outer async generator.
+
+        Returns a dict with keys: message, target, intended_speaker, question_obj
+        — or None if no suitable question could be forced.
+        """
+        cast_names = {c["name"] for c in characters}
+
+        def _q_pri(q):
+            if q.get("_resolution_attempted"):
+                return -10   # lowest priority — don't re-pick
+            directed = q.get("directed_to") or []
+            has_valid_target = any(d in cast_names for d in directed)
+            is_boru_asked = q.get("asked_by") == "Boru"
+            return (2 if has_valid_target else 0) + (1 if is_boru_asked else 0)
+
+        open_qs = list(ledger.open_questions)
+        top = sorted(open_qs, key=_q_pri, reverse=True)
+        for q in top:
+            if q.get("_resolution_attempted"):
+                continue
+            target = next(
+                (d for d in (q.get("directed_to") or []) if d in cast_names),
+                None,
+            )
+            if not target:
+                continue
+            forced_msg, intended = await _generate_boru_message_safely(
+                ledger, "closing", transcript, characters, story.title or "",
+                event_type="forced_question",
+                context={"target": target, "question": q.get("question", "")},
+            )
+            if not forced_msg:
+                q["_resolution_attempted"] = True
+                continue
+            return {
+                "message": forced_msg,
+                "target": target,
+                "intended_speaker": intended or target,
+                "question_obj": q,
+            }
+        return None
 
     try:
         # ── Main debate loop — heuristic-driven, Boru intervenes only when needed ──
@@ -570,7 +645,41 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             if (current_phase == "closing" or round_number % 4 == 0) and round_number > 0:
                 await _flush_pending_ledger()
                 if await should_end_debate(ledger, current_phase, transcript, characters):
-                    break
+                    # Before ending: if there are too many unanswered questions,
+                    # force Boru to ask the top-priority one and let the next
+                    # turn resolve it. Cap prevents infinite loops.
+                    if await _should_run_resolution():
+                        rq = await _prepare_resolution_question()
+                        if rq:
+                            yield sse("orchestrator", {
+                                "message": rq["message"],
+                                "phase": "closing",
+                                "event": "forced_question",
+                                "target": rq["target"],
+                                "intended_speaker": rq["intended_speaker"],
+                                "resolution_round": True,
+                            })
+                            transcript.append({
+                                "character": "Boru",
+                                "message": rq["message"],
+                                "round": round_number,
+                                "phase": "closing",
+                                "isOrchestrator": True,
+                                "orchestratorEvent": "forced_question",
+                                "intended_speaker": rq["intended_speaker"],
+                                "resolution_round": True,
+                            })
+                            pending_invitee = rq["intended_speaker"]
+                            resolution_rounds_used += 1
+                            logger.info(
+                                f"[RESOLUTION] round {resolution_rounds_used}/{MAX_RESOLUTION_ROUNDS} "
+                                f"— forcing {rq['intended_speaker']} to answer"
+                            )
+                            # Fall through to enforcement gate so target speaks this turn.
+                        else:
+                            break
+                    else:
+                        break
 
             # ── 3. Phase transition (check every 3rd turn — phases last 5-8 turns) ──
             # Phase transitions should not override a pending invitee (observer/character
@@ -616,7 +725,39 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     if current_phase == "closing":
                         await _flush_pending_ledger()
                         if await should_end_debate(ledger, current_phase, transcript, characters):
-                            break
+                            # Resolution round before closing — see section 2 above.
+                            if await _should_run_resolution():
+                                rq = await _prepare_resolution_question()
+                                if rq:
+                                    yield sse("orchestrator", {
+                                        "message": rq["message"],
+                                        "phase": "closing",
+                                        "event": "forced_question",
+                                        "target": rq["target"],
+                                        "intended_speaker": rq["intended_speaker"],
+                                        "resolution_round": True,
+                                    })
+                                    transcript.append({
+                                        "character": "Boru",
+                                        "message": rq["message"],
+                                        "round": round_number,
+                                        "phase": "closing",
+                                        "isOrchestrator": True,
+                                        "orchestratorEvent": "forced_question",
+                                        "intended_speaker": rq["intended_speaker"],
+                                        "resolution_round": True,
+                                    })
+                                    pending_invitee = rq["intended_speaker"]
+                                    resolution_rounds_used += 1
+                                    logger.info(
+                                        f"[RESOLUTION] round {resolution_rounds_used}/{MAX_RESOLUTION_ROUNDS} "
+                                        f"— forcing {rq['intended_speaker']} to answer"
+                                    )
+                                    # Fall through to enforcement gate so target speaks this turn.
+                                else:
+                                    break
+                            else:
+                                break
 
             # ── ENFORCEMENT: if Boru has a pending invitation, that character MUST speak next ──
             next_speaker_name = None
