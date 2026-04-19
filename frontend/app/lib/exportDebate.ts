@@ -64,6 +64,174 @@ function sanitizeForPdf(s: string | undefined | null): string {
     .trim();
 }
 
+/**
+ * Draw a simple interaction graph from turn data.
+ * Returns a PNG data URL or null if no data.
+ *
+ * Characters are placed in a circle; edges drawn for every target-character
+ * relationship, colored by frequency. No physics, no interactivity — just an
+ * image suitable for embedding in a PDF.
+ */
+function drawSyntheticGraph(
+  turns: ExportTurn[],
+  cast: { name: string; color?: string }[],
+): string | null {
+  if (!turns.length || !cast.length) return null;
+
+  // Compute edges: source → target counts
+  const edges = new Map<string, number>();  // "source|target" → count
+  for (const t of turns) {
+    if (t.isOrchestrator) continue;
+    const targets: string[] = [];
+    if (t.target_characters?.length) targets.push(...t.target_characters);
+    else if (t.target_character) targets.push(t.target_character);
+    for (const target of targets) {
+      if (!target || target === t.character || target === "all") continue;
+      const key = `${t.character}|${target}`;
+      edges.set(key, (edges.get(key) ?? 0) + 1);
+    }
+  }
+
+  // Compute node speak-counts
+  const speeches = new Map<string, number>();
+  for (const t of turns) {
+    if (t.isOrchestrator) continue;
+    speeches.set(t.character, (speeches.get(t.character) ?? 0) + 1);
+  }
+
+  // Filter cast to characters who actually appear (spoke or were targeted)
+  const appeared = new Set<string>();
+  for (const [key] of edges) {
+    const [src, dst] = key.split("|");
+    appeared.add(src);
+    appeared.add(dst);
+  }
+  for (const [name] of speeches) appeared.add(name);
+
+  const visibleCast = cast.filter(c => appeared.has(c.name));
+  if (!visibleCast.length) return null;
+
+  // Canvas setup — 900x600 for good resolution in PDF
+  const canvas = document.createElement("canvas");
+  canvas.width = 900;
+  canvas.height = 600;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Circle layout
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const radius = Math.min(canvas.width, canvas.height) * 0.38;
+  const positions = new Map<string, { x: number; y: number }>();
+
+  visibleCast.forEach((c, i) => {
+    const angle = (i / visibleCast.length) * Math.PI * 2 - Math.PI / 2;
+    positions.set(c.name, {
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+    });
+  });
+
+  // Draw edges first (under nodes)
+  const maxCount = Math.max(1, ...Array.from(edges.values()));
+  for (const [key, count] of edges) {
+    const [src, dst] = key.split("|");
+    const p1 = positions.get(src);
+    const p2 = positions.get(dst);
+    if (!p1 || !p2) continue;
+
+    const opacity = 0.25 + 0.55 * (count / maxCount);
+    const isBoru = src === "Boru" || dst === "Boru";
+    ctx.strokeStyle = isBoru
+      ? `rgba(192, 120, 32, ${opacity + 0.1})`
+      : `rgba(100, 85, 65, ${opacity})`;
+    ctx.lineWidth = isBoru ? 2.0 : 1.0 + 1.5 * (count / maxCount);
+
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+
+    // Arrow head at target end
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) {
+      const ux = dx / len;
+      const uy = dy / len;
+      const headSize = isBoru ? 9 : 7;
+      // Offset back from the node so the arrow doesn't disappear under it
+      const nodeR = 22;
+      const tipX = p2.x - ux * nodeR;
+      const tipY = p2.y - uy * nodeR;
+      const leftX = tipX - ux * headSize + uy * headSize * 0.6;
+      const leftY = tipY - uy * headSize - ux * headSize * 0.6;
+      const rightX = tipX - ux * headSize - uy * headSize * 0.6;
+      const rightY = tipY - uy * headSize + ux * headSize * 0.6;
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(leftX, leftY);
+      ctx.lineTo(rightX, rightY);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // Draw nodes
+  for (const c of visibleCast) {
+    const p = positions.get(c.name)!;
+    const speechCount = speeches.get(c.name) ?? 0;
+    const r = Math.min(26, 14 + speechCount * 1.2);
+
+    // Node circle
+    ctx.fillStyle = c.color ?? "#6b5a42";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Character name label — offset outward from center
+    const dirX = (p.x - cx) / radius;
+    const dirY = (p.y - cy) / radius;
+    const labelX = p.x + dirX * (r + 14);
+    const labelY = p.y + dirY * (r + 14);
+    ctx.fillStyle = "#2d241a";
+    ctx.font = "600 12px ui-sans-serif, system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(c.name, labelX, labelY);
+
+    // Speech count inside node
+    if (speechCount > 0) {
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "600 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+      ctx.fillText(String(speechCount), p.x, p.y);
+    }
+  }
+
+  // Title + footer
+  ctx.fillStyle = "#6b5a42";
+  ctx.font = "700 14px ui-sans-serif, system-ui, -apple-system, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("Interaction graph", 24, 16);
+
+  ctx.font = "11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+  ctx.fillStyle = "#9a8a73";
+  ctx.fillText(
+    `${visibleCast.length} speakers · ${edges.size} targeted interactions`,
+    24, canvas.height - 22,
+  );
+
+  return canvas.toDataURL("image/png");
+}
+
 export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
   // Lazy-load to keep initial bundle small — libs only pull on click
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
@@ -106,12 +274,29 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
 
   let y = margin + 80 + divergenceLines.length * 16 + 20;
 
-  // Graph snapshot (if available)
-  if (opts.graphElement) {
-    try {
-      let imgData: string | null = null;
-      let imgW = 0, imgH = 0;
+  // Graph image — prefer synthetic (reliable) over live capture (unreliable with SVG).
+  // html2canvas on the live interaction graph frequently produces a blank PNG (SVG
+  // wrappers, inactive tabs, unfinished render). The synthetic drawer builds an
+  // interaction graph directly from turn data, so it always renders.
+  let imgData: string | null = null;
+  let imgW = 0;
+  let imgH = 0;
 
+  try {
+    const synthetic = drawSyntheticGraph(opts.turns, opts.meta.cast ?? []);
+    if (synthetic) {
+      imgData = synthetic;
+      imgW = 900;
+      imgH = 600;
+      console.info(`[PDF] using synthetic graph (${imgW}x${imgH})`);
+    }
+  } catch (e) {
+    console.warn("[PDF] synthetic graph failed:", e);
+  }
+
+  // Fallback: try live-capture if synthetic somehow failed (no turns / no cast).
+  if (!imgData && opts.graphElement) {
+    try {
       if (opts.graphElement instanceof HTMLCanvasElement) {
         // Already a canvas — use directly at 2× scale for sharpness
         const canvas = opts.graphElement;
@@ -135,7 +320,6 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
             scale: 2,
             logging: false,
             useCORS: true,
-            // Force a size in case the element itself is weird
             width: rect.width,
             height: rect.height,
           });
@@ -143,8 +327,6 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
           imgW = capture.width;
           imgH = capture.height;
 
-          // Retry once with explicit scrollWidth/scrollHeight when first capture is tiny.
-          // SVG-heavy wrappers often yield 0×0 images on the first pass.
           if (imgW < 50 || imgH < 50) {
             console.warn(`first capture was tiny (${imgW}x${imgH}) — retrying with explicit size`);
             const retry = await html2canvas(el, {
@@ -161,23 +343,23 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
               imgH = retry.height;
             }
           }
-          console.info(`[PDF] graph captured: ${imgW}x${imgH}`);
+          console.info(`[PDF] fallback live-capture: ${imgW}x${imgH}`);
         }
-      }
-
-      if (imgData && imgW > 10 && imgH > 10) {
-        // Fit graph into the remaining space on page 1 (with room for cast strip below)
-        const maxImgH = pageH - y - margin - 120; // reserve 120pt for cast strip
-        const scale = Math.min(contentW / imgW, maxImgH / imgH);
-        const drawW = imgW * scale;
-        const drawH = imgH * scale;
-        const drawX = margin + (contentW - drawW) / 2;
-        doc.addImage(imgData, "PNG", drawX, y, drawW, drawH);
-        y += drawH + 20;
       }
     } catch (e) {
       console.warn("Could not capture graph for PDF export:", e);
     }
+  }
+
+  if (imgData && imgW > 50 && imgH > 50) {
+    // Fit graph into the remaining space on page 1 (with room for cast strip below)
+    const maxImgH = pageH - y - margin - 120; // reserve 120pt for cast strip
+    const scale = Math.min(contentW / imgW, maxImgH / imgH);
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
+    const drawX = margin + (contentW - drawW) / 2;
+    doc.addImage(imgData, "PNG", drawX, y, drawW, drawH);
+    y += drawH + 20;
   }
 
   // Cast strip — render inline with colors
