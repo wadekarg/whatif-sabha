@@ -184,3 +184,15 @@ def test_intent_rotate_prefers_silent_then_least_recent():
     )
     assert intent == "invite_speaker"
     assert ctx["speaker"] == "Muriel"
+
+
+def test_pair_duel_picks_most_silent_speaker():
+    intent, ctx = select_boru_intent(
+        reason="pair_duel",
+        tier3_dispute=None,
+        phase_change=None,
+        open_questions=[],
+        speaker_diversity={"Napoleon": 6, "Snowball": 5, "Boxer": 0, "Muriel": 0},
+    )
+    assert intent == "invite_speaker"
+    assert ctx["speaker"] in ("Boxer", "Muriel")

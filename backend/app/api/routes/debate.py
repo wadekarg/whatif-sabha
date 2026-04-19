@@ -873,6 +873,83 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                 second_speaker_name = None
                     boru_spoke_this_turn = True
                 is_first_round = False
+
+            # ── Pair-duel detection: if the last 5 character turns are all by the same
+            # 2 characters, treat it as a duel and force Boru to re-enter regardless of
+            # drama. Rotates in a silent voice to break the ping-pong.
+            recent_char_turns = [
+                e["character"] for e in transcript[-8:]
+                if not e.get("isOrchestrator")
+                and not e.get("isObserver")
+                and not e.get("isReaction")
+            ]
+            same_pair_duel = False
+            if len(recent_char_turns) >= 5:
+                last_five = recent_char_turns[-5:]
+                unique = set(last_five)
+                if len(unique) <= 2:
+                    same_pair_duel = True
+
+            if same_pair_duel and not forced and not boru_spoke_this_turn:
+                from app.core.agents.reentry_logic import select_boru_intent
+                _speaker_diversity = {
+                    c["name"]: sum(
+                        1 for e in transcript
+                        if e.get("character") == c["name"] and not e.get("isOrchestrator")
+                    )
+                    for c in characters
+                }
+                _intent, _ctx = select_boru_intent(
+                    reason="pair_duel",
+                    tier3_dispute=None,
+                    phase_change=None,
+                    open_questions=[],
+                    speaker_diversity=_speaker_diversity,
+                )
+                pair_duel_target = _ctx.get("speaker")
+                if pair_duel_target and pair_duel_target not in recent_char_turns[-5:]:
+                    pair_duel_msg, intended = await generate_orchestrator_message(
+                        ledger, current_phase, transcript, characters, story.title or "",
+                        event_type="invite_speaker",
+                        context={
+                            "speaker": pair_duel_target,
+                            "directive": _ctx.get("directive",
+                                "two speakers have been locked in exchange — bring a fresh voice on the issue they've been circling"),
+                        },
+                    )
+                    if pair_duel_msg:
+                        yield sse("orchestrator", {
+                            "message": pair_duel_msg,
+                            "phase": current_phase,
+                            "event": "invite_speaker",
+                            "target": pair_duel_target,
+                            "target_characters": [pair_duel_target],
+                            "intended_speaker": intended,
+                            "_rotation": True,
+                        })
+                        transcript.append({
+                            "character": "Boru", "message": pair_duel_msg, "round": round_number,
+                            "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "invite_speaker",
+                            "intended_speaker": intended,
+                            "target_characters": [pair_duel_target],
+                            "_rotation": True,
+                            "_pair_duel": True,
+                        })
+                        logger.info(
+                            f"[PAIR_DUEL] last 5 turns by {set(recent_char_turns[-5:])} — "
+                            f"invited {pair_duel_target}"
+                        )
+                        if intended:
+                            pending_invitee = intended
+                            if intended != next_speaker_name:
+                                candidate = next((c for c in characters if c["name"] == intended), None)
+                                if candidate:
+                                    next_speaker_name = intended
+                                    character = candidate
+                                    forced = True
+                                    second_speaker_name = None
+                        boru_spoke_this_turn = True
+
             # ── Silent-character rotation: if voices are being left out, Boru pulls them in ──
             if not forced and not boru_spoke_this_turn and round_number >= 5:
                 speaker_turn_counts = {

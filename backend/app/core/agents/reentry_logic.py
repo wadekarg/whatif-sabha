@@ -67,6 +67,14 @@ def select_boru_intent(
 
     Returns (event_type, context_dict) — shaped for generate_orchestrator_message.
     """
+    if reason == "pair_duel":
+        # Rotate in a silent voice — the same two characters need a break
+        target = _pick_most_silent(speaker_diversity)
+        return "invite_speaker", {
+            "speaker": target,
+            "directive": "two speakers have been locked in exchange — bring a fresh voice on the issue they've been circling",
+        }
+
     if reason == "tier3_dispute" and tier3_dispute:
         return "force_confrontation", {
             "char_a": tier3_dispute["claim_a"]["character"],
