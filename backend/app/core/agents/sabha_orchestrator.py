@@ -499,7 +499,31 @@ async def update_ledger(
               wants_observer, addresses_boru, observer_tension}
     """
     observer_names = observer_names or []
-    recent = transcript[-6:] if len(transcript) > 6 else transcript
+
+    # Hard guard — the orchestrator (Boru) and world observers are NOT debate
+    # disputants. They ask questions and narrate; they do not hold positions
+    # that can be challenged. Treat any accidental call on them as a no-op.
+    if speaker == "Boru" or speaker in observer_names:
+        logger.debug(f"update_ledger skipped for non-disputant speaker: {speaker}")
+        return {
+            "new_claims": [], "questions_asked": [], "questions_answered": [],
+            "position_update": "", "is_repetition": False, "progress_note": "",
+        }
+
+    # Build the recent-transcript context ONLY from participating characters.
+    # Orchestrator and observer turns used to leak into the LLM's dispute
+    # extraction, creating phantom "Boru said X" disputes against real chars.
+    non_disputant_names = {"Boru", *observer_names}
+    char_only = [
+        e for e in transcript
+        if not e.get("isOrchestrator")
+        and not e.get("isObserver")
+        and not e.get("isAudience")
+        and not e.get("isStageDirection")
+        and not e.get("isReaction")
+        and e.get("character") not in non_disputant_names
+    ]
+    recent = char_only[-6:] if len(char_only) > 6 else char_only
     transcript_text = "\n".join(f"{e['character']}: {e['message'][:200]}" for e in recent)
 
     # Build observer context for the LLM
@@ -512,7 +536,7 @@ async def update_ledger(
 CHARACTER: {speaker}
 THEIR MESSAGE: {message}
 
-RECENT TRANSCRIPT:
+RECENT TRANSCRIPT (participating characters only):
 {transcript_text}
 {observer_ctx}
 
@@ -548,6 +572,11 @@ CONTRADICTION DETECTION:
 Look at the ACTIVE CLAIMS in the ledger. Does {speaker}'s message CONTRADICT any existing claim
 by a DIFFERENT character? If yes, add to "disputes_detected" with both claims and who said them.
 A dispute exists when two characters state things that cannot both be true.
+
+IMPORTANT: Extract disputes ONLY between participating characters. Do NOT treat
+Boru (the orchestrator / moderator / host / elephant) or any world observer as
+a disputant. They ask questions and narrate — they do not hold positions.
+Never put "Boru" or an observer name in claim_a_character or claim_b_character.
 
 DETECTION RULES:
 - "wants_observer": true if the speaker asks for an outside perspective or mentions an observer by name
@@ -615,11 +644,19 @@ Be concise. Return ONLY valid JSON."""
         ledger.progress_summary = result["progress_note"]
 
     # Process detected disputes/contradictions
+    disputant_names = set(ledger.character_names)
     for dispute in result.get("disputes_detected", []):
         char_a = dispute.get("claim_a_character", "")
         char_b = dispute.get("claim_b_character", "")
         claim_a = dispute.get("claim_a", "")
         claim_b = dispute.get("claim_b", "")
+        # Reject any dispute where either party is Boru, a world observer,
+        # or any name not in the participating cast. The LLM is instructed
+        # to avoid this, but we double-guard since one leak per run is enough
+        # to create a phantom dispute that persists for the whole debate.
+        if char_a not in disputant_names or char_b not in disputant_names:
+            logger.info(f"Rejected non-disputant dispute: {char_a} vs {char_b}")
+            continue
         if char_a and char_b and claim_a and claim_b and char_a != char_b:
             # Check if this dispute already exists (avoid duplicates)
             exists = any(
