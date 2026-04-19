@@ -461,6 +461,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     current_phase = "opening"
     phase_started_round = 0
 
+    # Once set, no further chat-channel SSE events (character/observer/
+    # orchestrator) should be yielded or appended to the transcript. The
+    # debate is closed; only the narrator summary channel and debate_end
+    # meta event are allowed through after this flag flips.
+    sabha_closed: bool = False
+
     def sse(event_type: str, data: dict) -> str:
         return f"data: {json.dumps({'type': event_type, **data})}\n\n"
 
@@ -601,6 +607,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     try:
         # ── Main debate loop — heuristic-driven, Boru intervenes only when needed ──
         while round_number < max_rounds:
+            # Belt-and-braces: if the sabha was closed mid-loop (e.g. via user_stop),
+            # bail out immediately so no further chat events get emitted.
+            if sabha_closed:
+                break
             # Per-iteration state init — ensures pivot blocks don't NameError on first iter
             next_speaker_name = None
             character = None
@@ -621,18 +631,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     "phase": "closing", "isOrchestrator": True, "orchestratorEvent": "closing_summary",
                     "intended_speaker": intended,
                 })
-                if intended:
-                    pending_invitee = intended
-                    # Pivot this turn's speaker to the invitee so Boru's word takes effect
-                    # immediately, not on the next cycle.
-                    if intended != next_speaker_name:
-                        candidate = next((c for c in characters if c["name"] == intended), None)
-                        if candidate:
-                            next_speaker_name = intended
-                            character = candidate
-                            forced = True
-                            # Clear second_speaker — we're now on Boru's floor
-                            second_speaker_name = None
+                # HARD STOP: this IS the closing summary for the user_stop path.
+                # Prevent the post-loop closing_summary block from firing a second
+                # Boru closing, and prevent any further chat-channel events below.
+                sabha_closed = True
                 break
 
             # Retire disputes that have gone stale — keeps ledger context fresh
@@ -1873,24 +1875,33 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         # ── Closing summary from Boru — with structured verdict ──
         # Flush before reading the ledger for the verdict, so no late updates
         # are lost from the closing context.
-        await _flush_pending_ledger()
-        verdict = ledger.generate_closing_verdict()
-        closing_msg, intended = await _generate_boru_message_safely(
-            ledger, current_phase, transcript, characters, story.title or "",
-            event_type="closing_summary",
-            context=verdict,
-        )
-        if closing_msg:
-            yield sse("orchestrator", {"message": closing_msg, "phase": "closing", "event": "closing_summary", "target": "all", "intended_speaker": intended})
-            transcript.append({
-                "character": "Boru",
-                "message": closing_msg,
-                "round": round_number,
-                "phase": "closing",
-                "isOrchestrator": True,
-                "orchestratorEvent": "closing_summary",
-                "intended_speaker": intended,
-            })
+        # Skip this block entirely if the sabha was already closed earlier
+        # (e.g. user_stop path already emitted a closing summary).
+        if not sabha_closed:
+            await _flush_pending_ledger()
+            verdict = ledger.generate_closing_verdict()
+            closing_msg, intended = await _generate_boru_message_safely(
+                ledger, current_phase, transcript, characters, story.title or "",
+                event_type="closing_summary",
+                context=verdict,
+            )
+            if closing_msg:
+                yield sse("orchestrator", {"message": closing_msg, "phase": "closing", "event": "closing_summary", "target": "all", "intended_speaker": intended})
+                transcript.append({
+                    "character": "Boru",
+                    "message": closing_msg,
+                    "round": round_number,
+                    "phase": "closing",
+                    "isOrchestrator": True,
+                    "orchestratorEvent": "closing_summary",
+                    "intended_speaker": intended,
+                })
+            # HARD STOP: once closing_summary has been emitted, no further chat
+            # events (character / observer / orchestrator) may be yielded or
+            # appended to the transcript. Narrator summary streaming below
+            # flows to a separate summary channel (not the transcript) and is
+            # allowed to continue.
+            sabha_closed = True
 
         # Synthesize debate summary first
         debate_summary = ""
