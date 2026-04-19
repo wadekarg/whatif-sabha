@@ -181,6 +181,16 @@ async def synthesize_debate_summary_stream(
             parts.append("QUESTIONS LEFT UNANSWERED:\n" + "\n".join(
                 f"  - \"{q.get('question', '')[:120]}\" (asked by {q.get('asked_by', '?')})" for q in open_qs
             ))
+        if ledger.disputes:
+            unresolved_d = [d for d in ledger.disputes if d["status"] == "unresolved"]
+            resolved_d = [d for d in ledger.disputes if d["status"] != "unresolved"]
+            parts.append(f"DISPUTES: {len(ledger.disputes)} total — {len(resolved_d)} resolved, {len(unresolved_d)} unresolved")
+            if unresolved_d:
+                parts.append("UNRESOLVED DISPUTES:\n" + "\n".join(
+                    f"  - {d['claim_a']['character']} vs {d['claim_b']['character']}: "
+                    f"\"{d['claim_a']['claim'][:100]}\" vs \"{d['claim_b']['claim'][:100]}\""
+                    for d in unresolved_d[:4]
+                ))
         if ledger.progress_summary:
             parts.append(f"DEBATE ARC: {ledger.progress_summary}")
         ledger_text = "\n\n".join(parts)
