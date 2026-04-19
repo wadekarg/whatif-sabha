@@ -21,6 +21,7 @@ export default function StoryPage() {
   const [pastDebates, setPastDebates] = useState<any[]>([]);
   const [whatIf, setWhatIf]         = useState("");
   const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const [overview, setOverview]     = useState<any>(null);
   const [storyCharacters, setStoryCharacters] = useState<any[]>([]);
 
@@ -304,6 +305,17 @@ export default function StoryPage() {
                 <span className="text-lg">⚡</span>
                 <span className="text-sm font-bold text-[#1c1410]">What if...</span>
                 <span className="text-xs text-[#a09282]">— describe your alternate scenario</span>
+                {suggestions.length > 0 && (
+                  <button
+                    onClick={() => setShowSuggestions(v => !v)}
+                    className="ml-auto text-xs text-[#a09282] hover:text-[#c07820] transition-colors flex items-center gap-1"
+                    aria-label={showSuggestions ? "Hide suggestions" : "Show suggestions"}
+                    title={showSuggestions ? "Hide suggestions" : "Show suggestions"}
+                  >
+                    <span>{showSuggestions ? "Hide" : "Show"} suggestions</span>
+                    <span className={`transition-transform ${showSuggestions ? "rotate-180" : ""}`}>▾</span>
+                  </button>
+                )}
               </div>
               <textarea
                 value={whatIf}
@@ -313,7 +325,7 @@ export default function StoryPage() {
                 className="w-full bg-transparent resize-none text-[#1c1410] placeholder-[#c8b89a] focus:outline-none text-sm leading-relaxed"
               />
             </div>
-            <div className="px-6 pb-3 flex flex-wrap gap-2">
+            <div className={`px-6 pb-3 flex flex-wrap gap-2 ${showSuggestions ? "" : "hidden"}`}>
               {suggestions.map((s: any, i: number) => (
                 <button key={s.event_id || i} onClick={() => setWhatIf(s.description)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
