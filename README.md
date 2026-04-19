@@ -1,230 +1,257 @@
 <p align="center">
-  <h1 align="center">☸ WhatIfSabha</h1>
-  <p align="center"><b>Upload any book. Watch the characters debate what would have happened differently.</b></p>
+  <h1 align="center">WhatIfSabha</h1>
+  <p align="center"><b>Upload a book. Watch the characters debate what could have happened differently — live, in voice, with a moderator who actually runs the room.</b></p>
   <p align="center">
     <img src="https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white" alt="Python 3.10+" />
-    <img src="https://img.shields.io/badge/Next.js-15-black?logo=next.js&logoColor=white" alt="Next.js" />
+    <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white" alt="Next.js 16" />
     <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
     <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" />
-    <img src="https://img.shields.io/badge/LLMs-6_providers-orange" alt="6 LLM Providers" />
-    <img src="https://img.shields.io/badge/API_keys_needed-just_1-brightgreen" alt="Just 1 API Key" />
+    <img src="https://img.shields.io/badge/providers-Gemini%20%7C%20Cerebras%20%7C%20NVIDIA%20%7C%20Groq-orange" alt="LLM providers" />
   </p>
 </p>
 
 ---
 
-WhatIfSabha extracts characters from any story (PDF), researches their personalities, generates portraits, and then drops them into a **live debate** where they argue about an alternate "what if" scenario — in character, with emotions, conflict, and consequences.
+WhatIfSabha is a multi-agent debate engine for alternate story endings. You upload a PDF, WhatIfSabha extracts the characters, and then — given a divergence point — they argue about what would happen next. Live, in character, moderated by a moderator agent (Boru the Elephant) who enforces turn order, tracks unanswered questions, and stages a real reckoning before the debate closes.
 
-> *You ask: "What if the pigs had not become corrupted?"*
->
-> *Napoleon, Snowball, Boxer, and Mr. Jones argue about it. Live. With streaming text, interaction graphs, and a detailed war-correspondent-style report at the end.*
+The project is a prototype. The engine has been tuned extensively on *Animal Farm*; the long-horizon target is the great epics (Mahabharata, Ramayana, the Iliad) where "what if" has been the subject of commentary for centuries.
 
 ---
 
-## 🎯 How It Works
+## What you'll see
+
+Upload *Animal Farm*. Pick the divergence: **"What if Snowball returned?"**
 
 ```
-📄 Upload PDF  ──►  🔍 AI extracts characters  ──►  📚 Research + 🎨 Portraits
-                                                              │
-                                                              ▼
-                    💡 Pick a "what if" scenario  ──►  ⚡ Characters debate LIVE
-                                                              │
-                                                              ▼
-                                                    📝 Detailed debate report
+Boru: "Snowball walks back into the farm. Napoleon — your move. Speak."
+
+Napoleon: "Traitor. He sold us to Jones once, he'll sell us again..."
+
+Boru: "Clover, you were there both nights. Which nose was in the feed-bin?"
+
+Clover: "Napoleon's. I did not say so at the time because..."
+
+Boru: "Snowball, answer the charge. Did you signal the humans?"
+
+Snowball: "I signalled nothing. And Napoleon knows it..."
 ```
 
-| Step | What Happens |
-|------|-------------|
-| **📄 Upload** | Drop a PDF of any story — novel, play, short story. AI reads the full text, identifies characters, and generates storybook-style portraits. |
-| **🔍 Research** | Each character is researched via Wikipedia, web sources, and multi-perspective AI analysis. RAG (Retrieval-Augmented Generation) retrieves relevant story passages from ChromaDB to ground each character in actual quotes and scenes. |
-| **💡 What If?** | Pick a divergence point. AI suggests some, or write your own. *"What if Romeo never met Juliet?" "What if Dracula chose peace?" "What if the Ring was never found?"* |
-| **⚡ The Sabha** | Characters debate live — arguing, challenging, confessing, imagining consequences. An interaction graph shows who's talking to whom in real-time. |
-| **📝 The Report** | A detailed summary: who said what, fiercest clashes, questions answered and unanswered, and what the alternate future would actually look like. |
+- A force-directed **interaction graph** renders live: who addresses whom, who asks, who answers.
+- An **argument ledger** quietly tracks every claim, every open question, every active dispute.
+- Before the closing, Boru runs a **resolution round** — forcing answers to the top still-open questions.
+- At the end, a **narrator** synthesizes the alternate ending, and the whole debate can be **exported as a PDF** or **published as a static replay site**.
 
 ---
 
-## 🚀 Quick Start
+## Quick start
 
-> **You only need ONE API key.** Any provider works. Pick whichever you already have.
+### Prerequisites
 
-| Provider | Get a key | Cost | Speed |
-|----------|-----------|------|-------|
-| 🟢 Google Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | **Free** | Fast |
-| 🟢 Groq | [console.groq.com/keys](https://console.groq.com/keys) | **Free** | Very fast |
-| 🟢 Cerebras | [cloud.cerebras.ai](https://cloud.cerebras.ai) | **Free** | Ultra fast |
-| 🟢 NVIDIA NIM | [build.nvidia.com](https://build.nvidia.com) | **Free** | Fast |
-| 🟡 Anthropic (Claude) | [console.anthropic.com](https://console.anthropic.com/settings/keys) | Paid | Best quality |
-| 🟡 OpenAI | [platform.openai.com](https://platform.openai.com/api-keys) | Paid | Reliable |
+- Python 3.10+
+- Node 20+
+- At least one LLM API key. Free tiers work: Google Gemini, Cerebras, NVIDIA NIM, or Groq.
 
-### 🐳 With Docker (recommended)
+### With Docker (simplest)
 
 ```bash
-git clone https://github.com/wadekarg/What-If-Sabha.git
-cd What-If-Sabha
+git clone https://github.com/wadekarg/What-If-Sabha.git whatif-sabha
+cd whatif-sabha
 cp backend/.env.example backend/.env
+# Edit backend/.env — paste at least one API key
 docker compose up
 ```
 
-Open **http://localhost:3000** → click ⚙ → paste your API key → done.
+Open <http://localhost:3000>.
 
-### 💻 Without Docker
-
-<details>
-<summary><b>Manual setup instructions</b></summary>
+### Local (no Docker)
 
 **Backend:**
+
 ```bash
 cd backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-uvicorn app.main:app --port 8001
+cp .env.example .env   # then paste a key
+uvicorn app.main:app --port 8001 --reload
 ```
 
-**Frontend:**
+**Frontend (new terminal):**
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Open **http://localhost:3000** → click ⚙ → paste your API key → start debating.
-
-</details>
+Open <http://localhost:3000>. The gear icon in the nav lets you paste/override the API key from the UI without touching `.env`.
 
 ---
 
-## ✨ Features
-
-### 🤖 Multi-Agent Debate Engine
-Each character is an independent AI agent with their own personality, knowledge, emotions, and blind spots. They don't just recite facts — they argue, deflect, confess, and surprise. Characters find the cracks in each other's arguments and push into the consequences.
-
-### 📡 Live Streaming
-Debate streams token-by-token. You watch characters think and speak in real-time, not wait for a wall of text.
-
-### 🕸️ Interaction Graph
-A D3.js force-directed graph shows who is talking to whom, who's asking questions, and where the heat is. Multiple arrows per turn — a character can respond to one person while challenging another. Updated live.
-
-### 🔍 RAG-Powered Character Knowledge
-Story text is chunked and embedded into ChromaDB during upload. When characters are extracted, relevant passages are retrieved to ground their profiles in actual quotes, scenes, and relationships from the text. Character chat also uses RAG to reference specific story moments.
-
-### ⚖️ Fair Witness System
-Characters typically portrayed unfairly (villains, antagonists) get a "Fair Witness" analysis — AI researches what a more charitable reading of their actions would look like, giving them a richer, more nuanced voice in debate.
-
-### 🎨 Character Portraits
-AI-generated storybook-style portraits for every character, created automatically via Pollinations.ai (free, no API key needed).
-
-### 📝 War-Correspondent Debate Report
-A detailed 800-1200 word report at the end, structured as: Opening Salvos → Central Fight → Turning Point → Questions Answered → Questions Unanswered → What the Future Looks Like. Written like a journalist who was in the room, not a professor reading a transcript.
-
-### 🐘 Boru — The Elephant Moderator
-Boru the Elephant hosts every debate. He opens the Sabha, manages phase transitions, calls out repetition, redirects when characters dodge questions, and stirs the pot when things get too harmonious. He speaks only when needed — the characters are the stars.
-
-### 🔑 Single-Key Mode
-One key from any supported provider runs the entire app — characters, judge, narrator, analysis, everything. No multi-provider setup required.
-
-### 🔄 Multi-Provider Fallback
-For power users: configure multiple providers and the app automatically routes each role to the optimal one — Cerebras for character speed, Gemini for deep analysis, Groq for fast judging — with automatic fallback on rate limits.
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────┐     SSE streaming      ┌──────────────┐
-│   Next.js    │ ◄──────────────────── │   FastAPI     │
-│   Frontend   │ ────────────────────► │   Backend     │
-└─────────────┘     REST API           └──────┬───────┘
+┌──────────────────┐    SSE stream   ┌──────────────────┐
+│  Next.js 16      │ ◄───────────────│  FastAPI         │
+│  Tailwind 4      │    REST         │  Python 3.10+    │
+│  D3 / force-graph│ ◄──────────────►│  uvicorn         │
+└──────────────────┘                 └────────┬─────────┘
                                               │
-                    ┌─────────────────────────┼──────────────────┐
-                    │                         │                  │
-              ┌─────▼─────┐          ┌───────▼───────┐  ┌──────▼──────┐
-              │ Character  │          │    Judge      │  │  Narrator   │
-              │  Agents    │          │    Agent      │  │   Agent     │
-              │ (per char) │          │ (scores each  │  │ (summary +  │
-              │            │          │  turn)        │  │  report)    │
-              └────────────┘          └───────────────┘  └─────────────┘
-                    │                         │                  │
-              ┌─────▼──────────────────────────▼──────────────────▼────┐
-              │              LLM Provider Layer                        │
-              │  Cerebras │ Claude │ OpenAI │ Gemini │ Groq │ NVIDIA  │
-              │        (automatic routing + fallback)                  │
-              └──────────────────────────┬────────────────────────────┘
-                                         │
-              ┌──────────────────────────▼────────────────────────────┐
-              │              Data Layer                                │
-              │  ChromaDB (RAG) │ SQLite │ Neo4j (memory) │ Redis    │
-              └───────────────────────────────────────────────────────┘
+                    ┌─────────────────────────┼─────────────────────┐
+                    │                         │                     │
+              ┌─────▼──────┐          ┌──────▼──────┐        ┌─────▼──────┐
+              │ Character  │          │ Boru        │        │ Narrator   │
+              │ Agents     │          │ (moderator) │        │ + Oracle   │
+              │ + Observers│          │ + Ledger    │        │            │
+              └────────────┘          └─────────────┘        └────────────┘
+                            │                 │                      │
+              ┌─────────────▼─────────────────▼──────────────────────▼──────┐
+              │  LLM router — Gemini · Cerebras · NVIDIA NIM · Groq         │
+              │  role-based routing (character / judge / narrator / analysis)│
+              │  automatic fallback on rate-limit or error                   │
+              └─────────────────────────────────────────────────────────────┘
+                                     │
+              ┌──────────────────────▼──────────────────────────────────────┐
+              │  SQLite (debates, turns, characters)                        │
+              │  ChromaDB (per-character RAG over story text)               │
+              │  Graphiti + Kuzu (optional character "soul memory")         │
+              └─────────────────────────────────────────────────────────────┘
 ```
 
-| Layer | Tech |
-|-------|------|
-| **Frontend** | Next.js, D3.js, Tailwind CSS, SSE streaming |
-| **Backend** | FastAPI, LangChain, Pydantic |
-| **Vector Search (RAG)** | ChromaDB + sentence-transformers (`all-MiniLM-L6-v2`) |
-| **Database** | SQLite (aiosqlite) |
-| **Character Memory** | Neo4j + Graphiti (optional — persistent memory across debates) |
-| **LLM Providers** | Cerebras, Anthropic, OpenAI, Gemini, Groq, NVIDIA NIM, GitHub Models, Cloudflare |
-| **Portraits** | Pollinations.ai (free) |
+**Subprojects:**
+- `backend/` — FastAPI, the debate engine, agents, routes, SQLite + ChromaDB state.
+- `frontend/` — Next.js 16 app: upload flow, story pages, live streaming debate view, graph, PDF export.
+- `replay/` — separate Next.js static-export project; bundles one finished debate into a site you can deploy to Cloudflare Pages.
+- `demo/` — standalone HTML demo page.
 
 ---
 
-## ⚙️ The Debate Engine
+## Debate engine highlights
 
-Each debate turn:
+The moderator (Boru) is the differentiating part of the project. A short tour of what's actually in the code:
 
-| Step | What | LLM Calls | Notes |
-|------|------|-----------|-------|
-| 1️⃣ | **Speaker selection** | 0 | Heuristic scoring — recency, relevance, unanswered questions |
-| 2️⃣ | **Character speaks** | 1 | Streams live with emotion, personality, @target addressing |
-| 3️⃣ | **Judge evaluates** | 1 | Scores quality, detects emotion, identifies targets |
-| 4️⃣ | **Ledger tracks** | 0-1 | Records claims, positions, questions (every 2nd turn) |
-| 5️⃣ | **Boru moderates** | 0-1 | Only when needed: phase changes, stalls, repetition |
+- **Enforced invitations.** When Boru names a character (`"Napoleon — your move"`), the engine sets `pending_invitee` and skips heuristic scoring next turn. Boru's word is law.
+- **Vocative parser.** Phrases like `"Mrs. Jones, speak"` or `"for Mrs. Jones"` are parsed out of Boru's prose so the intended speaker actually gets the floor. A weighted variant handles character-to-character questions too.
+- **Character-to-character question enforcement.** When character A asks character B a direct question, B is pinned as `pending_invitee` for the next turn — even a high-scoring third party is bumped.
+- **Observer questions are enforced.** Historical observers (a world_observer_agent) can appear mid-debate; if they address a specific cast member, that person answers next.
+- **Dispute lifecycle.** The `ArgumentLedger` tracks claim-vs-claim disputes. Each dispute escalates through tier 2 and tier 3 events; after two `force_confrontation` turns on the same pair the dispute is **retired**, and a **pair cooldown** (≈10 rounds) prevents the same two characters from being pushed back into combat immediately. Stale disputes auto-retire after 10 turns untouched.
+- **Silent rotation.** When cast diversity is low (≥40% of characters silent, or three+ have never spoken), Boru actively invites the silent characters. The silence reward scales with debate length (≈+3 early → capped at +12) so latecomers don't stay frozen out.
+- **Pair-duel breaker.** After five exchanges dominated by the same two speakers, the engine forces a third voice in to break ping-pong.
+- **Phase progression.** `opening → cross_examination → deepening → reckoning → closing`, driven by the ledger state rather than round count alone.
+- **Resolution round.** Before closing, the engine forces answers to the top open questions. Configurable count; tracked via `resolution_rounds_used`.
+- **Anti-repetition.** Boru's last 5 openers are injected into his own prompt as a "don't start with these" list. Dispute subjects are diversified so the same clash doesn't get re-litigated every turn.
+- **Parallelized ledger.** Claim/question/dispute extraction runs alongside the next character's speech — the ledger doesn't block the stream.
+- **Hard stop after closing.** Once Boru delivers the closing, no further events fire. Late stage directions are dropped.
 
-> Judge and ledger run **in parallel** — halves the silence between speakers.
+All of the above is covered by tests in `backend/tests/` — `test_sabha_orchestrator_return.py`, `test_orchestrator_picker.py`, `test_dispute_retirement.py`, `test_reentry_logic.py`, `test_intended_speaker_parsing.py`, `test_boru_anti_repetition.py`, `test_character_speech_act.py`.
 
-**Debate Phases:** `Opening` → `Cross-Examination` → `Deepening` → `Reckoning` → `Closing`
+### Content-side agents
 
-**Per-turn cost:** 2-3 LLM calls. A full debate of 30+ turns completes in minutes, not hours.
-
----
-
-## 📖 Tested With
-
-| Story | Characters | What-If Examples |
-|-------|-----------|-----------------|
-| 🐷 **Animal Farm** | Napoleon, Snowball, Boxer, Squealer, Mr. Jones, Clover, Benjamin | "What if the pigs had not become corrupted?" |
-| 💀 **Hamlet** | Hamlet, Claudius, Ophelia, Horatio, Gertrude | "What if Hamlet had acted immediately?" |
-| 📄 **Any PDF** | Auto-extracted | Write your own what-if scenario |
-
-> 🎯 **The long-term vision:** The great epics and texts where what-if questions have been debated for millennia:
->
-> **Mahabharata** — *What if Karna revealed his identity before the war?* **Ramayana** — *What if Ravana returned Sita willingly?* **Bible** — *What if Judas refused?* **Greek Epics** — *What if Achilles chose a long life over glory?* **Shahnameh** — *What if Rostam recognized Sohrab?* **Journey to the West** — *What if Sun Wukong never submitted to the Buddha?*
+- **Character agents** (`character_agent.py`) — situational briefings include story excerpts retrieved per-turn from ChromaDB, the ledger context, recent transcript, and the character's evolving objective vector.
+- **Speech-act classifier** (`speech_act.py`) — labels each turn as question / response / statement and extracts the addressed character; the graph uses this to style arrows.
+- **Judge agent** (`judge_agent.py`) — optional per-turn character-fidelity and emotion scoring.
+- **Narrator agent** (`narrator_agent.py`) — synthesizes the alternate ending using the full ledger, not just the transcript tail.
+- **Oracle agent** (`oracle_agent.py`) — post-debate Q&A with any character from the alternate timeline.
+- **Character evolution** (`character_evolution.py`) — RL-inspired objective-vector update after each debate, persisted to DB and (optionally) to soul memory.
 
 ---
 
-## 📁 Project Structure
+## Replay + sharing
+
+Two ways to share a finished debate:
+
+- **PDF export.** `frontend/app/lib/exportDebate.ts` renders a bound PDF with title page, cast strip, a synthetic force-directed graph, full transcript, and the alternate ending. Uses jsPDF + html2canvas.
+- **Static replay site.** `replay/` is a Next.js static export. Run `replay/scripts/export_debate.py --latest` to pull a finished debate out of SQLite into a JSON bundle, then `npm run build` in `replay/` produces `replay/out/` — ready for Cloudflare Pages (config already in `wrangler.toml`). See [`replay/README.md`](replay/README.md) for details.
+
+---
+
+## Running tests
+
+```bash
+cd backend
+source venv/bin/activate
+pytest tests/ -v
+```
+
+The backend test suite (~86 tests across 7 files) covers the moderator/picker logic — re-entry triggers, dispute lifecycle, vocative parsing, anti-repetition, speech-act classification, Boru return paths. These are the pieces where regressions matter most; the content agents (character/narrator/judge) are verified by eye.
+
+Replay-site tests:
+
+```bash
+cd replay && npm test                                        # state-machine tests
+backend/venv/bin/pytest replay/scripts/test_export_debate.py # export bundler
+```
+
+---
+
+## Configuration reference
+
+All of this lives in `backend/.env` (see `backend/.env.example`). You only need **one** of the API keys; multiple are used for failover.
+
+| Variable | Purpose |
+|---|---|
+| `GEMINI_API_KEY` | Google Gemini — great for analysis / extraction. |
+| `CEREBRAS_API_KEY` | Cerebras — ultra-fast character turns. |
+| `NVIDIA_API_KEY` | NVIDIA NIM — large selection of free models. |
+| `GROQ_API_KEY` | Groq — fast judge/narrator. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Optional paid fallbacks. |
+| `DATABASE_URL` | Default: `sqlite+aiosqlite:///./whatif_sabha.db`. |
+| `UPLOAD_DIR` | Where PDFs + portraits are stored. Default `./uploads`. |
+| `MAX_UPLOAD_SIZE_MB` | Default 50. |
+| `ALLOWED_ORIGINS` | CORS list, comma-separated. Default includes `localhost:3000`. |
+| `ANALYSIS_MODEL` / `CHARACTER_AGENT_MODEL` / `JUDGE_MODEL` / `NARRATOR_MODEL` | Per-role model IDs. Defaults in `.env.example` are sane; only change if you know the provider. |
+| `NVIDIA_JUDGE_MODEL` / `NVIDIA_NARRATOR_MODEL` | NVIDIA-provider overrides. |
+| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | Optional — enables Graphiti-backed persistent character memory. `docker compose up neo4j` starts a local instance. |
+| `ENABLE_LIGHTRAG` | Optional — builds a narrative causal graph during upload (adds ~60s). |
+| `REDIS_URL` | Optional caching layer. |
+
+**Frontend:**
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | Backend URL. Default `http://localhost:8001`. |
+
+---
+
+## Project structure
 
 ```
 whatif-sabha/
 ├── backend/
 │   ├── app/
-│   │   ├── api/routes/               # REST + SSE endpoints
-│   │   ├── core/agents/              # Character, Judge, Narrator, Orchestrator, Observer agents
-│   │   ├── core/character_research/  # Wikipedia + web research + Fair Witness pipeline
-│   │   ├── core/rag/                 # ChromaDB embeddings + retrieval
-│   │   ├── core/memory/              # Neo4j character soul memory (optional)
-│   │   ├── db/                       # SQLAlchemy models
-│   │   └── config.py                 # LLM provider routing + fallback chains
-│   ├── requirements.txt
+│   │   ├── api/routes/               # debate.py (the big one), characters, story, upload, settings
+│   │   ├── core/agents/              # sabha_orchestrator, character_agent, orchestrator,
+│   │   │                             # reentry_logic, speech_act, judge, narrator, oracle,
+│   │   │                             # world_observer, character_evolution, power_interrogator
+│   │   ├── core/character_research/  # Wikipedia + Fair Witness pipeline
+│   │   ├── core/rag/                 # ChromaDB embedding + retrieval
+│   │   ├── core/memory/              # Graphiti + Kuzu soul memory (optional)
+│   │   ├── multi_pass_extractor.py   # story → characters (chunked, for long books)
+│   │   ├── story_analyzer.py         # single-pass extraction for short stories
+│   │   ├── portrait_generator.py     # Pollinations.ai portraits
+│   │   └── tts.py                    # text-to-speech (optional)
+│   ├── tests/                        # pytest suite, moderator logic coverage
 │   └── .env.example
 ├── frontend/
 │   ├── app/
-│   │   ├── components/               # NavBar, Settings modal
-│   │   ├── config.ts                 # Shared API URL config
-│   │   └── story/[id]/               # Story, Characters, Debate, Replay pages
+│   │   ├── components/NavBar.tsx
+│   │   ├── lib/exportDebate.ts       # PDF export (jsPDF + synthetic graph)
+│   │   └── story/[id]/
+│   │       ├── page.tsx              # story overview
+│   │       ├── characters/           # cast + per-character pages
+│   │       ├── debate/page.tsx       # live streaming debate UI
+│   │       ├── debate/[debateId]/    # read-only viewer for finished debates
+│   │       └── graph/                # full-size interaction graph
 │   └── package.json
+├── replay/                           # Next.js static export for Cloudflare Pages
+│   ├── app/
+│   ├── scripts/export_debate.py      # SQLite → JSON bundler
+│   └── README.md
+├── demo/                             # standalone HTML demo page
+├── docs/
+│   ├── superpowers/specs/            # design docs (Boru authority, replay page, …)
+│   ├── superpowers/plans/            # implementation plans
+│   └── internal/                     # workflow notes
 ├── docker-compose.yml
 ├── LICENSE
 └── README.md
@@ -232,57 +259,50 @@ whatif-sabha/
 
 ---
 
-## 🔧 Configuration
+## Tested with
 
-All configuration is **optional**. The app works with just one API key entered through the browser UI.
+| Story | Cast | Example divergences |
+|---|---|---|
+| *Animal Farm* | Napoleon, Snowball, Boxer, Squealer, Clover, Benjamin, Mr. Jones | *"What if Snowball returned?"* · *"What if the pigs stayed honest?"* |
+| *Hamlet* | Hamlet, Claudius, Gertrude, Ophelia, Horatio | *"What if Hamlet acted on the ghost immediately?"* |
+| Any PDF | Auto-extracted | You write the divergence. |
 
-<details>
-<summary><b>Advanced configuration options</b></summary>
-
-See `backend/.env.example` for all available settings:
-
-| Setting | What it does |
-|---------|-------------|
-| Model IDs | Choose which LLM model runs each role (analysis, character, judge, narrator) |
-| Neo4j | Persistent character memory across debates — characters remember what they said before |
-| LightRAG | Narrative causal graph extraction during upload |
-| Redis | Caching layer for faster repeated queries |
-
-</details>
+**Long-horizon target.** The interesting texts are the ones where "what if" is already a tradition: Mahabharata (*what if Karna revealed his lineage before Kurukshetra?*), Ramayana (*what if Ravana returned Sita?*), the Iliad (*what if Achilles chose the long life?*). The multi-pass character extractor is built for exactly these — not yet end-to-end tested on the full texts.
 
 ---
 
-## Known Limitations
+## Known limitations
 
-This is an early prototype:
+This is an early prototype; expect rough edges.
 
-- **Narrator prose quality** — the alternate-ending narrator currently produces analytical summaries rather than narrative prose. Prompt rewrite in progress.
-- **Mahabharata three-pass extraction** is implemented but not yet end-to-end tested on the full text.
-- **No RL reward signal** — character objective vectors are inferred after each debate, but there is no true policy-gradient training loop yet.
-- **No automated tests** — manual verification only.
-
----
-
-## 🤝 Contributing
-
-This is an early-stage project. Issues, ideas, and PRs are welcome.
-
-If something breaks, please open an issue with the story you uploaded and the what-if scenario — it helps reproduce the problem.
+- **Narrator prose quality.** The alternate-ending narrator currently produces analytical summary prose, not narrative scene-writing. Prompt rewrite is in progress.
+- **Mahabharata not yet end-to-end tested** on full-text extraction. The multi-pass extractor works on chapter-sized Animal Farm; the tens-of-thousands-of-shlokas case has not been validated.
+- **No RL training loop.** Characters evolve via post-debate objective-vector inference, but there is no policy-gradient loop feeding reward back into future turns.
+- **No authentication.** Single-user prototype. Don't put it on the public internet as-is.
+- **AI-synthetic test content.** The packaged *Animal Farm* fixtures and default story assets are AI-generated stand-ins, not scans of copyrighted editions. Bring your own PDFs for real runs.
+- **ChromaDB + SQLite on disk.** No multi-tenancy; resetting state means clearing `backend/whatif_sabha.db`, `backend/chroma_db/`, and `backend/uploads/`.
 
 ---
 
-## Replay site (static demo)
+## Contributing
 
-A standalone static page that replays one completed debate — see [`replay/`](./replay/README.md). Built to host on Cloudflare Pages for free so you can share a debate without running the full stack.
+Issues, ideas, and PRs welcome — this is an early-stage project and the feedback loop on real divergences is the most useful thing.
+
+If something goes wrong, please include:
+- the story you uploaded,
+- the divergence prompt,
+- which provider(s) you had configured.
+
+That's usually enough to reproduce.
 
 ---
 
-## 📄 License
+## License
 
-MIT — do whatever you want with it.
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Gajanan Wadekar.
 
 ---
 
 <p align="center">
-  <b>Built with curiosity by <a href="https://github.com/wadekarg">@wadekarg</a></b> — because every story deserves a second chance.
+  <b>Every story deserves a second hearing in the Sabha.</b>
 </p>
