@@ -115,6 +115,7 @@ export default function DebatePage() {
   const [showStats, setShowStats] = useState(false);
   const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(true);
   const pendingExplorationRef = useRef<string | null>(null);
+  const debateClosedCleanlyRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -1113,6 +1114,9 @@ export default function DebatePage() {
         setStatus("done");
         if (ev.oracle_ready) setOracleReady(true);
         setTimeout(() => setShowConclusion(true), 800);
+        // Mark clean close BEFORE calling es.close() so the subsequent
+        // onerror (which always fires on close) knows not to panic.
+        debateClosedCleanlyRef.current = true;
         es.close();
       } else if (ev.type === "interrogator_start") {
         setStreaming({ character: "The Interrogator", text: "" });
@@ -1161,15 +1165,18 @@ export default function DebatePage() {
     es.onerror = () => {
       es.close();
       setStreaming(null);
-      // Add error entry to transcript so user knows what happened
-      setTranscript(prev => [...prev, {
-        character: "Boru",
-        message: "The Sabha's connection was interrupted. The debate may have ended, or there was a network issue. You can review what was said above.",
-        round: 0,
-        isOrchestrator: true,
-        orchestratorEvent: "error",
-        phase: "interrupted",
-      } as any]);
+      // Only surface an "interrupted" notice if the debate had NOT cleanly
+      // reached debate_end — otherwise this is just the natural close.
+      if (!debateClosedCleanlyRef.current) {
+        setTranscript(prev => [...prev, {
+          character: "Boru",
+          message: "The Sabha's connection was interrupted. The debate may have ended, or there was a network issue. You can review what was said above.",
+          round: 0,
+          isOrchestrator: true,
+          orchestratorEvent: "error",
+          phase: "interrupted",
+        } as any]);
+      }
       setStatus(prev => prev === "running" ? "done" : prev);
     };
   };
@@ -2148,10 +2155,10 @@ export default function DebatePage() {
                 </Link>
               </div>
             )}
-            {status === "done" && !debateSummary && transcript.length > 0 && (
+            {status === "done" && !debateSummary && !alternateEnding && transcript.length > 0 && (
               <div className="mt-8 pt-8 border-t border-[#e8e0d5] space-y-3">
                 <div className="text-center py-6 px-4 rounded-2xl border border-[#e8e0d5] bg-white">
-                  <p className="text-sm text-[#6b5c4e]">This debate was interrupted before the summary could be written.</p>
+                  <p className="text-sm text-[#6b5c4e]">No written summary was generated for this debate.</p>
                 </div>
                 <Link
                   href={`/story/${id}/debate`}
