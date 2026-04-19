@@ -631,14 +631,24 @@ Respond with JSON only:
   "disputes_detected": [{{"claim_a_character": "Name1", "claim_a": "what they said", "claim_b_character": "Name2", "claim_b": "what the other said"}}]
 }}
 
-QUESTIONS ANSWERED — THIS IS CRITICAL:
+QUESTIONS ANSWERED — THIS IS CRITICAL. BE GENEROUS.
 Look at the OPEN QUESTIONS in the ledger above. For EACH open question, check:
-  Did {speaker} address this question in their message? Even partially?
+  Did {speaker}'s message address the ESSENCE of this question — even if phrased
+  differently, indirectly, or via example/analogy? Do NOT require exact word
+  matches or direct quotations. If the speaker's response contains reasoning,
+  examples, or a direct stance that relates to what was asked, it counts.
 If yes, add it to "questions_answered" with:
   - "question_id": the exact ID number from the ledger (e.g. 1, 2, 3)
-  - "satisfactory": true if they gave a real answer, false if they dodged/deflected
+  - "satisfactory": true if the response addresses the essence of the question
+    (reasoning, examples, or a direct stance — even phrased differently).
+    false ONLY if the response genuinely ignores or deflects the question.
+    When in doubt between satisfactory=true and satisfactory=false, prefer
+    TRUE — characters in a real debate rarely ignore questions entirely, and
+    tangential-but-relevant responses should count as answered.
   - "summary": one sentence summarizing what they said about it
-Do NOT skip this. If {speaker} answered a question, it MUST appear in questions_answered.
+Do NOT skip this. If {speaker} answered a question in any recognizable way,
+it MUST appear in questions_answered. Stale "unanswered" questions piling up
+in the ledger means this extraction is being too conservative — err generous.
 
 CONTRADICTION DETECTION:
 Look at the ACTIVE CLAIMS in the ledger. Does {speaker}'s message CONTRADICT any existing claim
