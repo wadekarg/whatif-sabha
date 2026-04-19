@@ -660,7 +660,19 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 if not boru_spoke_this_turn and round_number > 6:
                     escalated = ledger.get_escalated_disputes(round_number)
 
-                    if escalated["tier3"]:
+                    # Compute silent ratio — rotation outranks dispute escalation when
+                    # most of the cast hasn't spoken yet.
+                    _speaker_turn_counts = {
+                        c["name"]: sum(
+                            1 for e in transcript
+                            if e.get("character") == c["name"] and not e.get("isOrchestrator")
+                        )
+                        for c in characters
+                    }
+                    _silent = [n for n, t in _speaker_turn_counts.items() if t == 0]
+                    _silent_ratio = len(_silent) / max(1, len(characters))
+
+                    if escalated["tier3"] and _silent_ratio < 0.5:
                         # Global cooldown — don't fire force_confrontation more than once per N turns
                         from app.core.agents.sabha_orchestrator import DISPUTE_GLOBAL_COOLDOWN_TURNS
                         if round_number - last_force_confrontation_round < DISPUTE_GLOBAL_COOLDOWN_TURNS:
@@ -731,7 +743,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                     f"after {dispute['_force_count']} escalations"
                                 )
 
-                    elif escalated["tier2"]:
+                    elif escalated["tier2"] and _silent_ratio < 0.5:
                         # Tier 2: Boru calls it out
                         dispute = escalated["tier2"][0]
                         callout_char_a = dispute["claim_a"]["character"]
@@ -812,14 +824,18 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     for c in characters
                 }
                 silent = [n for n, t in speaker_turn_counts.items() if t == 0]
-                # Fire if at least 2 characters are silent — avoids the "only 1 silent left" edge case
-                # where a single straggler keeps triggering.
-                if len(silent) >= 2:
+                # Fire when >=40% of the cast is silent OR at least 3 silent characters exist.
+                # In large casts (15+ silent of 19), this triggers aggressively; in small casts
+                # (2 of 3 silent), the ratio check still fires. Avoids the "only 1 silent left"
+                # edge where a single straggler keeps triggering.
+                silent_ratio = len(silent) / max(1, len(characters))
+                if silent_ratio >= 0.4 or len(silent) >= 3:
                     # Cooldown: don't rotate two turns in a row.
-                    recent_orch = [e for e in transcript[-4:] if e.get("isOrchestrator")]
+                    # Widened window to 6 and loosened to any _rotation marker,
+                    # letting the trigger condition itself be more assertive.
+                    recent_orch = [e for e in transcript[-6:] if e.get("isOrchestrator")]
                     recent_rotation = any(
-                        e.get("orchestratorEvent") == "invite_speaker"
-                        and e.get("_rotation") is True
+                        e.get("_rotation") is True
                         for e in recent_orch
                     )
                     if not recent_rotation:
