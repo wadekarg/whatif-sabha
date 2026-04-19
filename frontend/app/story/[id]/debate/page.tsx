@@ -735,7 +735,8 @@ export default function DebatePage() {
 
         const isQ = e.questions > 0;
         const hasResponses = e.count > e.questions;
-        const col = src.color;  // always source node color
+        const isBoruEdge = e.targetId === "Boru" || e.sourceId === "Boru";
+        const col = isBoruEdge ? "#c07820" : src.color;  // amber for Boru edges, source color otherwise
         const strandCount = Math.min(e.count, 8);
 
         const el = d3.select(this);
@@ -761,9 +762,11 @@ export default function DebatePage() {
         el.select("path")
           .attr("d", pathsData.trim() || `M${src.x},${src.y} L${tgt.x},${tgt.y}`)
           .attr("stroke", col)
-          .attr("stroke-width", 1.2)
+          .attr("stroke-width", isBoruEdge ? 2.2 : 1.2)
           .attr("stroke-dasharray", "none")
-          .attr("opacity", hasResponses ? Math.min(0.35 + responseCount * 0.06, 0.75) : 0);
+          .attr("opacity", isBoruEdge
+            ? Math.min(0.6 + responseCount * 0.05, 0.9)
+            : (hasResponses ? Math.min(0.35 + responseCount * 0.06, 0.75) : 0));
 
         // Draw question strands (dotted, slightly offset)
         if (questionCount > 0) {
@@ -787,8 +790,8 @@ export default function DebatePage() {
           qPath
             .attr("d", qPathsData.trim())
             .attr("stroke", col)
-            .attr("stroke-width", 1.2)
-            .attr("stroke-dasharray", "4,3")
+            .attr("stroke-width", isBoruEdge ? 2.2 : 1.2)
+            .attr("stroke-dasharray", isBoruEdge ? "none" : "4,3")
             .attr("opacity", Math.min(0.4 + questionCount * 0.1, 0.8));
         } else {
           el.select("path.q-strand").remove();
@@ -815,7 +818,7 @@ export default function DebatePage() {
         el.select("polygon.arrow")
           .attr("points", `${tx0},${ty0} ${a1x},${a1y} ${a2x},${a2y}`)
           .attr("fill", col)
-          .attr("opacity", 0.7);
+          .attr("opacity", isBoruEdge ? 0.95 : 0.7);
 
         // Label
         const labelX = 0.25 * sx0 + 0.5 * cpX0 + 0.25 * tx0;

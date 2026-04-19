@@ -133,20 +133,29 @@ export default function DebateViewPage() {
       let node = graphNodesRef.current.find(n => n.id === name);
       if (!node) {
         const idx = chars.indexOf(name);
-        const hex = (CHAR_COLORS[Math.max(0, idx) % CHAR_COLORS.length]).hex;
+        const hex = name === "Boru" ? "#c07820" : (CHAR_COLORS[Math.max(0, idx) % CHAR_COLORS.length]).hex;
         const total = chars.length || 1;
         const angle = (Math.max(0, idx) / total) * 2 * Math.PI;
         const dist = Math.min(W, H) * 0.3;
-        node = {
-          id: name,
-          x: W / 2 + Math.cos(angle) * dist + (Math.random() - 0.5) * 30,
-          y: H / 2 + Math.sin(angle) * dist + (Math.random() - 0.5) * 30,
-          vx: 0, vy: 0, r: 18, color: hex, speeches: 0,
-        };
+        node = name === "Boru"
+          ? {
+              id: name,
+              x: W / 2, y: H / 2,
+              vx: 0, vy: 0, r: 20, color: hex, speeches: 0,
+            }
+          : {
+              id: name,
+              x: W / 2 + Math.cos(angle) * dist + (Math.random() - 0.5) * 30,
+              y: H / 2 + Math.sin(angle) * dist + (Math.random() - 0.5) * 30,
+              vx: 0, vy: 0, r: 18, color: hex, speeches: 0,
+            };
         graphNodesRef.current.push(node);
       }
       return node;
     };
+
+    // Ensure Boru node exists (he may not appear as a speaker if no character addressed him before)
+    ensureNode("Boru");
 
     for (const entry of transcript) {
       // Skip non-dialogue entries (orchestrator, reactions, stage directions)
@@ -155,10 +164,10 @@ export default function DebateViewPage() {
       node.speeches++;
       node.r = Math.min(18 + node.speeches * 1.5, 34);
       // Backend stores as target_characters (array); frontend SSE stored as targets (array) or target_character (string for backward compat)
-      const targetNames = (entry as any).target_characters || (entry as any).targets || 
+      const targetNames = (entry as any).target_characters || (entry as any).targets ||
                           ((entry as any).target_character ? [(entry as any).target_character] : []) ||
                           (entry.target ? [entry.target] : []);
-      
+
       // Create an edge for each target
       const act = classifySpeechAct(
         entry.message,
@@ -166,7 +175,7 @@ export default function DebateViewPage() {
       );
       const isQ = act === "question";
       for (const targetName of targetNames) {
-        if (targetName && targetName !== entry.character && targetName !== "Boru" && targetName !== "all") {
+        if (targetName && targetName !== entry.character && targetName !== "all") {
           ensureNode(targetName);
           const existing = graphEdgesRef.current.find(e => e.source === entry.character && e.target === targetName);
           if (existing) { existing.count++; if (isQ) existing.questions++; }
@@ -300,7 +309,8 @@ export default function DebateViewPage() {
         const ux = dx/d, uy = dy/d;
         const px = -uy, py = ux;
         const isQ = e.questions > 0;
-        const col = isQ ? "#f0c060" : src.color;
+        const isBoruEdge = e.target === "Boru" || e.source === "Boru";
+        const col = isBoruEdge ? "#c07820" : (isQ ? "#f0c060" : src.color);
         const strandCount = e.count;
         const spacing = strandCount > 1 ? Math.min(3.2, 32 / (strandCount - 1)) : 0;
         const hasMirror = edges.some(e2 => e2.source === e.target && e2.target === e.source);
@@ -320,7 +330,9 @@ export default function DebateViewPage() {
           ctx.save();
           ctx.beginPath(); ctx.moveTo(sxe, sye); ctx.quadraticCurveTo(cpX, cpY, txe, tye);
           ctx.strokeStyle = col + Math.round(alpha * 255).toString(16).padStart(2, "0");
-          ctx.lineWidth = 1.2; ctx.stroke();
+          ctx.lineWidth = isBoruEdge ? 2.2 : 1.2;
+          if (isBoruEdge) ctx.setLineDash([]);
+          ctx.stroke();
           ctx.restore();
         }
 
@@ -331,7 +343,7 @@ export default function DebateViewPage() {
         const arrowDx = txe0 - cpX0, arrowDy = tye0 - cpY0;
         const arrowD = Math.sqrt(arrowDx*arrowDx + arrowDy*arrowDy) || 1;
         ctx.fillStyle = col + "cc";
-        drawArrow(ctx, txe0, tye0, arrowDx/arrowD, arrowDy/arrowD, 7);
+        drawArrow(ctx, txe0, tye0, arrowDx/arrowD, arrowDy/arrowD, isBoruEdge ? 9 : 7);
       }
 
       // Nodes
