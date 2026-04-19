@@ -175,6 +175,21 @@ def _extract_boru_question(full_response: str) -> str | None:
     return first_q.group(0).strip() if first_q else None
 
 
+def _is_addressing_boru(entry: dict) -> bool:
+    """True only when a transcript entry EXPLICITLY addresses Boru.
+
+    Prevents respond_to_character from firing whenever a character happens
+    to mention Boru in passing — the sabha is meant to be a debate between
+    characters, not a Q&A with the host.
+    """
+    targets = entry.get("target_characters") or []
+    if "Boru" in targets or entry.get("target_character") == "Boru":
+        return True
+    msg = entry.get("message", "")
+    # @Boru word-boundary, case-insensitive
+    return bool(re.search(r"@boru\b", msg, re.IGNORECASE))
+
+
 class DebateStartRequest(BaseModel):
     story_id: str = Field(..., min_length=1)
     divergence_description: str = Field(..., min_length=5, max_length=2000)
@@ -1077,8 +1092,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 if ledger_update.get("addresses_boru") and ledger_update.get("boru_question"):
                     boru_question = ledger_update["boru_question"]
 
-            # Boru responds if character asked a direct question (regardless of ledger turn)
-            if boru_question:
+            # Boru responds ONLY if the character EXPLICITLY addressed Boru —
+            # via target_characters/target_character OR an @Boru mention. A mere
+            # rhetorical mention of "Boru" in the response is not enough: the
+            # sabha is a debate between characters, not a Q&A with the host.
+            last_turn_entry = transcript[-1] if transcript else {}
+            if boru_question and _is_addressing_boru(last_turn_entry):
                 boru_reply, intended = await generate_orchestrator_message(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="respond_to_character",
