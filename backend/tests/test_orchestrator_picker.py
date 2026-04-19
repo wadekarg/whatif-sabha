@@ -77,3 +77,92 @@ def test_empty_transcript_no_forced():
         [], CHARS, current_phase="opening", round_number=0,
     )
     assert forced is False
+
+
+def test_silent_character_beats_targeted_character_in_long_debate():
+    """At turn 20+, a never-spoken character should score higher than a @-targeted one."""
+    from app.core.agents.orchestrator import _score_candidates
+
+    chars = [
+        {"name": "Napoleon", "role": "antagonist",
+         "phases": [{"personality_traits": [], "motivations": [], "fears": []}]},
+        {"name": "Squealer", "role": "supporting",
+         "phases": [{"personality_traits": [], "motivations": [], "fears": []}]},
+        {"name": "Boxer", "role": "supporting",
+         "phases": [{"personality_traits": [], "motivations": [], "fears": []}]},
+        {"name": "Bluebell", "role": "supporting",
+         "phases": [{"personality_traits": [], "motivations": [], "fears": []}]},
+    ]
+    # 20 turns: Napoleon/Squealer dominate, Bluebell never speaks, Boxer spoke
+    # recently (so his silence reward is small) and is now being @-targeted.
+    # The test asserts Bluebell (pure silence +8) beats Boxer (small silence + target +6).
+    history = []
+    for i in range(18):
+        history.append({
+            "character": "Napoleon" if i % 2 == 0 else "Squealer",
+            "message": f"Turn {i}.",
+            "round": i, "phase": "opening",
+        })
+    history.append({"character": "Boxer", "message": "I am here.", "round": 18, "phase": "opening"})
+    history.append({
+        "character": "Napoleon", "message": "Boxer is the obvious choice.",
+        "round": 19, "phase": "opening", "target_characters": ["Boxer"],
+    })
+    last_entry = history[-1]
+    last_speaker = last_entry["character"]
+
+    scores = _score_candidates(
+        history, ["Napoleon", "Squealer", "Boxer", "Bluebell"],
+        chars, last_speaker, last_entry["message"], last_entry,
+    )
+
+    # Bluebell (never spoke, 20 turns elapsed) should beat Boxer (targeted)
+    assert scores["Bluebell"] > scores["Boxer"], (
+        f"Bluebell={scores['Bluebell']}, Boxer={scores['Boxer']} — silent should dominate"
+    )
+
+
+def test_silent_character_reward_capped_at_12():
+    """The silence reward maxes out at +12 even in very long debates."""
+    from app.core.agents.orchestrator import _score_candidates
+
+    chars = [
+        {"name": "Napoleon", "role": "antagonist",
+         "phases": [{"personality_traits": [], "motivations": [], "fears": []}]},
+        {"name": "Bluebell", "role": "supporting",
+         "phases": [{"personality_traits": [], "motivations": [], "fears": []}]},
+    ]
+    # 100 turns of Napoleon
+    history = [
+        {"character": "Napoleon", "message": f"Turn {i}", "round": i, "phase": "opening"}
+        for i in range(100)
+    ]
+    scores = _score_candidates(
+        history, ["Napoleon", "Bluebell"], chars,
+        "Napoleon", history[-1]["message"], history[-1],
+    )
+    # Bluebell's score = silence reward (capped at 12) minus any recency penalty (0 here).
+    # Relevance reward is also capped at 0.5. So max achievable ~12.5.
+    assert 10 <= scores["Bluebell"] <= 13
+
+
+def test_silent_reward_scales_linearly_for_short_debates():
+    """At turn 4, silence reward is 3 + 4*0.25 = 4.0."""
+    from app.core.agents.orchestrator import _score_candidates
+
+    chars = [
+        {"name": "Napoleon", "role": "antagonist",
+         "phases": [{"personality_traits": [], "motivations": [], "fears": []}]},
+        {"name": "Bluebell", "role": "supporting",
+         "phases": [{"personality_traits": [], "motivations": [], "fears": []}]},
+    ]
+    history = [
+        {"character": "Napoleon", "message": f"Turn {i}", "round": i, "phase": "opening"}
+        for i in range(4)
+    ]
+    scores = _score_candidates(
+        history, ["Napoleon", "Bluebell"], chars,
+        "Napoleon", history[-1]["message"], history[-1],
+    )
+    # At turn 4, silent reward = 3 + 4*0.25 = 4.0
+    assert abs(scores["Bluebell"] - 4.0) < 0.5

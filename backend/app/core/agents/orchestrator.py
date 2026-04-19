@@ -125,11 +125,12 @@ def _score_candidates(
         score = 0.0
 
         # Recency reward: turns of silence → more pressure to speak
+        # Scales with debate length so silent characters dominate in long debates.
         if last_spoke_at[name] == -1:
-            score += 3.0  # never spoken — highest priority
+            score += min(3.0 + total_turns * 0.25, 12.0)
         else:
             turns_silent = total_turns - last_spoke_at[name]
-            score += min(turns_silent * 0.4, 2.0)
+            score += min(turns_silent * 0.4, 3.0)
 
         # Recency penalty for dominating recent turns
         recent_count = recent_turns.count(name)
