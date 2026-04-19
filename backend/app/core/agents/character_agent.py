@@ -3,6 +3,124 @@ from app.config import get_agent_llm, get_agent_fallbacks
 from app.core.agents.base_agent import build_character_system_prompt
 
 
+def _build_debate_state_briefing(ledger, round_number, current_phase, character_name):
+    """Build a structured debate state block from the ledger — gives character full situational awareness."""
+    if not ledger:
+        return None
+    lines = [f"[DEBATE STATE — Turn {round_number}, Phase: {current_phase.upper().replace('_', ' ')}]"]
+
+    # Positions (max 5, prioritize this character + most active)
+    if ledger.character_positions:
+        lines.append("\nPOSITIONS:")
+        # This character first
+        if character_name in ledger.character_positions:
+            lines.append(f"  You: {ledger.character_positions[character_name][:100]}")
+        count = 0
+        for name, pos in ledger.character_positions.items():
+            if name == character_name:
+                continue
+            lines.append(f"  {name}: {pos[:100]}")
+            count += 1
+            if count >= 4:
+                break
+
+    # Open questions (max 3, prioritize directed at this character)
+    if ledger.open_questions:
+        directed_at_me = [q for q in ledger.open_questions if character_name in q.get("directed_to", [])]
+        others = [q for q in ledger.open_questions if character_name not in q.get("directed_to", [])]
+        show_qs = (directed_at_me + others)[:3]
+        if show_qs:
+            lines.append("\nOPEN QUESTIONS (the Sabha is waiting):")
+            for q in show_qs:
+                age = q.get("_times_injected", 0) + q.get("_deflections", 0)
+                urgency = f" — UNANSWERED {age}+ TURNS" if age >= 2 else ""
+                directed = ", ".join(q.get("directed_to", []))
+                me_tag = " [TO YOU]" if character_name in q.get("directed_to", []) else ""
+                lines.append(f"  Q{q['id']}: \"{q['question'][:100]}\" [asked by {q['asked_by']}, to {directed}]{me_tag}{urgency}")
+
+    # Disputes (max 2, prioritize those involving this character)
+    if ledger.disputes:
+        unresolved = [d for d in ledger.disputes if d["status"] == "unresolved"]
+        my_disputes = [d for d in unresolved if d["claim_a"]["character"] == character_name or d["claim_b"]["character"] == character_name]
+        other_disputes = [d for d in unresolved if d not in my_disputes]
+        show_d = (my_disputes + other_disputes)[:2]
+        if show_d:
+            lines.append("\nDISPUTES (contradictions — still unresolved):")
+            for d in show_d:
+                lines.append(
+                    f"  D{d['id']}: {d['claim_a']['character']} says \"{d['claim_a']['claim'][:60]}\" "
+                    f"BUT {d['claim_b']['character']} says \"{d['claim_b']['claim'][:60]}\""
+                )
+
+    # Summary stats
+    resolved_count = len(ledger.resolved_questions)
+    resolved_disputes = len([d for d in ledger.disputes if d["status"] != "unresolved"])
+    if resolved_count or resolved_disputes:
+        lines.append(f"\nRESOLVED: {resolved_count} questions, {resolved_disputes} disputes settled.")
+
+    return "\n".join(lines)
+
+
+# Phase-specific behavioral directives
+PHASE_DIRECTIVES = {
+    "opening": None,  # System prompt handles opening
+    "cross_examination": (
+        "[DEBATE PHASE: CROSS-EXAMINATION]\n"
+        "CHALLENGE. Pick a specific claim and tear it apart. Ask questions with only one honest answer.\n"
+        "Short, sharp, specific. Name names. 1-2 sentences. NO speeches."
+    ),
+    "deepening": (
+        "[DEBATE PHASE: DEEPENING]\n"
+        "Surface arguments are done. Go DEEPER. What happens six months after this scenario? A year?\n"
+        "Find the specific day, the specific choice, the specific cost nobody has named.\n"
+        "NO POLICY LANGUAGE. NO ABSTRACTIONS. The specific moment, or nothing."
+    ),
+    "reckoning": (
+        "[DEBATE PHASE: RECKONING]\n"
+        "Open questions MUST be answered. Disputes MUST be faced.\n"
+        "Either confess something true, or double down and explain WHY you refuse to answer.\n"
+        "No dodging. No speeches. The truth, or your best lie — commit to it.\n"
+        "BANNED: any sentence that could appear in a policy memo."
+    ),
+    "closing": (
+        "[DEBATE PHASE: CLOSING]\n"
+        "Your last chance to speak. Say the ONE thing you need the Sabha to remember.\n"
+        "Make it personal. Make it count. 1-2 sentences."
+    ),
+}
+
+
+def _build_phase_directive(current_phase, round_number):
+    """Return phase-specific behavioral instruction, or None for early turns."""
+    if round_number < 6:
+        return None
+    return PHASE_DIRECTIVES.get(current_phase)
+
+
+def _build_dispute_callout(ledger, character_name):
+    """If this character is party to an unresolved dispute, build a direct callout."""
+    if not ledger or not ledger.disputes:
+        return None
+    for d in ledger.disputes:
+        if d["status"] != "unresolved" or d["turns_unresolved"] < 2:
+            continue
+        if d["claim_a"]["character"] == character_name:
+            return (
+                f"[UNRESOLVED DISPUTE — the Sabha has noticed]\n"
+                f"You said: \"{d['claim_a']['claim'][:120]}\"\n"
+                f"{d['claim_b']['character']} said: \"{d['claim_b']['claim'][:120]}\"\n"
+                f"These cannot both be true. Address this."
+            )
+        elif d["claim_b"]["character"] == character_name:
+            return (
+                f"[UNRESOLVED DISPUTE — the Sabha has noticed]\n"
+                f"You said: \"{d['claim_b']['claim'][:120]}\"\n"
+                f"{d['claim_a']['character']} said: \"{d['claim_a']['claim'][:120]}\"\n"
+                f"These cannot both be true. Address this."
+            )
+    return None
+
+
 def _extract_personal_directive(character_name, message):
     """
     When Boru issues a multi-character directive ("Hamlet, address X. Claudius, explain Y."),
@@ -197,7 +315,10 @@ async def character_respond_stream(
     memory_context=None,
     observer_challenge=None,
     pending_questions=None,
-    debate_progress=None,  # NEW: Short note on debate state
+    debate_progress=None,
+    ledger=None,
+    current_phase="",
+    round_number=0,
 ):
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
@@ -206,23 +327,20 @@ async def character_respond_stream(
 
     _inject_memories(messages, memory_context or [])
 
-    # Add debate progress note if available
-    if debate_progress:
-        messages.append(HumanMessage(content=(
-            f"[CURRENT DEBATE STATE — what's been happening so far]: {debate_progress}"
-        )))
-
-    # ── Compressed history: last 6 raw + summary of older turns + ledger context ──
     char_name = character["name"]
+
+    # ── 3. DEBATE STATE BRIEFING (full situational awareness from ledger) ──
+    state_briefing = _build_debate_state_briefing(ledger, round_number, current_phase or "opening", char_name)
+    if state_briefing:
+        messages.append(HumanMessage(content=state_briefing))
+
+    # ── 4. COMPRESSED OLDER HISTORY ──
     real_entries = [e for e in debate_history
                     if not e.get("isReaction") and not e.get("isStageDirection")]
-
-    # Split: older entries get compressed, recent entries stay raw
-    RECENT_COUNT = 6
+    RECENT_COUNT = 5
     recent = real_entries[-RECENT_COUNT:] if len(real_entries) > RECENT_COUNT else real_entries
     older = real_entries[:-RECENT_COUNT] if len(real_entries) > RECENT_COUNT else []
 
-    # Compress older entries into a brief summary
     if older:
         older_speakers = {}
         for e in older:
@@ -231,25 +349,34 @@ async def character_respond_stream(
             name = e["character"]
             if name not in older_speakers:
                 older_speakers[name] = []
-            older_speakers[name].append(e["message"][:80])
+            older_speakers[name].append(e["message"][:60])
         summary_lines = []
         for name, msgs in older_speakers.items():
-            key_point = msgs[-1]  # most recent point from this character
+            key_point = msgs[-1]
             summary_lines.append(f"  {name}: \"{key_point}...\" ({len(msgs)} turns)")
         if summary_lines:
             messages.append(HumanMessage(content=(
-                f"[EARLIER IN THE DEBATE — {len(older)} turns ago, here's what was argued]:\n"
-                + "\n".join(summary_lines)
+                f"[EARLIER — {len(older)} turns ago]:\n" + "\n".join(summary_lines)
             )))
 
-    # Inject Boru callouts directed at this character (from any point in history)
-    for entry in debate_history:
+    # ── 5. PHASE DIRECTIVE (replaces static BANNED LANGUAGE reminder) ──
+    phase_dir = _build_phase_directive(current_phase or "opening", round_number)
+    if phase_dir:
+        messages.append(HumanMessage(content=phase_dir))
+
+    # ── 6. BORU CALLOUTS (max 2 most recent) ──
+    boru_callouts = []
+    for entry in reversed(debate_history):
         if entry.get("isOrchestrator"):
             event = entry.get("orchestratorEvent", "")
-            if event in ("forced_question", "call_out_repetition", "defend_sabha") and char_name.lower() in entry["message"].lower():
-                messages.append(HumanMessage(content=f"[The moderator said to you]: {entry['message'][:200]}"))
+            if event in ("forced_question", "call_out_repetition", "defend_sabha", "break_duel") and char_name.lower() in entry["message"].lower():
+                boru_callouts.append(entry["message"][:200])
+                if len(boru_callouts) >= 2:
+                    break
+    for msg in reversed(boru_callouts):
+        messages.append(HumanMessage(content=f"[The moderator said to you]: {msg}"))
 
-    # Recent entries — raw, full text
+    # ── 7. RECENT RAW MESSAGES (last 5) ──
     for entry in recent:
         if entry.get("isOrchestrator"):
             event = entry.get("orchestratorEvent", "")
@@ -263,14 +390,10 @@ async def character_respond_stream(
         else:
             messages.append(HumanMessage(content=f"{speaker}: {text}"))
 
-    # Re-inject BANNED LANGUAGE rules every 8+ turns (keeps system prompt fresh in context)
-    total_real = len(real_entries)
-    if total_real >= 8:
-        messages.append(HumanMessage(content=(
-            "[REMINDER — HOW TO SPEAK]: Short, sharp, specific. 1-3 sentences for most turns. "
-            "NO policy language, NO 'the consequences of this would be', NO committee-speak. "
-            "Speak from your gut. Find the crack in what was just said. Name names."
-        )))
+    # ── 8. DISPUTE CALLOUT (if this character is party to an unresolved dispute) ──
+    dispute_callout = _build_dispute_callout(ledger, char_name)
+    if dispute_callout:
+        messages.append(HumanMessage(content=dispute_callout))
 
     turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history, correction_hint, pending_questions)
 
