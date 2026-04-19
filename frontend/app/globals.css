@@ -58,3 +58,70 @@ input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visib
 ::-webkit-scrollbar       { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d4c8b8; border-radius: 4px; }
+
+/* ══════════════════════════════════════════════════════════
+   Print stylesheet — "Save as PDF" flow.
+   Hides interactive panels (graph, chat, oracle, playback
+   controls) so the transcript + alternate ending print
+   cleanly onto pages.
+   ══════════════════════════════════════════════════════════ */
+@media print {
+  /* Hide non-essential UI during print */
+  .print\:hidden,
+  [data-print-hide="true"],
+  header.playback-controls,
+  footer,
+  nav,
+  aside,
+  button:not(.print-keep),
+  [class*="split"] > [class*="right"],
+  [role="navigation"] {
+    display: none !important;
+  }
+
+  /* Force background colors to render (where supported) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Flow content naturally on the page */
+  html, body {
+    background: #ffffff !important;
+    color: #1a1410 !important;
+    font-size: 11pt;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Release fixed viewport height / overflow constraints
+     so the transcript flows across multiple pages */
+  main {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  main * {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  /* Page-break before phase banners (if present in markup) */
+  [data-phase-banner] {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  /* Keep turn bubbles un-fragmented across pages */
+  [data-turn-bubble] {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Simplify shadowed cards in print */
+  .bubble-shadow {
+    box-shadow: none !important;
+    border: 1px solid #00000022 !important;
+  }
+}

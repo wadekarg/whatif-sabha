@@ -564,6 +564,14 @@ export default function DebateViewPage() {
             </div>
           )}
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#1c1410] text-xs font-medium border border-[#f0c060]/60 hover:bg-[#fde9c9] transition-colors print:hidden"
+              aria-label="Save debate as PDF"
+              title="Save as PDF — opens your browser's print dialog"
+            >
+              🖨 Save as PDF
+            </button>
             <span className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
               debate.status === "completed"
                 ? "border-emerald-200 text-emerald-700 bg-emerald-50"
@@ -734,7 +742,7 @@ export default function DebateViewPage() {
           </div>
 
           {/* Chat toggle */}
-          <div className="shrink-0 border-t border-[#e8e0d5] bg-white">
+          <div data-print-hide="true" className="shrink-0 border-t border-[#e8e0d5] bg-white">
             <button
               onClick={() => setShowChat(v => !v)}
               className="w-full flex items-center gap-2 px-5 py-2.5 hover:bg-[#faf7f2] transition-colors text-left"
@@ -748,7 +756,7 @@ export default function DebateViewPage() {
 
           {/* Chat panel */}
           {showChat && (
-            <div className="shrink-0 flex flex-col bg-white border-t border-[#e8e0d5]" style={{ height: "280px" }}>
+            <div data-print-hide="true" className="shrink-0 flex flex-col bg-white border-t border-[#e8e0d5]" style={{ height: "280px" }}>
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
                 {chatMessages.length === 0 && (
                   <div className="space-y-1.5 pt-1">
@@ -816,12 +824,13 @@ export default function DebateViewPage() {
 
         {/* Drag handle */}
         <div
+          data-print-hide="true"
           className="w-1 shrink-0 bg-[#e8e0d5] hover:bg-[#c07820] transition-colors cursor-col-resize"
           onMouseDown={() => { isDraggingRef.current = true; }}
         />
 
         {/* RIGHT: Visualization panel */}
-        <div className="flex flex-col overflow-hidden bg-[#09090b]" style={{ flex: 1 }}>
+        <div data-print-hide="true" className="flex flex-col overflow-hidden bg-[#09090b]" style={{ flex: 1 }}>
 
           {/* Tab bar */}
           <div className="shrink-0 flex border-b border-white/10 bg-black/30">
@@ -915,9 +924,16 @@ export default function DebateViewPage() {
           <div className="absolute inset-0 z-50 overflow-y-auto" style={{ background: "#0d0b08" }}>
 
             {/* Sticky nav */}
-            <div className="sticky top-0 z-20 border-b border-white/8 flex items-center justify-between px-8 py-3" style={{ background: "rgba(13,11,8,0.92)", backdropFilter: "blur(12px)" }}>
+            <div data-print-hide="true" className="sticky top-0 z-20 border-b border-white/8 flex items-center justify-between px-8 py-3" style={{ background: "rgba(13,11,8,0.92)", backdropFilter: "blur(12px)" }}>
               <span className="text-[#f0c060] font-bold text-sm tracking-wider">✦ WhatIfSabha</span>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="text-xs text-white/70 hover:text-white border border-[#f0c060]/40 hover:border-[#f0c060]/70 px-3 py-1.5 rounded-lg transition-colors print:hidden"
+                  aria-label="Save alternate ending as PDF"
+                >
+                  🖨 Save as PDF
+                </button>
                 <Link href={`/story/${id}/debate`} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">New debate →</Link>
                 <button onClick={() => setShowConclusion(false)} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">← Back</button>
               </div>
@@ -1029,7 +1045,7 @@ export default function DebateViewPage() {
 
             {/* ORACLE MODE */}
             {debate.alternate_world_state && (
-              <div style={{ background: "#0d0b08" }} className="py-24 px-8">
+              <div data-print-hide="true" style={{ background: "#0d0b08" }} className="py-24 px-8">
                 <div className="max-w-2xl mx-auto space-y-8">
                   <div className="text-center space-y-3">
                     <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center text-[#f0c060] text-xl border border-[#f0c060]/25" style={{ background: "rgba(240,192,96,0.08)" }}>◉</div>
@@ -1088,7 +1104,7 @@ export default function DebateViewPage() {
             )}
 
             {/* Footer */}
-            <div className="border-t border-white/8 py-14 text-center" style={{ background: "#0d0b08" }}>
+            <div data-print-hide="true" className="border-t border-white/8 py-14 text-center" style={{ background: "#0d0b08" }}>
               <Link href={`/story/${id}/debate`} className="inline-flex items-center gap-2 px-8 py-3 text-sm font-bold rounded-xl transition-colors" style={{ background: "#f0c060", color: "#0d0b08" }}>
                 Explore another what-if →
               </Link>

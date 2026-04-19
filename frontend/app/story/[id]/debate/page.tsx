@@ -1657,6 +1657,14 @@ export default function DebatePage() {
 
           {/* Layout controls */}
           <div className="flex items-center gap-1 ml-auto shrink-0">
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#1c1410] text-xs font-medium border border-[#f0c060]/60 hover:bg-[#fde9c9] transition-colors print:hidden"
+              aria-label="Save debate as PDF"
+              title="Save as PDF — opens your browser's print dialog"
+            >
+              🖨 Save as PDF
+            </button>
             <button onClick={() => setMaximize(m => m === "left" ? "none" : "left")} title="Maximize debate"
               className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors ${maximize === "left" ? "bg-[#c07820] text-white" : "text-[#a09282] hover:text-[#6b5c4e] hover:bg-[#f0ece5]"}`}>
               💬
@@ -1683,7 +1691,7 @@ export default function DebatePage() {
           style={{ width: maximize === "right" ? "0px" : maximize === "left" ? "100%" : `${splitPct}%`, display: maximize === "right" ? "none" : "flex" }}>
 
           {/* Fixed toolbar — status + emotions + auto-play — single line */}
-          <div className="shrink-0 border-b border-[#e8e0d5] bg-white/90 px-5 py-1.5 flex items-center gap-3 min-h-[36px]">
+          <div data-print-hide="true" className="shrink-0 border-b border-[#e8e0d5] bg-white/90 px-5 py-1.5 flex items-center gap-3 min-h-[36px]">
             {/* Emotion legend toggle */}
             <button
               onClick={() => setShowLegend(v => !v)}
@@ -2339,6 +2347,7 @@ export default function DebatePage() {
         {/* ══ Drag handle ══ */}
         {maximize === "none" && (
           <div
+            data-print-hide="true"
             className={`w-1.5 shrink-0 transition-colors cursor-col-resize group relative ${isDraggingSplit ? "bg-[#c07820]" : "bg-[#e8e0d5] hover:bg-[#c07820]/60"}`}
             onMouseDown={() => { isDraggingRef.current = true; setIsDraggingSplit(true); }}
           >
@@ -2351,7 +2360,7 @@ export default function DebatePage() {
         )}
 
         {/* ══ RIGHT: Graph / Heatmap / Emotions ══ */}
-        <div className="flex flex-col overflow-hidden bg-[#f7f3ed]"
+        <div data-print-hide="true" className="flex flex-col overflow-hidden bg-[#f7f3ed]"
           style={{ flex: maximize === "left" ? 0 : 1, width: maximize === "left" ? "0px" : maximize === "right" ? "100%" : `${100 - splitPct}%`, display: maximize === "left" ? "none" : "flex" }}>
 
           {/* Right panel tabs */}

@@ -13,3 +13,49 @@ html, body {
   color: var(--ink);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Print stylesheet — "Save as PDF" flow.
+   Replay has a simpler structure than the main frontend.
+   ══════════════════════════════════════════════════════════ */
+@media print {
+  [data-print-hide="true"],
+  button:not(.print-keep),
+  .print\:hidden {
+    display: none !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #1a1410 !important;
+    font-size: 11pt;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  main {
+    max-width: 100%;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  main * {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  [data-phase-banner] {
+    page-break-before: always;
+    break-before: page;
+  }
+  [data-turn-bubble] {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
