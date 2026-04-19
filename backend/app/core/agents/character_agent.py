@@ -243,6 +243,13 @@ def _build_turn_prompt(
         )
         # Don't inflate token budget — pending questions are a nudge, not a direct address
 
+    # ── In-character reminder — the last nudge before the LLM speaks ──
+    prompt += (
+        f"\n\nSpeak as {character_name}. Every sentence must sound like they would say it — "
+        f"in their world, in their voice, in this room, now. "
+        f"Not as a planner. Not as a narrator. Not as a committee."
+    )
+
     return prompt, is_direct
 
 
