@@ -1073,7 +1073,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             async def _run_ledger():
                 if round_number % 2 == 0:
-                    return await update_ledger(ledger, next_speaker_name, full_response, transcript, observer_names=obs_names)
+                    return await update_ledger(ledger, next_speaker_name, full_response, transcript, observer_names=obs_names, round_number=round_number)
                 return None
 
             judge_result, ledger_update = await asyncio.gather(_run_judge(), _run_ledger())

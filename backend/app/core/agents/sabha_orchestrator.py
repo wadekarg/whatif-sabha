@@ -451,6 +451,22 @@ class ArgumentLedger:
                 return d
         return None
 
+    def _pair_recently_retired(self, char_a: str, char_b: str, current_round: int, window: int = 10) -> bool:
+        """Return True if this pair has a retired (resolved_by_escalation) dispute
+        within the last `window` turns."""
+        pair = {char_a, char_b}
+        for d in self.disputes:
+            if d.get("status") != "resolved_by_escalation":
+                continue
+            existing = {d["claim_a"]["character"], d["claim_b"]["character"]}
+            if existing != pair:
+                continue
+            # Check the turn it was retired. Use _last_escalation_turn as a proxy.
+            retired_at = d.get("_last_escalation_turn", 0)
+            if current_round - retired_at < window:
+                return True
+        return False
+
     def is_response_repeating(self, character: str, full_response: str, transcript: list[dict]) -> bool:
         """
         Direct check on the full response text against this character's prior messages.
@@ -528,6 +544,7 @@ async def update_ledger(
     message: str,
     transcript: list[dict],
     observer_names: list[str] = None,
+    round_number: int = 0,   # used by pair-cooldown for retired disputes
 ) -> dict:
     """
     After a character speaks, use LLM to update the argument ledger.
@@ -695,6 +712,14 @@ Be concise. Return ONLY valid JSON."""
             logger.info(f"Rejected non-disputant dispute: {char_a} vs {char_b}")
             continue
         if char_a and char_b and claim_a and claim_b and char_a != char_b:
+            # Skip creating new disputes for pairs that just retired a dispute --
+            # prevents Snowball-vs-Napoleon looping under slightly different wording.
+            if ledger._pair_recently_retired(char_a, char_b, round_number, window=10):
+                logger.info(
+                    f"[DISPUTE] Skipping new dispute for cooled pair "
+                    f"{char_a}/{char_b} — retired recently"
+                )
+                continue
             # Dedup: if an unresolved dispute between these two characters already exists,
             # bump its turn counter instead of adding a new row.
             existing = ledger._find_existing_dispute(char_a, char_b)
