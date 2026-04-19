@@ -1124,7 +1124,19 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     )
                     if obs_intro:
                         yield sse("orchestrator", {"message": obs_intro, "phase": current_phase, "event": "observer_intro", "target": observer["name"], "intended_speaker": intended})
+                        # Record Boru's intro in the transcript so downstream logic sees it —
+                        # and so the observer's turn (emitted immediately below) is clearly
+                        # linked to Boru's invitation rather than a random character turn.
+                        transcript.append({
+                            "character": "Boru", "message": obs_intro, "round": round_number,
+                            "phase": current_phase, "isOrchestrator": True,
+                            "orchestratorEvent": "observer_intro",
+                            "intended_speaker": observer["name"],
+                        })
 
+                # After intro (or for returning observers), emit the observer's turn immediately
+                # in the SAME loop iteration. Intuitively, when Boru introduces an observer,
+                # the observer must speak next — not a character.
                 obs_response = ""
                 try:
                     yield sse("observer_start", {
