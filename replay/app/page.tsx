@@ -40,7 +40,27 @@ const EMOTION_STYLE: Record<string, { bg: string; label: string; dot: string }> 
 
 type DebateEntry = { character: string; message: string; round: number; target?: string; target_character?: string; target_characters?: string[]; emotion?: string; isObserver?: boolean; observerEra?: string; };
 type GraphNode   = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; };
-type GraphEdge   = { source: string; target: string; count: number; questions: number; };
+type SpeechAct   = "question" | "response" | "statement";
+type GraphEdge   = { source: string; target: string; count: number; questions: number; speech_act?: SpeechAct; };
+
+function classifySpeechAct(message: string, targetCharacters: string[]): SpeechAct {
+  if (!targetCharacters || targetCharacters.length === 0) return "statement";
+  if (!message || !message.trim()) return "statement";
+  if (!message.includes("?")) return "response";
+
+  const questionSentences = message
+    .split(/(?<=[.!?])\s+/)
+    .filter(s => s.trim().endsWith("?"));
+
+  const targetSet = new Set(targetCharacters.map(t => t.toLowerCase()));
+
+  for (const sent of questionSentences) {
+    const sentLower = sent.toLowerCase();
+    if ([...targetSet].some(t => sentLower.includes(t))) return "question";
+    if (/\b(you|your|you're|yours)\b/.test(sentLower)) return "question";
+  }
+  return "response";
+}
 
 export default function DebateViewPage() {
   const [debate, setDebate]     = useState<any>(null);
@@ -137,13 +157,21 @@ export default function DebateViewPage() {
                           (entry.target ? [entry.target] : []);
       
       // Create an edge for each target
+      const act = classifySpeechAct(
+        entry.message,
+        (entry.target_characters as string[] | undefined) ?? (entry.target_character ? [entry.target_character] : []),
+      );
+      const isQ = act === "question";
       for (const targetName of targetNames) {
         if (targetName && targetName !== entry.character && targetName !== "Boru" && targetName !== "all") {
           ensureNode(targetName);
-          const isQ = entry.message.includes("?");
           const existing = graphEdgesRef.current.find(e => e.source === entry.character && e.target === targetName);
           if (existing) { existing.count++; if (isQ) existing.questions++; }
-          else graphEdgesRef.current.push({ source: entry.character, target: targetName, count: 1, questions: isQ ? 1 : 0 });
+          else graphEdgesRef.current.push({
+            source: entry.character, target: targetName,
+            count: 1, questions: isQ ? 1 : 0,
+            speech_act: act,
+          });
         }
       }
     }

@@ -44,7 +44,27 @@ type StreamEntry = { character: string; text: string; };
 type DivPoint    = { event_id: string; description: string; affected_characters: string[]; };
 
 type GraphNode = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; role: string; shape: string; fx?: number | null; fy?: number | null; };
-type GraphEdge = { source: string | any; target: string | any; sourceId: string; targetId: string; count: number; questions: number; };
+type SpeechAct = "question" | "response" | "statement";
+type GraphEdge = { source: string | any; target: string | any; sourceId: string; targetId: string; count: number; questions: number; speech_act?: SpeechAct; };
+
+function classifySpeechAct(message: string, targetCharacters: string[]): SpeechAct {
+  if (!targetCharacters || targetCharacters.length === 0) return "statement";
+  if (!message || !message.trim()) return "statement";
+  if (!message.includes("?")) return "response";
+
+  const questionSentences = message
+    .split(/(?<=[.!?])\s+/)
+    .filter(s => s.trim().endsWith("?"));
+
+  const targetSet = new Set(targetCharacters.map(t => t.toLowerCase()));
+
+  for (const sent of questionSentences) {
+    const sentLower = sent.toLowerCase();
+    if ([...targetSet].some(t => sentLower.includes(t))) return "question";
+    if (/\b(you|your|you're|yours)\b/.test(sentLower)) return "question";
+  }
+  return "response";
+}
 
 export default function DebatePage() {
   const { id } = useParams<{ id: string }>();
@@ -566,7 +586,11 @@ export default function DebatePage() {
         }
         if (allTargets.length === 0) allTargets = ["Boru"];
       }
-      const isQuestion = last.message.includes("?");
+      const act = classifySpeechAct(
+        last.message,
+        (last.target_characters as string[] | undefined) ?? (last.target ? [last.target] : []),
+      );
+      const isQuestion = act === "question";
       for (const targetName of allTargets) {
         ensureNode(targetName);
         const existing = graphEdgesRef.current.find(e => e.sourceId === last.character && e.targetId === targetName);
@@ -574,7 +598,12 @@ export default function DebatePage() {
           existing.count++;
           if (isQuestion) existing.questions++;
         } else {
-          graphEdgesRef.current.push({ source: last.character, target: targetName, sourceId: last.character, targetId: targetName, count: 1, questions: isQuestion ? 1 : 0 });
+          graphEdgesRef.current.push({
+            source: last.character, target: targetName,
+            sourceId: last.character, targetId: targetName,
+            count: 1, questions: isQuestion ? 1 : 0,
+            speech_act: act,
+          });
         }
       }
     }
