@@ -408,6 +408,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     try:
         # ── Main debate loop — heuristic-driven, Boru intervenes only when needed ──
         while round_number < max_rounds:
+            # Per-iteration state init — ensures pivot blocks don't NameError on first iter
+            next_speaker_name = None
+            character = None
+            forced = False
+            second_speaker_name = None
+
             # ── 1. Stop signal ──
             if _stop_signals.pop(debate_id, False):
                 stop_summary, intended = await generate_orchestrator_message(
@@ -424,6 +430,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 })
                 if intended:
                     pending_invitee = intended
+                    # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                    # immediately, not on the next cycle.
+                    if intended != next_speaker_name:
+                        candidate = next((c for c in characters if c["name"] == intended), None)
+                        if candidate:
+                            next_speaker_name = intended
+                            character = candidate
+                            forced = True
+                            # Clear second_speaker — we're now on Boru's floor
+                            second_speaker_name = None
                 break
 
             # ── 2. End condition (check every 4th turn, or always in closing phase) ──
@@ -449,6 +465,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         })
                         if intended:
                             pending_invitee = intended
+                            # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                            # immediately, not on the next cycle.
+                            if intended != next_speaker_name:
+                                candidate = next((c for c in characters if c["name"] == intended), None)
+                                if candidate:
+                                    next_speaker_name = intended
+                                    character = candidate
+                                    forced = True
+                                    # Clear second_speaker — we're now on Boru's floor
+                                    second_speaker_name = None
                     previous_phase = current_phase
                     current_phase = new_phase
                     if current_phase == "closing" and await should_end_debate(ledger, current_phase, transcript, characters):
@@ -528,6 +554,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         })
                         if intended:
                             pending_invitee = intended
+                            # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                            # immediately, not on the next cycle.
+                            if intended != next_speaker_name:
+                                candidate = next((c for c in characters if c["name"] == intended), None)
+                                if candidate:
+                                    next_speaker_name = intended
+                                    character = candidate
+                                    forced = True
+                                    # Clear second_speaker — we're now on Boru's floor
+                                    second_speaker_name = None
                         boru_spoke_this_turn = True
 
                 # ── 5b. Dispute escalation — Boru forces confrontation on long-unresolved disputes ──
@@ -553,7 +589,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                      "turns": dispute["turns_unresolved"]},
                         )
                         if confront_msg:
-                            yield sse("orchestrator", {"message": confront_msg, "phase": current_phase, "event": "force_confrontation", "target": f"{char_a},{char_b}", "intended_speaker": intended})
+                            yield sse("orchestrator", {"message": confront_msg, "phase": current_phase, "event": "force_confrontation", "target": char_a, "target_characters": [char_a, char_b], "intended_speaker": intended})
                             transcript.append({
                                 "character": "Boru", "message": confront_msg, "round": round_number,
                                 "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "force_confrontation",
@@ -561,6 +597,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             })
                             if intended:
                                 pending_invitee = intended
+                                # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                                # immediately, not on the next cycle.
+                                if intended != next_speaker_name:
+                                    candidate = next((c for c in characters if c["name"] == intended), None)
+                                    if candidate:
+                                        next_speaker_name = intended
+                                        character = candidate
+                                        forced = True
+                                        # Clear second_speaker — we're now on Boru's floor
+                                        second_speaker_name = None
                             boru_spoke_this_turn = True
                         dispute["_last_escalation_turn"] = round_number
 
@@ -585,6 +631,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             })
                             if intended:
                                 pending_invitee = intended
+                                # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                                # immediately, not on the next cycle.
+                                if intended != next_speaker_name:
+                                    candidate = next((c for c in characters if c["name"] == intended), None)
+                                    if candidate:
+                                        next_speaker_name = intended
+                                        character = candidate
+                                        forced = True
+                                        # Clear second_speaker — we're now on Boru's floor
+                                        second_speaker_name = None
                             boru_spoke_this_turn = True
                         dispute["_last_escalation_turn"] = round_number
 
@@ -604,6 +660,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     })
                     if intended:
                         pending_invitee = intended
+                        # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                        # immediately, not on the next cycle.
+                        if intended != next_speaker_name:
+                            candidate = next((c for c in characters if c["name"] == intended), None)
+                            if candidate:
+                                next_speaker_name = intended
+                                character = candidate
+                                forced = True
+                                # Clear second_speaker — we're now on Boru's floor
+                                second_speaker_name = None
                     boru_spoke_this_turn = True
                 is_first_round = False
             elif not forced and not boru_spoke_this_turn:
@@ -628,6 +694,16 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             })
                             if intended:
                                 pending_invitee = intended
+                                # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                                # immediately, not on the next cycle.
+                                if intended != next_speaker_name:
+                                    candidate = next((c for c in characters if c["name"] == intended), None)
+                                    if candidate:
+                                        next_speaker_name = intended
+                                        character = candidate
+                                        forced = True
+                                        # Clear second_speaker — we're now on Boru's floor
+                                        second_speaker_name = None
                             boru_spoke_this_turn = True
 
             # ── 6. Character speaks (1 LLM call — live streaming) ──
@@ -883,6 +959,17 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     })
                     if intended:
                         pending_invitee = intended
+                        # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                        # immediately, not on the next cycle. (Character already spoke this cycle,
+                        # so this mainly clears any queued second speaker.)
+                        if intended != next_speaker_name:
+                            candidate = next((c for c in characters if c["name"] == intended), None)
+                            if candidate:
+                                next_speaker_name = intended
+                                character = candidate
+                                forced = True
+                                # Clear second_speaker — we're now on Boru's floor
+                                second_speaker_name = None
 
                 # Store correction hint — injected into this character's NEXT turn
                 correction_hints[next_speaker_name] = (
@@ -933,6 +1020,17 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     })
                     if intended:
                         pending_invitee = intended
+                        # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                        # immediately, not on the next cycle. (Character already spoke this cycle,
+                        # so this mainly clears any queued second speaker.)
+                        if intended != next_speaker_name:
+                            candidate = next((c for c in characters if c["name"] == intended), None)
+                            if candidate:
+                                next_speaker_name = intended
+                                character = candidate
+                                forced = True
+                                # Clear second_speaker — we're now on Boru's floor
+                                second_speaker_name = None
 
             # ── 11. (Reactions removed — they cluttered the debate without adding to the what-if discussion) ──
 
@@ -1024,6 +1122,17 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                 })
                                 if intended:
                                     pending_invitee = intended
+                                    # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                                    # immediately, not on the next cycle. (Character already spoke this cycle,
+                                    # so this mainly clears any queued second speaker.)
+                                    if intended != next_speaker_name:
+                                        candidate = next((c for c in characters if c["name"] == intended), None)
+                                        if candidate:
+                                            next_speaker_name = intended
+                                            character = candidate
+                                            forced = True
+                                            # Clear second_speaker — we're now on Boru's floor
+                                            second_speaker_name = None
 
                         last_observer_at = len(transcript)
                 except Exception as obs_exc:
@@ -1145,6 +1254,17 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         })
                         if intended:
                             pending_invitee = intended
+                            # Pivot this turn's speaker to the invitee so Boru's word takes effect
+                            # immediately, not on the next cycle. (Character already spoke this cycle,
+                            # so this mainly clears any queued second speaker.)
+                            if intended != next_speaker_name:
+                                candidate = next((c for c in characters if c["name"] == intended), None)
+                                if candidate:
+                                    next_speaker_name = intended
+                                    character = candidate
+                                    forced = True
+                                    # Clear second_speaker — we're now on Boru's floor
+                                    second_speaker_name = None
 
                     targets = [directed_to] if directed_to else char_names[:3]
                     ledger.add_question(audience_text, audience_name, targets)
