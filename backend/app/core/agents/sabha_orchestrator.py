@@ -293,6 +293,10 @@ class ArgumentLedger:
         for d in self.disputes:
             if d["status"] != "unresolved":
                 continue
+            # Skip disputes that have already been force-escalated twice —
+            # they become a loop if characters keep dodging.
+            if d.get("_force_count", 0) >= 2:
+                continue
             # Per-dispute cooldown (don't hammer the same pair of characters)
             if round_number - d.get("_last_escalation_turn", 0) < DISPUTE_PER_DISPUTE_COOLDOWN_TURNS:
                 continue

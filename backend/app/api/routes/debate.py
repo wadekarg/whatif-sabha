@@ -615,6 +615,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                 boru_spoke_this_turn = True
                             dispute["_last_escalation_turn"] = round_number
                             last_force_confrontation_round = round_number
+                            dispute["_force_count"] = dispute.get("_force_count", 0) + 1
 
                     elif escalated["tier2"]:
                         # Tier 2: Boru calls it out
