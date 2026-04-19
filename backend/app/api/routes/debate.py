@@ -1264,6 +1264,21 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             "isObserver": True, "observerEra": observer.get("era", ""),
                         })
 
+                        # ── Observer question target enforcement ──
+                        # Observer messages use "→ Target: question?" format.
+                        # Force the target to respond next cycle.
+                        if not pending_invitee and not pending_invitee_secondary:
+                            # Match "→ Name: ..." or "-> Name: ..." (unicode arrow or ASCII)
+                            m = re.search(r"[→>]\s*([A-Z][A-Za-z.\s'-]*?)\s*[:?]", obs_response)
+                            if m:
+                                candidate = m.group(1).strip().rstrip(".,;")
+                                # Validate it's a participating character
+                                if any(c["name"] == candidate for c in characters):
+                                    pending_invitee = candidate
+                                    logger.info(
+                                        f"[Q-ENFORCE] Observer {observer['name']} asked {candidate} — pending_invitee set"
+                                    )
+
                         # Boru defends the Sabha — if observer is dismissive or mocking, fire back
                         dismissive_signals = ["naive", "naivety", "laughable", "absurd", "pathetic",
                             "foolish", "amusing", "quaint", "primitive", "savage", "uncivilized",
