@@ -671,7 +671,74 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                 second_speaker_name = None
                     boru_spoke_this_turn = True
                 is_first_round = False
-            elif not forced and not boru_spoke_this_turn:
+            # ── Silent-character rotation: if voices are being left out, Boru pulls them in ──
+            if not forced and not boru_spoke_this_turn and round_number >= 5:
+                speaker_turn_counts = {
+                    c["name"]: sum(
+                        1 for e in transcript
+                        if e.get("character") == c["name"] and not e.get("isOrchestrator")
+                    )
+                    for c in characters
+                }
+                silent = [n for n, t in speaker_turn_counts.items() if t == 0]
+                # Fire if at least 2 characters are silent — avoids the "only 1 silent left" edge case
+                # where a single straggler keeps triggering.
+                if len(silent) >= 2:
+                    # Cooldown: don't rotate two turns in a row.
+                    recent_orch = [e for e in transcript[-4:] if e.get("isOrchestrator")]
+                    recent_rotation = any(
+                        e.get("orchestratorEvent") == "invite_speaker"
+                        and e.get("_rotation") is True
+                        for e in recent_orch
+                    )
+                    if not recent_rotation:
+                        # Pick the silent character at the lowest index of the characters list
+                        # (stable, deterministic — matches how the picker scores ties today)
+                        rotate_target = next((c["name"] for c in characters if c["name"] in silent), None)
+                        if rotate_target:
+                            rotation_msg, intended = await generate_orchestrator_message(
+                                ledger, current_phase, transcript, characters, story.title or "",
+                                event_type="invite_speaker",
+                                context={
+                                    "speaker": rotate_target,
+                                    "directive": (
+                                        f"{rotate_target} hasn't spoken yet — bring them into the "
+                                        f"debate with a sharp question rooted in what's been argued."
+                                    ),
+                                },
+                            )
+                            if rotation_msg:
+                                yield sse("orchestrator", {
+                                    "message": rotation_msg,
+                                    "phase": current_phase,
+                                    "event": "invite_speaker",
+                                    "target": intended or rotate_target,
+                                    "intended_speaker": intended or rotate_target,
+                                    "_rotation": True,
+                                })
+                                transcript.append({
+                                    "character": "Boru",
+                                    "message": rotation_msg,
+                                    "round": round_number,
+                                    "phase": current_phase,
+                                    "isOrchestrator": True,
+                                    "orchestratorEvent": "invite_speaker",
+                                    "intended_speaker": intended or rotate_target,
+                                    "_rotation": True,
+                                })
+                                boru_spoke_this_turn = True
+                                if intended or rotate_target:
+                                    pending_invitee = intended or rotate_target
+                                    # Pivot this turn to the rotated character
+                                    if pending_invitee != next_speaker_name:
+                                        candidate = next((c for c in characters if c["name"] == pending_invitee), None)
+                                        if candidate:
+                                            next_speaker_name = pending_invitee
+                                            character = candidate
+                                            forced = True
+                                            second_speaker_name = None
+
+            if not forced and not boru_spoke_this_turn:
                 # Stall detection: if all scores are flat, Boru intervenes (skip if duel already handled)
                 valid_scores = [v for v in scores.values() if v > -100]
                 is_stalling = valid_scores and max(valid_scores) < 1.0 and round_number > len(characters)
