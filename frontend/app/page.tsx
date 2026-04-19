@@ -245,7 +245,7 @@ export default function Home() {
 
               {!hasStarted && (
                 <p className="text-center text-xs text-[#c8b89a]">
-                  Try with: Animal Farm · Mahabharata · Hamlet · Any story
+                  Try with: Animal Farm · Hamlet · Pride and Prejudice · Any PDF
                 </p>
               )}
 
@@ -380,11 +380,14 @@ export default function Home() {
             </div>
             <div className="space-y-8">
               {[
-                { icon: "📖", n: "01", title: "Upload any story PDF", body: "Drop in Animal Farm, the Mahabharata, Hamlet — any fiction. The engine reads it, identifies every character, maps the arc of events, and researches them against real-world sources." },
-                { icon: "🔬", n: "02", title: "Characters come alive", body: "Each character gets a Fair Witness profile — cross-referenced with Wikipedia and web sources, then analysed from 3 independent AI perspectives. You see who they really are." },
-                { icon: "⚡", n: "03", title: "Pose your 'What if?'", body: "Once ready, describe your divergence point. What if Boxer refused the slaughterhouse? What if Karna joined the Pandavas? The characters take it from there." },
-                { icon: "🎭", n: "04", title: "Watch the Sabha unfold", body: "Characters debate in real-time, drawing on their own motivations and relationships. They ask each other questions, push back, reveal hidden feelings." },
-                { icon: "✍️", n: "05", title: "A new ending is written", body: "After the debate concludes, an alternate ending is generated — grounded in the characters' own choices, not a generic rewrite." },
+                { icon: "📖", n: "01", title: "Upload any story PDF", body: "Drop in Animal Farm, Hamlet, Pride and Prejudice — any public-domain fiction. The engine reads it, identifies every character, and maps the arc of events." },
+                { icon: "🎭", n: "02", title: "Meet the cast", body: "Each character gets a profile drawn from their motivations, relationships, and voice in the text. You see who's who before anyone steps onto the Sabha floor." },
+                { icon: "💭", n: "03", title: "Pose your 'What if?'", body: "Describe the divergence. What if Boxer refused the slaughterhouse? What if Hamlet never saw the ghost? The characters take it from there." },
+                { icon: "🎙️", n: "04", title: "Watch the Sabha unfold", body: "Characters debate in real-time, hosted by Boru the Elephant. He pulls silent voices in, breaks up runaway duels, and forces answers when someone dodges." },
+                { icon: "💬", n: "05", title: "Chat with any character — before or after", body: "Oracle mode lets you sit down with any character one-on-one. Interrogate their position, their regrets, their reasoning — all in their own voice." },
+                { icon: "🌐", n: "06", title: "See the web form", body: "A live interaction graph shows who's arguing with whom, which arrows are questions vs responses, and where the heat lives. Click any node to focus on a character's thread." },
+                { icon: "✍️", n: "07", title: "A new ending is written", body: "After the debate concludes, an alternate ending is narrated — grounded in the characters' own choices from the debate, not a generic rewrite." },
+                { icon: "📥", n: "08", title: "Export or share", body: "Download the full debate as a PDF (title page, graph, transcript, alternate ending). Or host it as a static replay site anyone can scroll through — no backend needed." },
               ].map(s => (
                 <div key={s.n} className="flex gap-4">
                   <div className="w-10 h-10 rounded-xl bg-[#fef3e2] border border-[#f0c060]/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
@@ -433,7 +436,7 @@ export default function Home() {
           </div>
           <p className="text-xs text-[#a09282] text-center leading-relaxed max-w-md">
             Upload any book. Watch the characters debate what would have happened differently.
-            Multi-agent AI debate engine powered by 6 LLM providers.
+            A curiosity-driven side project — debate engine powered by multiple LLM providers.
           </p>
           <div className="flex items-center gap-4">
             <a href="https://github.com/wadekarg/What-If-Sabha" target="_blank" rel="noopener noreferrer"
