@@ -1657,14 +1657,6 @@ export default function DebatePage() {
 
           {/* Layout controls */}
           <div className="flex items-center gap-1 ml-auto shrink-0">
-            <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#1c1410] text-xs font-medium border border-[#f0c060]/60 hover:bg-[#fde9c9] transition-colors print:hidden"
-              aria-label="Save debate as PDF"
-              title="Save as PDF — opens your browser's print dialog"
-            >
-              🖨 Save as PDF
-            </button>
             <button onClick={() => setMaximize(m => m === "left" ? "none" : "left")} title="Maximize debate"
               className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors ${maximize === "left" ? "bg-[#c07820] text-white" : "text-[#a09282] hover:text-[#6b5c4e] hover:bg-[#f0ece5]"}`}>
               💬
@@ -1740,6 +1732,15 @@ export default function DebatePage() {
               title={ttsAutoPlay ? "Mute" : "Auto-play"}
             >
               {ttsAutoPlay ? "🔊 Auto-Play On" : "🔇 Auto-Play Off"}
+            </button>
+            {/* Print / Save as PDF — sits beside auto-play */}
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[#f0c060]/60 bg-[#fef3e2] text-[#1c1410] hover:bg-[#fde9c9] transition-colors shrink-0 print:hidden"
+              aria-label="Save debate as PDF"
+              title="Save as PDF — opens your browser's print dialog"
+            >
+              🖨 PDF
             </button>
           </div>
           {/* Emotion legend dropdown */}
