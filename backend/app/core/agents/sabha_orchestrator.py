@@ -809,6 +809,35 @@ If only 1 speaker needed, set is_parallel to false."""
         }
 
 
+def intended_speaker_for(event_type: str, context: dict | None) -> str | None:
+    """Return the single character whose turn this orchestrator message names,
+    or None if the message broadcasts to multiple or no specific target.
+
+    Pure function — no LLM call, no state. Used both at message-generation
+    time (to stamp `intended_speaker` onto the transcript entry) and in
+    deterministic unit tests.
+    """
+    if not context:
+        return None
+    if event_type == "invite_speaker":
+        return context.get("speaker")
+    if event_type == "forced_question":
+        return context.get("target")
+    if event_type == "break_duel":
+        return context.get("next_speaker")
+    if event_type == "force_confrontation":
+        # The first-named disputant speaks first; the second is named via
+        # target_character in that turn and will get pulled in naturally next.
+        return context.get("char_a")
+    if event_type == "call_out_repetition":
+        # A sharp callout names a new speaker to redirect to.
+        return context.get("next_speaker") or context.get("speaker")
+    # All other events broadcast — no single invitee:
+    # opening_with_invite, phase_transition, observer_intro, summon_observer,
+    # dispute_callout, closing_summary, redirect, phase_intro.
+    return None
+
+
 async def generate_orchestrator_message(
     ledger: ArgumentLedger,
     current_phase: str,
@@ -817,7 +846,7 @@ async def generate_orchestrator_message(
     story_title: str,
     event_type: str,
     context: dict = None,
-) -> str:
+) -> tuple[str, str | None]:
     """
     Generate a spoken message from Boru the Elephant.
     event_type: "phase_intro", "redirect", "call_out_repetition", "invite_speaker",
@@ -1063,10 +1092,10 @@ CRITICAL RULES:
 
     try:
         raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
-        return raw.strip().strip('"')
+        return (raw.strip().strip('"'), intended_speaker_for(event_type, context))
     except Exception as e:
         logger.warning(f"Orchestrator message generation failed: {e}")
-        return ""
+        return ("", None)
 
 
 async def should_end_debate(
