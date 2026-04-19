@@ -486,6 +486,52 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     transcript.append({"character": "Boru", "message": duel_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "break_duel"})
                     boru_spoke_this_turn = True
 
+            # ── 5b. Dispute escalation — Boru forces confrontation on long-unresolved disputes ──
+            if not boru_spoke_this_turn and round_number > 6:
+                escalated = ledger.get_escalated_disputes(round_number)
+
+                if escalated["tier3"]:
+                    # Tier 3: FORCE confrontation — override speakers
+                    dispute = escalated["tier3"][0]
+                    char_a = dispute["claim_a"]["character"]
+                    char_b = dispute["claim_b"]["character"]
+                    # Override next speaker to be one of the dispute parties
+                    if next_speaker_name not in (char_a, char_b):
+                        next_speaker_name = char_a
+                        character = next((c for c in characters if c["name"] == next_speaker_name), character)
+                    second_speaker_name = char_b if next_speaker_name == char_a else char_a
+                    confront_msg = await generate_orchestrator_message(
+                        ledger, current_phase, transcript, characters, story.title or "",
+                        event_type="force_confrontation",
+                        context={"char_a": char_a, "char_b": char_b,
+                                 "claim_a": dispute["claim_a"]["claim"][:120],
+                                 "claim_b": dispute["claim_b"]["claim"][:120],
+                                 "turns": dispute["turns_unresolved"]},
+                    )
+                    if confront_msg:
+                        yield sse("orchestrator", {"message": confront_msg, "phase": current_phase, "event": "force_confrontation", "target": f"{char_a},{char_b}"})
+                        transcript.append({"character": "Boru", "message": confront_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "force_confrontation"})
+                        boru_spoke_this_turn = True
+                    dispute["_last_escalation_turn"] = round_number
+
+                elif escalated["tier2"]:
+                    # Tier 2: Boru calls it out
+                    dispute = escalated["tier2"][0]
+                    callout_msg = await generate_orchestrator_message(
+                        ledger, current_phase, transcript, characters, story.title or "",
+                        event_type="dispute_callout",
+                        context={"char_a": dispute["claim_a"]["character"],
+                                 "char_b": dispute["claim_b"]["character"],
+                                 "claim_a": dispute["claim_a"]["claim"][:120],
+                                 "claim_b": dispute["claim_b"]["claim"][:120],
+                                 "turns": dispute["turns_unresolved"]},
+                    )
+                    if callout_msg:
+                        yield sse("orchestrator", {"message": callout_msg, "phase": current_phase, "event": "dispute_callout", "target": "all"})
+                        transcript.append({"character": "Boru", "message": callout_msg, "round": round_number, "phase": current_phase, "isOrchestrator": True, "orchestratorEvent": "dispute_callout"})
+                        boru_spoke_this_turn = True
+                    dispute["_last_escalation_turn"] = round_number
+
             if is_first_round:
                 # Grand opening — introduce himself + topic
                 opening_msg = await generate_orchestrator_message(
@@ -592,7 +638,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     memory_context=memory_context,
                     observer_challenge=observer_challenge,
                     pending_questions=_pqs,
-                    debate_progress=ledger.progress_summary if ledger.progress_summary else None,
+                    ledger=ledger,
+                    current_phase=current_phase,
+                    round_number=round_number,
                 ):
                     if not first_line_extracted:
                         # Buffer tokens until we find the first newline
@@ -928,7 +976,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             story_title=story.title or "",
                             correction_hint=correction_hints.pop(second_speaker_name, None),
                             pending_questions=_pqs2,
-                            debate_progress=ledger.progress_summary if ledger.progress_summary else None,
+                            ledger=ledger,
+                            current_phase=current_phase,
+                            round_number=round_number,
                         ):
                             if not second_first_line:
                                 second_raw += token
@@ -1024,10 +1074,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         # Clean up audience queue
         _audience_queues.pop(debate_id, None)
 
-        # ── Closing summary from Boru ──
+        # ── Closing summary from Boru — with structured verdict ──
+        verdict = ledger.generate_closing_verdict()
         closing_msg = await generate_orchestrator_message(
             ledger, current_phase, transcript, characters, story.title or "",
             event_type="closing_summary",
+            context=verdict,
         )
         if closing_msg:
             yield sse("orchestrator", {"message": closing_msg, "phase": "closing", "event": "closing_summary", "target": "all"})
@@ -1101,6 +1153,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "claims": ledger.claims[-20:],
                 "open_questions": ledger.open_questions,
                 "resolved_questions": ledger.resolved_questions,
+                "disputes": ledger.disputes,
                 "progress": ledger.progress_summary or "",
             }
             db_debate.status = "completed" if alternate_ending else "interrupted"
