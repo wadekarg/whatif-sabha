@@ -23,6 +23,34 @@ from app.core.usage_tracker import tracker
 logger = logging.getLogger(__name__)
 
 
+# Injected into every orchestrator prompt so the LLM hears the same voice
+# signal no matter which event is firing. Event-specific instructions still
+# handle structure (what Boru does); this handles WHO Boru is.
+BORU_VOICE_GUIDELINES = """
+YOU ARE BORU THE ELEPHANT, Speaker of this Sabha.
+
+YOUR VOICE:
+- Warm but commanding. You hold the room without raising your voice.
+- Witty — you find absurdity in contradictions and gently roast dodgers.
+- Specific — quote speakers' exact words back at them when possible.
+- Tonally varied turn-by-turn: amused / stern / impatient / reverent / sardonic. DO NOT sound neutral.
+- You reference your elephant nature rarely — a tusk, a memory, a long winter — never as a filler.
+- Short sentences. Strong verbs. Parliament-speaker cadence, not professor lecturing.
+- Call people by NAME, not role. "Napoleon." "Boxer." Never "the antagonist."
+
+BANNED PHRASINGS (you have used them too much, find fresh alternatives):
+- "I'd like to hear from..."
+- "Can you tell us..."
+- "Settle this once and for all"
+- "Let's move on"
+- "It's time to"
+- "I demand..."
+- "In conclusion..."
+
+Vary your openers every turn. No two Boru turns should start with the same 3 words.
+"""
+
+
 def _jaccard_similarity(text_a: str, text_b: str) -> float:
     """Jaccard similarity on 4+ letter words. Used for repetition detection."""
     words_a = set(re.findall(r'\b\w{4,}\b', text_a.lower()))
@@ -613,10 +641,16 @@ async def decide_phase_transition(
     current_phase: str,
     transcript: list[dict],
     characters: list[dict],
+    phase_started_round: int = 0,
+    round_number: int = 0,
 ) -> Optional[str]:
     """
     Ask the orchestrator if it's time to move to the next phase.
     Returns the new phase name, or None if staying in current phase.
+
+    `phase_started_round` and `round_number` let us enforce a wall-clock
+    (round-based) hard floor so a phase can never linger indefinitely
+    even when Boru/observers/audience dominate the transcript.
     """
     phase_idx = PHASES.index(current_phase) if current_phase in PHASES else 0
     if phase_idx >= len(PHASES) - 1:
@@ -625,6 +659,7 @@ async def decide_phase_transition(
     next_phase = PHASES[phase_idx + 1]
     config = PHASE_CONFIG[current_phase]
     char_names = [c["name"] for c in characters]
+    cast_size = max(len(char_names), 1)
 
     # Count ACTUAL character dialogue turns (not Boru, observers, reactions)
     char_turns = [
@@ -648,12 +683,26 @@ async def decide_phase_transition(
     else:
         min_met = total_char_turns >= len(char_names) * min_turns
 
+    # Round-based hard floor: once we've burned (cast_size + 4) *rounds*
+    # in this phase — counting ALL turns, including Boru/observers — force
+    # the transition regardless of whether min_met is satisfied by
+    # character-only turns. This prevents the "opening lingers 22 turns"
+    # pathology where Boru-heavy rounds never reach the char-turn floor.
+    rounds_in_phase = max(round_number - phase_started_round, 0)
+    round_floor = cast_size + 4
+    if rounds_in_phase >= round_floor:
+        logger.info(
+            f"Round-floor phase transition: {current_phase} → {next_phase} "
+            f"after {rounds_in_phase} rounds in phase (floor {round_floor}, round {round_number})"
+        )
+        return next_phase
+
     if not min_met:
         return None
 
     # Hard fallback: if we have WAY exceeded minimum turns, force transition
     # regardless of what the LLM says. Prevents getting stuck in one phase forever.
-    hard_limit = max(len(char_names) * (min_turns + 2), 8)
+    hard_limit = max(cast_size * (min_turns + 2), 8)
     if total_char_turns >= hard_limit:
         logger.info(f"Hard phase transition: {current_phase} → {next_phase} after {total_char_turns} turns (hard limit {hard_limit})")
         return next_phase

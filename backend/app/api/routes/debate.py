@@ -392,6 +392,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     # ── Initialize the Sutradhar (orchestrator) ──
     ledger = ArgumentLedger(debate.divergence_description, char_names)
     current_phase = "opening"
+    phase_started_round = 0
 
     def sse(event_type: str, data: dict) -> str:
         return f"data: {json.dumps({'type': event_type, **data})}\n\n"
@@ -465,7 +466,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             # ── 3. Phase transition (check every 3rd turn — phases last 5-8 turns) ──
             if not is_first_round and round_number % 3 == 0:
-                new_phase = await decide_phase_transition(ledger, current_phase, transcript, characters)
+                new_phase = await decide_phase_transition(
+                    ledger, current_phase, transcript, characters,
+                    phase_started_round=phase_started_round,
+                    round_number=round_number,
+                )
                 if new_phase:
                     transition_msg, intended = await generate_orchestrator_message(
                         ledger, new_phase, transcript, characters, story.title or "",
@@ -493,6 +498,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                     second_speaker_name = None
                     previous_phase = current_phase
                     current_phase = new_phase
+                    phase_started_round = round_number
                     if current_phase == "closing" and await should_end_debate(ledger, current_phase, transcript, characters):
                         break
 
