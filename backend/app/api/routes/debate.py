@@ -542,7 +542,12 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     break
 
             # ── 3. Phase transition (check every 3rd turn — phases last 5-8 turns) ──
-            if not is_first_round and round_number % 3 == 0:
+            # Phase transitions should not override a pending invitee (observer/character
+            # questions, Boru invitations) — let the invitee speak first, then transition
+            # fires on a later cycle. Otherwise the phase-transition message's vocative
+            # ("Snowball, …") parses back into pending_invitee and steals the floor from
+            # whoever was already invited (e.g. Napoleon).
+            if not pending_invitee and not is_first_round and round_number % 3 == 0:
                 new_phase = await decide_phase_transition(
                     ledger, current_phase, transcript, characters,
                     phase_started_round=phase_started_round,
