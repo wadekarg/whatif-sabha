@@ -1114,6 +1114,25 @@ def extract_first_cast_name(message: str, cast_names: list[str]) -> str | None:
     return candidates[0][2]
 
 
+def _extract_strong_vocative(message: str, cast_names: list[str]) -> str | None:
+    """Like extract_first_cast_name but ONLY returns a name if it appears in a
+    strong vocative position (Name followed by comma).
+
+    Used for broadcast events (opening, phase_transition) where the default
+    is no invitee — but if Boru explicitly addresses someone, we should
+    still enforce it."""
+    import re
+    if not message or not cast_names:
+        return None
+    sorted_names = sorted(cast_names, key=len, reverse=True)
+    for name in sorted_names:
+        # Match "Name," (vocative with comma) as a strong signal
+        pattern = r"\b" + re.escape(name) + r"\s*,"
+        if re.search(pattern, message, flags=re.IGNORECASE):
+            return name
+    return None
+
+
 def intended_speaker_from_result(
     event_type: str,
     context: dict | None,
@@ -1123,20 +1142,25 @@ def intended_speaker_from_result(
     """Decide the intended speaker for an orchestrator message.
 
     Priority:
-      1. Broadcast events always return None, no matter what the message says.
-      2. If the context has an explicit target via intended_speaker_for() AND
-         that target is a valid cast member, use it.
-      3. Otherwise, parse the message text for the first cast-member name.
+      1. For non-broadcast events: context-based extraction first, then
+         fall back to message parsing.
+      2. For broadcast events: default is no invitee, but if the message
+         contains a strong vocative ("Old Major,"), enforce that character.
     """
-    if event_type in _BROADCAST_EVENTS:
-        return None
-
     cast_set = set(cast_names)
-    explicit = intended_speaker_for(event_type, context)
-    if explicit and explicit in cast_set:
-        return explicit
 
-    return extract_first_cast_name(message, cast_names)
+    # Context-based extraction comes first (for non-broadcast events)
+    if event_type not in _BROADCAST_EVENTS:
+        explicit = intended_speaker_for(event_type, context)
+        if explicit and explicit in cast_set:
+            return explicit
+        return extract_first_cast_name(message, cast_names)
+
+    # Broadcast events (opening, phase_transition, observer_intro, etc.):
+    # normally no invitee, BUT if the message contains a clear vocative address
+    # ("Old Major, your vision..." or "I turn to you, Old Major, ..."),
+    # enforce that character.
+    return _extract_strong_vocative(message, cast_names)
 
 
 async def generate_orchestrator_message(

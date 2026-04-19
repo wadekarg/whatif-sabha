@@ -141,8 +141,20 @@ def test_plain_mention_no_punctuation():
 
 # ── intended_speaker_from_result ──────────────────────────────────────
 
-def test_broadcast_events_always_return_none():
-    """Even if message names a character, broadcast events don't enforce."""
+def test_broadcast_events_without_vocative_return_none():
+    """Without a strong vocative, broadcast events don't enforce a speaker."""
+    for ev in ["opening_with_invite", "phase_transition", "phase_intro",
+               "observer_intro", "summon_observer", "closing_summary"]:
+        assert intended_speaker_from_result(
+            event_type=ev,
+            context={},
+            message="The gloves come off. Let us begin.",
+            cast_names=CAST,
+        ) is None, f"{ev} should return None"
+
+
+def test_broadcast_events_with_strong_vocative_enforce():
+    """A strong vocative (Name,) in a broadcast event does enforce the speaker."""
     for ev in ["opening_with_invite", "phase_transition", "phase_intro",
                "observer_intro", "summon_observer", "closing_summary"]:
         assert intended_speaker_from_result(
@@ -150,7 +162,43 @@ def test_broadcast_events_always_return_none():
             context={},
             message="Napoleon, speak now.",
             cast_names=CAST,
-        ) is None, f"{ev} should return None"
+        ) == "Napoleon", f"{ev} should enforce Napoleon via vocative"
+
+
+def test_phase_transition_with_vocative_enforces():
+    """'I turn to you, Old Major, to unravel' in phase_transition should target Old Major."""
+    cast = ["Napoleon", "Snowball", "Old Major"]
+    result = intended_speaker_from_result(
+        event_type="phase_transition",
+        context={"from_phase": "cross_examination", "to_phase": "reckoning"},
+        message="The reckoning begins. I turn to you, Old Major, to unravel the tangled threads.",
+        cast_names=cast,
+    )
+    assert result == "Old Major"
+
+
+def test_phase_transition_without_vocative_returns_none():
+    """Pure broadcast phase transition with no vocative — no enforcement."""
+    cast = ["Napoleon", "Snowball"]
+    result = intended_speaker_from_result(
+        event_type="phase_transition",
+        context={"from_phase": "opening", "to_phase": "cross_examination"},
+        message="The gloves come off. Cross-examination begins.",
+        cast_names=cast,
+    )
+    assert result is None
+
+
+def test_phase_transition_with_mention_but_no_comma_returns_none():
+    """Name appears but not in vocative position — broadcast, no enforcement."""
+    cast = ["Napoleon"]
+    result = intended_speaker_from_result(
+        event_type="phase_transition",
+        context={"from_phase": "a", "to_phase": "b"},
+        message="Napoleon's claims still echo as we move on.",
+        cast_names=cast,
+    )
+    assert result is None
 
 
 def test_context_target_wins_over_message_parse():
