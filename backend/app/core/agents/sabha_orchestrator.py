@@ -203,8 +203,10 @@ class ArgumentLedger:
         self.open_questions: list[dict] = []  # {id, question, asked_by, directed_to, status, answers}
         self.resolved_questions: list[dict] = []
         self.claims: list[dict] = []  # {character, claim, challenged_by, status}
+        self.disputes: list[dict] = []  # {id, claim_a: {character, claim}, claim_b: {character, claim}, status, turns_unresolved}
         self.character_positions: dict[str, str] = {}  # character → current position summary
         self.progress_summary: str = ""
+        self._next_dispute_id: int = 1
         self.repetition_log: dict[str, list[str]] = {n: [] for n in character_names}  # character → list of claim hashes
         self._next_q_id = 1
 
@@ -239,6 +241,17 @@ class ArgumentLedger:
                                  (f" — challenged by {challengers}" if challengers else ""))
                 lines.append("")
 
+        if self.disputes:
+            unresolved = [d for d in self.disputes if d["status"] == "unresolved"]
+            if unresolved:
+                lines.append("DISPUTES (contradictions between characters):")
+                for d in unresolved[:4]:
+                    lines.append(
+                        f"  D{d['id']}: {d['claim_a']['character']} says \"{d['claim_a']['claim'][:80]}\" "
+                        f"BUT {d['claim_b']['character']} says \"{d['claim_b']['claim'][:80]}\" — {d['status']} ({d['turns_unresolved']} turns)"
+                    )
+                lines.append("")
+
         if self.progress_summary:
             lines.append(f"PROGRESS: {self.progress_summary}")
 
@@ -259,6 +272,53 @@ class ArgumentLedger:
             "_times_injected": 0,  # how many times this was pushed to a character's prompt
         })
         return qid
+
+    def get_escalated_disputes(self, round_number: int = 0) -> dict:
+        """Return disputes bucketed by escalation tier."""
+        tier2 = []  # Boru calls it out
+        tier3 = []  # Forced confrontation
+        for d in self.disputes:
+            if d["status"] != "unresolved":
+                continue
+            # Cooldown: don't re-escalate within 3 turns of last escalation
+            if round_number - d.get("_last_escalation_turn", 0) < 3:
+                continue
+            if d["turns_unresolved"] >= 7:
+                tier3.append(d)
+            elif d["turns_unresolved"] >= 5:
+                tier2.append(d)
+        return {"tier2": tier2, "tier3": tier3}
+
+    def generate_closing_verdict(self) -> dict:
+        """Compute structured debate outcome for Boru's closing."""
+        total_disputes = len(self.disputes)
+        resolved_d = [d for d in self.disputes if d["status"] != "unresolved"]
+        unresolved_d = [d for d in self.disputes if d["status"] == "unresolved"]
+
+        # Find fiercest clash pair
+        pairs: dict[tuple, int] = {}
+        for d in self.disputes:
+            pair = tuple(sorted([d["claim_a"]["character"], d["claim_b"]["character"]]))
+            pairs[pair] = pairs.get(pair, 0) + 1
+        fiercest_pair = max(pairs, key=lambda p: pairs[p]) if pairs else None
+
+        return {
+            "total_disputes": total_disputes,
+            "resolved_disputes": len(resolved_d),
+            "unresolved_disputes": len(unresolved_d),
+            "unresolved_details": [
+                f"{d['claim_a']['character']} vs {d['claim_b']['character']}: \"{d['claim_a']['claim'][:80]}\""
+                for d in unresolved_d[:3]
+            ],
+            "fiercest_pair": list(fiercest_pair) if fiercest_pair else [],
+            "total_questions": len(self.open_questions) + len(self.resolved_questions),
+            "resolved_questions": len(self.resolved_questions),
+            "open_questions_remaining": len(self.open_questions),
+            "open_question_details": [
+                f"\"{q['question'][:80]}\" (asked by {q['asked_by']})"
+                for q in self.open_questions[:3]
+            ],
+        }
 
     def who_hasnt_spoken(self, transcript: list[dict]) -> list[str]:
         """Return characters who haven't spoken yet in the debate."""
@@ -401,7 +461,8 @@ Respond with JSON only:
   "wants_observer": false,
   "wanted_observer_reason": "",
   "addresses_boru": false,
-  "boru_question": ""
+  "boru_question": "",
+  "disputes_detected": [{{"claim_a_character": "Name1", "claim_a": "what they said", "claim_b_character": "Name2", "claim_b": "what the other said"}}]
 }}
 
 QUESTIONS ANSWERED — THIS IS CRITICAL:
@@ -413,15 +474,17 @@ If yes, add it to "questions_answered" with:
   - "summary": one sentence summarizing what they said about it
 Do NOT skip this. If {speaker} answered a question, it MUST appear in questions_answered.
 
+CONTRADICTION DETECTION:
+Look at the ACTIVE CLAIMS in the ledger. Does {speaker}'s message CONTRADICT any existing claim
+by a DIFFERENT character? If yes, add to "disputes_detected" with both claims and who said them.
+A dispute exists when two characters state things that cannot both be true.
+
 DETECTION RULES:
 - "wants_observer": true if the speaker asks for an outside perspective or mentions an observer by name
-- "wanted_observer_reason": which observer and why
-- "addresses_boru": true if the speaker directly addresses Boru/the Speaker/the moderator/the elephant
-- "boru_question": what they asked Boru
+- "addresses_boru": true if the speaker directly addresses Boru/the moderator/the elephant
 
 FOLLOW-UP QUESTIONS:
-- Generate 0-1 follow-up questions that Boru should ask — NEW angles not yet explored
-- Direct it at the character(s) most relevant to answer
+- Generate 0-1 follow-up questions — NEW angles only
 - Summarize what has changed in the progress_note
 
 Be concise. Return ONLY valid JSON."""
@@ -480,6 +543,35 @@ Be concise. Return ONLY valid JSON."""
 
     if result.get("progress_note"):
         ledger.progress_summary = result["progress_note"]
+
+    # Process detected disputes/contradictions
+    for dispute in result.get("disputes_detected", []):
+        char_a = dispute.get("claim_a_character", "")
+        char_b = dispute.get("claim_b_character", "")
+        claim_a = dispute.get("claim_a", "")
+        claim_b = dispute.get("claim_b", "")
+        if char_a and char_b and claim_a and claim_b and char_a != char_b:
+            # Check if this dispute already exists (avoid duplicates)
+            exists = any(
+                (d["claim_a"]["character"] == char_a and d["claim_b"]["character"] == char_b) or
+                (d["claim_a"]["character"] == char_b and d["claim_b"]["character"] == char_a)
+                for d in ledger.disputes if d["status"] == "unresolved"
+            )
+            if not exists:
+                ledger.disputes.append({
+                    "id": ledger._next_dispute_id,
+                    "claim_a": {"character": char_a, "claim": claim_a},
+                    "claim_b": {"character": char_b, "claim": claim_b},
+                    "status": "unresolved",
+                    "turns_unresolved": 0,
+                })
+                ledger._next_dispute_id += 1
+                logger.info(f"Dispute D{ledger._next_dispute_id - 1}: {char_a} vs {char_b}")
+
+    # Age unresolved disputes
+    for d in ledger.disputes:
+        if d["status"] == "unresolved":
+            d["turns_unresolved"] += 1
 
     # Check repetition
     for claim in result.get("new_claims", []):
@@ -807,6 +899,23 @@ async def generate_orchestrator_message(
             f"or observation that connects to what the duelists were arguing but from a DIFFERENT angle. "
             f"2 sentences. First sentence breaks the duel. Second sentence invites the new voice."
         ),
+        "dispute_callout": (
+            f"A dispute between {context.get('char_a', '?')} and {context.get('char_b', '?')} "
+            f"has gone unresolved for {context.get('turns', '?')} turns.\n"
+            f"{context.get('char_a', '?')}: \"{context.get('claim_a', '')[:120]}\"\n"
+            f"{context.get('char_b', '?')}: \"{context.get('claim_b', '')[:120]}\"\n"
+            f"Call this out directly. Both cannot be right. Name both characters. "
+            f"Challenge them to settle it. Be pointed, not diplomatic. 1-2 sentences."
+        ),
+        "force_confrontation": (
+            f"A dispute between {context.get('char_a', '?')} and {context.get('char_b', '?')} "
+            f"has been ignored for {context.get('turns', '?')} turns. The Sabha's patience is over.\n"
+            f"{context.get('char_a', '?')}: \"{context.get('claim_a', '')[:120]}\"\n"
+            f"{context.get('char_b', '?')}: \"{context.get('claim_b', '')[:120]}\"\n"
+            f"Force them to face each other. This MUST be resolved NOW. "
+            f"Be commanding: address both by name, demand they settle this, no more dodging. "
+            f"2 sentences. Absolute authority."
+        ),
         "phase_transition": (
             f"The debate is moving from '{context.get('from_phase', '')}' to '{context.get('to_phase', '')}'. "
             f"Summarize what was accomplished — be honest about what was productive and what was hot air. "
@@ -814,11 +923,18 @@ async def generate_orchestrator_message(
             f"2-3 sentences. Mix gravity with wit."
         ),
         "closing_summary": (
-            f"The debate is concluding. You are moved — reflect on what emerged. "
-            f"Highlight the moment that surprised even you (an elephant is not easily surprised). "
-            f"Name the tension that remains unresolved — 'Some truths, it seems, are too heavy even for an elephant to carry.' "
-            f"Thank the characters, but with a knowing edge — 'You spoke. Some of you even meant it.' "
-            f"3-4 sentences. This is your finest moment."
+            f"The debate is concluding. Here are the facts:\n"
+            f"- Disputes: {context.get('resolved_disputes', 0)} resolved, {context.get('unresolved_disputes', 0)} unresolved out of {context.get('total_disputes', 0)}\n"
+            f"- Questions: {context.get('resolved_questions', 0)} answered, {context.get('open_questions_remaining', 0)} still open\n"
+            f"- Fiercest clash: {' vs '.join(context.get('fiercest_pair', []))}\n"
+            f"- Unresolved: {'; '.join(context.get('unresolved_details', ['none']))}\n"
+            f"- Open questions: {'; '.join(context.get('open_question_details', ['none']))}\n\n"
+            f"Use these FACTS to deliver your closing. You must:\n"
+            f"1. Reference the strongest clash — name both characters, say what made it burn\n"
+            f"2. Name what was settled and what remains open — be honest about both\n"
+            f"3. Deliver your VERDICT: what did this debate prove? What truth emerged? What lie was exposed?\n"
+            f"4. Close with warmth but edge — you're proud of them, even the ones who dodged\n"
+            f"4-5 sentences. This is your finest moment. Make it earned."
         ),
         "observer_intro": (
             f"You are introducing a world observer: {context.get('observer_name', 'an outside voice')}. "
