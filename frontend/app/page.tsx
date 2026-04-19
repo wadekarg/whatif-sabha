@@ -385,7 +385,7 @@ export default function Home() {
                 { icon: "💭", n: "03", title: "Pose your 'What if?'", body: "Describe the divergence. What if Boxer refused the slaughterhouse? What if Hamlet never saw the ghost? The characters take it from there." },
                 { icon: "🎙️", n: "04", title: "Watch the Sabha unfold", body: "Characters debate in real-time, hosted by Boru the Elephant. He pulls silent voices in, breaks up runaway duels, and forces answers when someone dodges." },
                 { icon: "💬", n: "05", title: "Chat with any character — before or after", body: "Oracle mode lets you sit down with any character one-on-one. Interrogate their position, their regrets, their reasoning — all in their own voice." },
-                { icon: "🌐", n: "06", title: "See the web form", body: "A live interaction graph shows who's arguing with whom, which arrows are questions vs responses, and where the heat lives. Click any node to focus on a character's thread." },
+                { icon: "🌐", n: "06", title: "See the interaction graph", body: "A live interaction graph shows who's arguing with whom, which arrows are questions vs responses, and where the heat lives. Click any node to focus on a character's thread." },
                 { icon: "✍️", n: "07", title: "A new ending is written", body: "After the debate concludes, an alternate ending is narrated — grounded in the characters' own choices from the debate, not a generic rewrite." },
               ].map(s => (
                 <div key={s.n} className="flex gap-4">
