@@ -47,6 +47,49 @@ def classify_speech_act(
     return "response"
 
 
+def extract_question_target(
+    message: str,
+    target_characters: list[str],
+) -> str | None:
+    """Return the character the question is DIRECTED AT.
+
+    Finds all question sentences (ending in '?'), then for each, looks for the
+    target character mentioned most strongly (vocative > @mention > plain mention).
+
+    Returns None if no question, or no target can be identified.
+    """
+    if not message or not target_characters:
+        return None
+
+    question_sentences = _extract_question_sentences(message)
+    if not question_sentences:
+        return None
+
+    # Score each candidate target per question sentence.
+    # Priority: @Name (+10), vocative Name (+8), name in sentence (+2).
+    best: tuple[int, str] | None = None
+    for sent in question_sentences:
+        sent_lower = sent.lower()
+        for target in target_characters:
+            t_lower = target.lower()
+            if t_lower not in sent_lower:
+                continue
+            score = 2  # baseline mention
+            # @Target → strong signal
+            if re.search(r"@" + re.escape(t_lower) + r"\b", sent_lower):
+                score = max(score, 10)
+            # Name, (vocative with comma)
+            if re.search(r"\b" + re.escape(t_lower) + r"\s*,", sent_lower):
+                score = max(score, 8)
+            # Name? (vocative followed by ?)
+            if re.search(r"\b" + re.escape(t_lower) + r"\s*\?", sent_lower):
+                score = max(score, 8)
+            if best is None or score > best[0]:
+                best = (score, target)
+
+    return best[1] if best else None
+
+
 def _extract_question_sentences(message: str) -> list[str]:
     """Return the sentences that END with a '?'.
 

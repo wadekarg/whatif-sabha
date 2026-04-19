@@ -1,7 +1,7 @@
 """Tests for speech-act classifier."""
 import pytest
 
-from app.core.agents.speech_act import classify_speech_act
+from app.core.agents.speech_act import classify_speech_act, extract_question_target
 
 
 # ── No target → statement ─────────────────────────────────────────
@@ -69,3 +69,38 @@ def test_empty_message_is_statement():
 
 def test_single_word_question():
     assert classify_speech_act("Why?", ["Napoleon"]) == "response"  # no named target, no 'you'
+
+
+# ── extract_question_target ────────────────────────────────────────
+def test_extract_question_target_at_mention():
+    """'@Snowball, how will you ensure' → Snowball, not Benjamin."""
+    msg = "You're right, Benjamin, the promises fade. @Snowball, how will you ensure accountability?"
+    result = extract_question_target(msg, ["Benjamin", "Snowball"])
+    assert result == "Snowball"
+
+
+def test_extract_question_target_vocative_in_question():
+    """'how, Snowball, will you handle it?' — vocative inside question sentence."""
+    msg = "Let me ask: how, Snowball, will you handle the sow's revolt?"
+    result = extract_question_target(msg, ["Snowball"])
+    assert result == "Snowball"
+
+
+def test_extract_question_target_no_question():
+    msg = "Napoleon is the traitor."
+    result = extract_question_target(msg, ["Napoleon"])
+    assert result is None
+
+
+def test_extract_question_target_rhetorical_no_target_in_question():
+    """Question sentence has no named target → None."""
+    msg = "Napoleon speaks of loyalty. Who really pays the price?"
+    result = extract_question_target(msg, ["Napoleon"])
+    assert result is None
+
+
+def test_extract_question_target_picks_strongest():
+    """Both Benjamin and Snowball mentioned; Snowball is @-tagged in question."""
+    msg = "Benjamin knows better. Snowball, don't you think @Snowball?"
+    result = extract_question_target(msg, ["Benjamin", "Snowball"])
+    assert result == "Snowball"

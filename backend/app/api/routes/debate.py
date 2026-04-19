@@ -1308,19 +1308,26 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             # pending_invitee if nothing's already queued (respect Boru's
             # existing queue and force_confrontation's A-then-B chain).
             if not pending_invitee and not pending_invitee_secondary:
-                from app.core.agents.speech_act import classify_speech_act
+                from app.core.agents.speech_act import classify_speech_act, extract_question_target
                 effective_targets = target_chars  # emitted targets from SSE payload
                 if effective_targets:
                     act = classify_speech_act(full_response, effective_targets)
                     if act == "question":
-                        # Pick the first target that is actually a participating character
-                        for t in effective_targets:
-                            if t and t != "Boru" and any(c["name"] == t for c in characters):
-                                pending_invitee = t
-                                logger.info(
-                                    f"[Q-ENFORCE] {next_speaker_name} asked {t} — pending_invitee set"
-                                )
-                                break
+                        # Use weighted vocative scoring — @Name or Name, in the question
+                        # sentence beats first-in-list.
+                        q_target = extract_question_target(full_response, effective_targets)
+                        # Fall back to first non-Boru target if parser returns None
+                        if q_target is None or q_target == "Boru" or not any(c["name"] == q_target for c in characters):
+                            q_target = next(
+                                (t for t in effective_targets
+                                 if t and t != "Boru" and any(c["name"] == t for c in characters)),
+                                None,
+                            )
+                        if q_target:
+                            pending_invitee = q_target
+                            logger.info(
+                                f"[Q-ENFORCE] {next_speaker_name} asked {q_target} — pending_invitee set"
+                            )
 
             # Save to character soul memory (tracked, not fire-and-forget)
             _track_task(debate_id, save_debate_turn(
