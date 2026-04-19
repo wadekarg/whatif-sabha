@@ -1057,6 +1057,26 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             else:
                 window_turn_count += 1
 
+            # ── Character-to-character question enforcement ──
+            # If the character just asked a directed question (has targets +
+            # speech_act "question"), the target MUST answer next. Only sets
+            # pending_invitee if nothing's already queued (respect Boru's
+            # existing queue and force_confrontation's A-then-B chain).
+            if not pending_invitee and not pending_invitee_secondary:
+                from app.core.agents.speech_act import classify_speech_act
+                effective_targets = target_chars  # emitted targets from SSE payload
+                if effective_targets:
+                    act = classify_speech_act(full_response, effective_targets)
+                    if act == "question":
+                        # Pick the first target that is actually a participating character
+                        for t in effective_targets:
+                            if t and t != "Boru" and any(c["name"] == t for c in characters):
+                                pending_invitee = t
+                                logger.info(
+                                    f"[Q-ENFORCE] {next_speaker_name} asked {t} — pending_invitee set"
+                                )
+                                break
+
             # Save to character soul memory (tracked, not fire-and-forget)
             _track_task(debate_id, save_debate_turn(
                 story_id=debate.story_id,
