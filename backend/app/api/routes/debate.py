@@ -359,6 +359,70 @@ async def stream_debate(debate_id: str, db: AsyncSession = Depends(get_db)):
     )
 
 
+def _observer_topic_relevant(observer: dict, transcript: list) -> bool:
+    """Check if recent transcript mentions keywords from observer's background."""
+    # Keywords from observer name + era + background fields
+    raw = " ".join(str(v) for v in observer.values() if isinstance(v, str))
+    # Extract significant words (length 4+, lowercase)
+    keywords = set(w.lower() for w in re.findall(r"\b\w{4,}\b", raw))
+    # Exclude very generic words
+    STOPWORDS = {"observer", "world", "that", "this", "with", "from", "have", "been", "were"}
+    keywords -= STOPWORDS
+    if not keywords:
+        return False
+
+    # Concatenate last 3-5 turns' messages
+    recent_text = " ".join(
+        str(e.get("message", ""))
+        for e in transcript[-5:]
+        if not e.get("isOrchestrator")
+    ).lower()
+
+    # Match if any keyword appears in recent text
+    return any(kw in recent_text for kw in keywords)
+
+
+def _should_observer_speak(
+    round_number: int,
+    last_observer_round: int,
+    drama_score: float,
+    transcript: list,
+    observer: dict,
+    introduced: set[str],
+) -> tuple[bool, str]:
+    """Decide if an observer should speak this turn.
+
+    Returns (should_speak, mode) where mode is:
+      "intro"   — first appearance, needs Boru's observer_intro first
+      "organic" — subsequent appearance, observer speaks directly without intro
+      ""        — don't speak this turn
+    """
+    # Cooldown: at least 5 turns since any observer spoke
+    if round_number - last_observer_round < 5:
+        return (False, "")
+
+    obs_name = observer.get("name", "")
+    relevant = _observer_topic_relevant(observer, transcript)
+
+    # First appearance — Boru introduces
+    if obs_name not in introduced:
+        # Trigger on either:
+        #   - moderate drama (0.45+) AND topic relevance, OR
+        #   - round 6-9 as guaranteed early intro window
+        if drama_score >= 0.45 and relevant:
+            return (True, "intro")
+        if 6 <= round_number <= 9:
+            return (True, "intro")
+        return (False, "")
+
+    # Subsequent appearance — organic, no Boru intro, needs stronger triggers
+    if drama_score < 0.6:
+        return (False, "")
+    if not relevant:
+        return (False, "")
+    return (True, "organic")
+
+
 async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     """Core debate loop — orchestrator-driven, streams SSE events to the frontend."""
     session_maker = get_session_maker()
@@ -379,6 +443,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     active_observers = _select_observers(all_observers, debate.divergence_description, num_active=4)
     last_observer_at: int = 0
     pending_observer_question: dict | None = None
+    # Organic observer state
+    introduced_observers: set[str] = set()  # observer names Boru has formally introduced
+    last_observer_round: int = -999          # round of last observer turn (any kind)
 
     transcript = list(debate.transcript or [])
     round_number = len(transcript)
@@ -1191,15 +1258,28 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             # ── 11. (Reactions removed — they cluttered the debate without adding to the what-if discussion) ──
 
-            # ── 12. World observer — every 5 character turns ──
-            if not forced and active_observers and should_invite_observer(transcript, last_observer_at, observer_interval=10):
-                observer = random.choice(active_observers)
-                obs_has_spoken = any(
-                    e.get("isObserver") and e["character"] == observer["name"]
-                    for e in transcript
-                )
-                # Only introduce if this is their first appearance — returning observers just speak
-                if not obs_has_spoken:
+            # ── 12. World observer — organic appearance ──
+            # Boru introduces each observer on first appearance; afterwards they
+            # chime in organically when drama is high, topic matches their
+            # background, cooldown has elapsed, and nothing is pending.
+            observer = None
+            observer_mode = ""
+            if (not forced and not pending_invitee and not boru_spoke_this_turn
+                    and active_observers):
+                drama = orch_drama_score(transcript)
+                for _candidate_obs in active_observers:
+                    should, mode = _should_observer_speak(
+                        round_number, last_observer_round, drama,
+                        transcript, _candidate_obs, introduced_observers,
+                    )
+                    if should:
+                        observer = _candidate_obs
+                        observer_mode = mode
+                        break
+
+            if observer is not None:
+                # First appearance: Boru formally introduces the observer.
+                if observer_mode == "intro":
                     obs_intro, intended = await generate_orchestrator_message(
                         ledger, current_phase, transcript, characters, story.title or "",
                         event_type="observer_intro",
@@ -1216,10 +1296,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             "orchestratorEvent": "observer_intro",
                             "intended_speaker": observer["name"],
                         })
+                        introduced_observers.add(observer["name"])
+                        boru_spoke_this_turn = True
 
-                # After intro (or for returning observers), emit the observer's turn immediately
-                # in the SAME loop iteration. Intuitively, when Boru introduces an observer,
-                # the observer must speak next — not a character.
+                # Emit the observer's turn immediately in the SAME loop iteration
+                # (both for intro and organic modes).
                 obs_response = ""
                 try:
                     yield sse("observer_start", {
@@ -1319,9 +1400,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                             second_speaker_name = None
 
                         last_observer_at = len(transcript)
+                        last_observer_round = round_number
                 except Exception as obs_exc:
                     logger.warning(f"Observer failed (non-fatal): {obs_exc}")
                     last_observer_at = len(transcript)  # reset timer even on failure
+                    last_observer_round = round_number
 
             # ── 12b. (Bug G fix: removed dual-speaker consumer block — caused
             # back-to-back repetition when second speaker was the same as or adjacent
