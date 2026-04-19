@@ -414,6 +414,18 @@ class ArgumentLedger:
         self.repetition_log.setdefault(character, []).append(normalized)
         return False
 
+    def _find_existing_dispute(self, char_a: str, char_b: str) -> dict | None:
+        """Return an existing UNRESOLVED dispute between the same pair, if any.
+        Order-independent: A↔B == B↔A."""
+        pair = {char_a, char_b}
+        for d in self.disputes:
+            if d.get("status") != "unresolved":
+                continue
+            existing = {d["claim_a"]["character"], d["claim_b"]["character"]}
+            if existing == pair:
+                return d
+        return None
+
     def is_response_repeating(self, character: str, full_response: str, transcript: list[dict]) -> bool:
         """
         Direct check on the full response text against this character's prior messages.
@@ -658,22 +670,28 @@ Be concise. Return ONLY valid JSON."""
             logger.info(f"Rejected non-disputant dispute: {char_a} vs {char_b}")
             continue
         if char_a and char_b and claim_a and claim_b and char_a != char_b:
-            # Check if this dispute already exists (avoid duplicates)
-            exists = any(
-                (d["claim_a"]["character"] == char_a and d["claim_b"]["character"] == char_b) or
-                (d["claim_a"]["character"] == char_b and d["claim_b"]["character"] == char_a)
-                for d in ledger.disputes if d["status"] == "unresolved"
-            )
-            if not exists:
-                ledger.disputes.append({
-                    "id": ledger._next_dispute_id,
-                    "claim_a": {"character": char_a, "claim": claim_a},
-                    "claim_b": {"character": char_b, "claim": claim_b},
-                    "status": "unresolved",
-                    "turns_unresolved": 0,
-                })
-                ledger._next_dispute_id += 1
-                logger.info(f"Dispute D{ledger._next_dispute_id - 1}: {char_a} vs {char_b}")
+            # Dedup: if an unresolved dispute between these two characters already exists,
+            # bump its turn counter instead of adding a new row.
+            existing = ledger._find_existing_dispute(char_a, char_b)
+            if existing:
+                existing["turns_unresolved"] = existing.get("turns_unresolved", 0) + 1
+                # Keep original claim text — don't overwrite with possibly-rephrased duplicate.
+                logger.info(
+                    f"[DISPUTE] Merged duplicate into existing D{existing.get('id', '?')} "
+                    f"({char_a} vs {char_b}, turns={existing['turns_unresolved']})"
+                )
+                continue  # skip the append
+
+            # Otherwise, create a new dispute
+            ledger.disputes.append({
+                "id": ledger._next_dispute_id,
+                "claim_a": {"character": char_a, "claim": claim_a},
+                "claim_b": {"character": char_b, "claim": claim_b},
+                "status": "unresolved",
+                "turns_unresolved": 0,
+            })
+            ledger._next_dispute_id += 1
+            logger.info(f"Dispute D{ledger._next_dispute_id - 1}: {char_a} vs {char_b}")
 
     # Age unresolved disputes
     for d in ledger.disputes:
