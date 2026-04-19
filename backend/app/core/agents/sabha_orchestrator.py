@@ -838,6 +838,75 @@ def intended_speaker_for(event_type: str, context: dict | None) -> str | None:
     return None
 
 
+# Events where Boru broadcasts to everyone — no single invitee, even if the
+# message mentions characters.
+_BROADCAST_EVENTS = frozenset({
+    "opening_with_invite",
+    "phase_transition",
+    "phase_intro",
+    "observer_intro",
+    "summon_observer",
+    "closing_summary",
+    "redirect",
+})
+
+
+def extract_first_cast_name(message: str, cast_names: list[str]) -> str | None:
+    """Find the FIRST cast-member name mentioned in the message text.
+
+    Matches case-insensitively on word boundaries. When two cast names overlap
+    (e.g., "Jones" and "Mr. Jones"), the longer match wins at that position.
+
+    Returns the cast name in its original casing, or None if no match.
+    """
+    import re
+    if not message or not cast_names:
+        return None
+
+    # Sort by length descending so longer names are checked first at any position.
+    sorted_names = sorted(cast_names, key=len, reverse=True)
+
+    # Build a single regex with word-boundary anchors and case-insensitive flag.
+    # Escape each name; join with | (alternation). Python's re is leftmost-first,
+    # so with the longest-name-first ordering, overlapping matches resolve correctly.
+    pattern = r"\b(?:" + "|".join(re.escape(n) for n in sorted_names) + r")\b"
+    match = re.search(pattern, message, flags=re.IGNORECASE)
+    if not match:
+        return None
+
+    matched_text = match.group(0)
+    # Map back to the original cast casing.
+    for name in cast_names:
+        if name.lower() == matched_text.lower():
+            return name
+    return None
+
+
+def intended_speaker_from_result(
+    event_type: str,
+    context: dict | None,
+    message: str,
+    cast_names: list[str],
+) -> str | None:
+    """Decide the intended speaker for an orchestrator message.
+
+    Priority:
+      1. Broadcast events always return None, no matter what the message says.
+      2. If the context has an explicit target via intended_speaker_for() AND
+         that target is a valid cast member, use it.
+      3. Otherwise, parse the message text for the first cast-member name.
+    """
+    if event_type in _BROADCAST_EVENTS:
+        return None
+
+    cast_set = set(cast_names)
+    explicit = intended_speaker_for(event_type, context)
+    if explicit and explicit in cast_set:
+        return explicit
+
+    return extract_first_cast_name(message, cast_names)
+
+
 async def generate_orchestrator_message(
     ledger: ArgumentLedger,
     current_phase: str,
@@ -1092,7 +1161,9 @@ CRITICAL RULES:
 
     try:
         raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
-        return (raw.strip().strip('"'), intended_speaker_for(event_type, context))
+        text = raw.strip().strip('"')
+        cast_names = [c.get("name", "") for c in characters if c.get("name")]
+        return (text, intended_speaker_from_result(event_type, context, text, cast_names))
     except Exception as e:
         logger.warning(f"Orchestrator message generation failed: {e}")
         return ("", None)
