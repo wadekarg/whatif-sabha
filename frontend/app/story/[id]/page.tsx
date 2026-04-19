@@ -22,6 +22,7 @@ export default function StoryPage() {
   const [whatIf, setWhatIf]         = useState("");
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [suggestionsExpanded, setSuggestionsExpanded] = useState(false);
   const [overview, setOverview]     = useState<any>(null);
   const [storyCharacters, setStoryCharacters] = useState<any[]>([]);
 
@@ -326,8 +327,13 @@ export default function StoryPage() {
               />
             </div>
             <div className={`px-6 pb-3 flex flex-wrap gap-2 ${showSuggestions ? "" : "hidden"}`}>
-              {suggestions.slice(0, 5).map((s: any, i: number) => (
-                <button key={s.event_id || i} onClick={() => setWhatIf(s.description)}
+              {(suggestionsExpanded ? suggestions : suggestions.slice(0, 5)).map((s: any, i: number) => (
+                <button
+                  key={s.event_id || i}
+                  onClick={() => {
+                    setWhatIf(s.description);
+                    setSuggestionsExpanded(false);
+                  }}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                     whatIf === s.description
                       ? "bg-[#fef3e2] border-[#f0c060] text-[#c07820] font-medium"
@@ -339,7 +345,13 @@ export default function StoryPage() {
               <button
                 onClick={async () => {
                   const res = await fetch(`${API}/stories/${id}/divergence-points/generate`, { method: "POST" });
-                  if (res.ok) { const data = await res.json(); if (Array.isArray(data)) setSuggestions(data); }
+                  if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data)) {
+                      setSuggestions(data);
+                      setSuggestionsExpanded(true);
+                    }
+                  }
                 }}
                 className="text-xs px-3 py-1.5 rounded-full border border-dashed border-[#c07820]/40 text-[#c07820] hover:bg-[#fef3e2]/60 transition-all"
               >
