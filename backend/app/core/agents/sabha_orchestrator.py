@@ -68,6 +68,31 @@ def _is_similar_to_previous(text: str, previous: list[str], threshold: float = 0
     return False
 
 
+def _extract_recent_boru_openers(transcript: list[dict], limit: int = 5) -> list[str]:
+    """Return the first-6-words of Boru's most recent orchestrator turns.
+
+    Used to inject into Boru's prompt so the LLM knows what openers to avoid.
+    Skips the grand opening (first Boru turn) and anything without meaningful text.
+    """
+    openers = []
+    seen = 0
+    # Walk backwards, skipping very short or empty messages
+    for e in reversed(transcript):
+        if seen >= limit:
+            break
+        if not e.get("isOrchestrator"):
+            continue
+        msg = (e.get("message") or "").strip()
+        if len(msg) < 12:
+            continue
+        # Take first 6 words, strip any leading punctuation
+        first_words = " ".join(msg.split()[:6]).strip('.,!?"\'— ')
+        if first_words:
+            openers.append(first_words)
+            seen += 1
+    return openers   # most recent first
+
+
 def _get_orchestrator_llm():
     """Get an LLM for Boru — tries Gemini first, falls back to NVIDIA/Groq."""
     # Try Gemini first
@@ -1228,6 +1253,18 @@ async def generate_orchestrator_message(
 
     instruction = event_instructions.get(event_type, "Moderate the debate. 1-2 sentences.")
 
+    # Anti-repetition: remind Boru what his last few openings were
+    recent_openers = _extract_recent_boru_openers(transcript, limit=5)
+    if recent_openers:
+        anti_rep_block = (
+            "\n\nYOUR LAST OPENERS — do NOT start your new turn with these patterns "
+            "(vary the opener; use a different pronoun, subject, or cadence):\n"
+            + "\n".join(f"  - \"{o}...\"" for o in recent_openers)
+            + "\n\nStart THIS turn with a different opening pattern."
+        )
+    else:
+        anti_rep_block = ""
+
     prompt = f"""You are Boru the Elephant — the witty, sharp host of the WhatIfSabha debate about "{story_title}".
 
 {BORU_VOICE_GUIDELINES}
@@ -1257,6 +1294,8 @@ CRITICAL RULES:
 2. KEEP IT SHORT — 1 sentence is ideal, 2 max. Never 3. Boru is punchy, not verbose.
 3. Do NOT repeat the scenario/divergence description — everyone already knows it.
 4. No quotes around output. No "Boru:" prefix."""
+
+    prompt += anti_rep_block
 
     try:
         raw = await _invoke_with_fallback([HumanMessage(content=prompt)])
