@@ -246,17 +246,39 @@ EMOTION_MODIFIERS: dict[str, tuple[str, str, str]] = {
 }
 
 
+# Pronunciation map — word → phonetic respelling that Edge TTS pronounces correctly.
+# The display text (transcript) is unchanged; only the TTS audio input gets the swap.
+PRONUNCIATION_MAP = {
+    # "sabha" is often read with a short final 'a' by English TTS.
+    # "sabhaa" forces the elongated vowel that matches the actual Sanskrit-origin pronunciation.
+    r"\bsabha\b":  "sabhaa",
+    r"\bSabha\b":  "Sabhaa",
+    r"\bSABHA\b":  "SABHAA",
+}
+
+
+def _apply_pronunciation_fixes(text: str) -> str:
+    """Replace specific words with phonetic respellings for TTS only."""
+    for pattern, replacement in PRONUNCIATION_MAP.items():
+        text = re.sub(pattern, replacement, text)
+    return text
+
+
 def _clean_text_for_speech(text: str) -> str:
     """
     Clean text so TTS reads it like a human:
     - Strip @targets, markdown, asterisks
     - Add pauses at paragraph breaks and dramatic punctuation
     - Clean up artifacts
+    - Apply pronunciation fixes (e.g. 'sabha' → 'sabhaa')
     """
     # Remove @CharacterName lines (target declarations)
     text = re.sub(r'^@\w[\w\s]*\n?', '', text, flags=re.MULTILINE)
     # Remove inline @mentions at start of sentences
     text = re.sub(r'@(\w+)', r'\1', text)
+
+    # Pronunciation fixes — keep transcript text unchanged, only affect TTS audio
+    text = _apply_pronunciation_fixes(text)
 
     # Strip markdown
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # **bold**
@@ -642,6 +664,9 @@ async def generate_speech_stream(text: str, voice_profile: dict):
     Stream MP3 audio chunks for text. Yields raw bytes as they arrive.
     """
     import edge_tts
+
+    # Apply pronunciation fixes so the audio pronounces 'sabha' as 'sabhaa', etc.
+    text = _apply_pronunciation_fixes(text)
 
     comm = edge_tts.Communicate(
         text,
