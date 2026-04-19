@@ -419,6 +419,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
     # Boru authority state (Task 4b)
     pending_invitee: str | None = None   # character Boru just named; cleared when they speak
+    # Secondary invitee — used when Boru names TWO characters (e.g.
+    # force_confrontation / dispute_callout). After the primary invitee
+    # speaks, this gets promoted to primary so both disputants get the mic.
+    pending_invitee_secondary: str | None = None
     window_turn_count: int = 0           # character turns since Boru last spoke
     last_force_confrontation_round: int = -999   # global cooldown for force_confrontation events
 
@@ -623,6 +627,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                 })
                                 if intended:
                                     pending_invitee = intended
+                                    # If Boru's confrontation names a SECOND disputant,
+                                    # queue them to speak right after the primary. This
+                                    # guarantees both sides of the dispute get the mic.
+                                    if intended == char_a and char_b != char_a:
+                                        pending_invitee_secondary = char_b
+                                    elif intended == char_b and char_a != char_b:
+                                        pending_invitee_secondary = char_a
                                     # Pivot this turn's speaker to the invitee so Boru's word takes effect
                                     # immediately, not on the next cycle.
                                     if intended != next_speaker_name:
@@ -634,18 +645,27 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                             # Clear second_speaker — we're now on Boru's floor
                                             second_speaker_name = None
                                 boru_spoke_this_turn = True
+                            # Increment OUTSIDE the `if confront_msg:` branch so the
+                            # dispute retires after 2 fires even if message generation
+                            # returned empty — prevents infinite-retry loops.
                             dispute["_last_escalation_turn"] = round_number
                             last_force_confrontation_round = round_number
                             dispute["_force_count"] = dispute.get("_force_count", 0) + 1
+                            logger.info(
+                                f"[FORCE] dispute {dispute.get('id')} fired, "
+                                f"count={dispute['_force_count']}"
+                            )
 
                     elif escalated["tier2"]:
                         # Tier 2: Boru calls it out
                         dispute = escalated["tier2"][0]
+                        callout_char_a = dispute["claim_a"]["character"]
+                        callout_char_b = dispute["claim_b"]["character"]
                         callout_msg, intended = await generate_orchestrator_message(
                             ledger, current_phase, transcript, characters, story.title or "",
                             event_type="dispute_callout",
-                            context={"char_a": dispute["claim_a"]["character"],
-                                     "char_b": dispute["claim_b"]["character"],
+                            context={"char_a": callout_char_a,
+                                     "char_b": callout_char_b,
                                      "claim_a": dispute["claim_a"]["claim"][:120],
                                      "claim_b": dispute["claim_b"]["claim"][:120],
                                      "turns": dispute["turns_unresolved"]},
@@ -659,6 +679,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             })
                             if intended:
                                 pending_invitee = intended
+                                # Queue the other disputant to speak after the primary —
+                                # both sides of the dispute should respond when Boru calls
+                                # it out.
+                                if intended == callout_char_a and callout_char_b != callout_char_a:
+                                    pending_invitee_secondary = callout_char_b
+                                elif intended == callout_char_b and callout_char_a != callout_char_b:
+                                    pending_invitee_secondary = callout_char_a
                                 # Pivot this turn's speaker to the invitee so Boru's word takes effect
                                 # immediately, not on the next cycle.
                                 if intended != next_speaker_name:
@@ -1012,10 +1039,21 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 "emotion": judge_result.get("dominant_emotion", "neutral"),
             })
 
-            # Clear pending invitee if satisfied
+            # Clear pending invitee if satisfied. If a secondary invitee is
+            # queued (force_confrontation / dispute_callout named two
+            # disputants), promote them to primary so they speak next before
+            # normal rotation resumes.
             if pending_invitee and pending_invitee == next_speaker_name:
-                pending_invitee = None
-                window_turn_count = 0
+                if pending_invitee_secondary:
+                    pending_invitee = pending_invitee_secondary
+                    pending_invitee_secondary = None
+                    # Don't reset window_turn_count — we're still on Boru's floor.
+                    logger.info(
+                        f"[PENDING] primary satisfied; promoting secondary={pending_invitee}"
+                    )
+                else:
+                    pending_invitee = None
+                    window_turn_count = 0
             else:
                 window_turn_count += 1
 
