@@ -722,6 +722,14 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                                 f"[FORCE] dispute {dispute.get('id')} fired, "
                                 f"count={dispute['_force_count']}"
                             )
+                            # Retire the dispute after 2 fires — no further escalation, and remove from
+                            # "unresolved" pool so the ledger context stops surfacing it every turn.
+                            if dispute["_force_count"] >= 2:
+                                dispute["status"] = "resolved_by_escalation"
+                                logger.info(
+                                    f"[DISPUTE] {dispute.get('id', '?')} retired as resolved_by_escalation "
+                                    f"after {dispute['_force_count']} escalations"
+                                )
 
                     elif escalated["tier2"]:
                         # Tier 2: Boru calls it out
