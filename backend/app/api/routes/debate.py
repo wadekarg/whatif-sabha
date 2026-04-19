@@ -500,6 +500,29 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     last_broken_pair: tuple[str, str] | None = None
     last_broken_pair_round: int = -999
 
+    # Background ledger update tasks — flushed before any orchestrator message
+    # generation / ledger-reading call so Boru sees an up-to-date ledger while
+    # the turn loop otherwise runs without blocking on the ledger LLM call.
+    pending_ledger_tasks: list[asyncio.Task] = []
+
+    async def _flush_pending_ledger() -> None:
+        """Wait for in-flight ledger updates to finish, then clear the list.
+
+        Called right before any code path that reads the ledger (Boru
+        orchestrator messages, should_end_debate, decide_phase_transition, and
+        at debate end) so those readers see fully-applied updates.
+        """
+        if not pending_ledger_tasks:
+            return
+        await asyncio.gather(*pending_ledger_tasks, return_exceptions=True)
+        pending_ledger_tasks.clear()
+
+    async def _generate_boru_message_safely(*args, **kwargs):
+        """Flush pending ledger tasks before asking Boru to speak so his
+        prompt sees an up-to-date ledger."""
+        await _flush_pending_ledger()
+        return await generate_orchestrator_message(*args, **kwargs)
+
     try:
         # ── Main debate loop — heuristic-driven, Boru intervenes only when needed ──
         while round_number < max_rounds:
@@ -511,7 +534,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             # ── 1. Stop signal ──
             if _stop_signals.pop(debate_id, False):
-                stop_summary, intended = await generate_orchestrator_message(
+                stop_summary, intended = await _generate_boru_message_safely(
                     ledger, "closing", transcript, characters, story.title or "",
                     event_type="closing_summary",
                 )
@@ -545,6 +568,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             # ── 2. End condition (check every 4th turn, or always in closing phase) ──
             if (current_phase == "closing" or round_number % 4 == 0) and round_number > 0:
+                await _flush_pending_ledger()
                 if await should_end_debate(ledger, current_phase, transcript, characters):
                     break
 
@@ -555,13 +579,14 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             # ("Snowball, …") parses back into pending_invitee and steals the floor from
             # whoever was already invited (e.g. Napoleon).
             if not pending_invitee and not is_first_round and round_number % 3 == 0:
+                await _flush_pending_ledger()
                 new_phase = await decide_phase_transition(
                     ledger, current_phase, transcript, characters,
                     phase_started_round=phase_started_round,
                     round_number=round_number,
                 )
                 if new_phase:
-                    transition_msg, intended = await generate_orchestrator_message(
+                    transition_msg, intended = await _generate_boru_message_safely(
                         ledger, new_phase, transcript, characters, story.title or "",
                         event_type="phase_transition",
                         context={"from_phase": current_phase, "to_phase": new_phase},
@@ -588,8 +613,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     previous_phase = current_phase
                     current_phase = new_phase
                     phase_started_round = round_number
-                    if current_phase == "closing" and await should_end_debate(ledger, current_phase, transcript, characters):
-                        break
+                    if current_phase == "closing":
+                        await _flush_pending_ledger()
+                        if await should_end_debate(ledger, current_phase, transcript, characters):
+                            break
 
             # ── ENFORCEMENT: if Boru has a pending invitation, that character MUST speak next ──
             next_speaker_name = None
@@ -645,7 +672,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             if not forced:
                 # Boru breaks up duels with a witty interjection
                 if duel_detected:
-                    duel_msg, intended = await generate_orchestrator_message(
+                    duel_msg, intended = await _generate_boru_message_safely(
                         ledger, current_phase, transcript, characters, story.title or "",
                         event_type="break_duel",
                         context={
@@ -713,7 +740,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                             # (Bug G fix: removed second_speaker_name assignment. The opposing
                             # dispute party will be the natural next speaker via Boru's invitation
                             # / enforcement on the following turn.)
-                            confront_msg, intended = await generate_orchestrator_message(
+                            confront_msg, intended = await _generate_boru_message_safely(
                                 ledger, current_phase, transcript, characters, story.title or "",
                                 event_type="force_confrontation",
                                 context={"char_a": char_a, "char_b": char_b,
@@ -801,7 +828,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         dispute = escalated["tier2"][0]
                         callout_char_a = dispute["claim_a"]["character"]
                         callout_char_b = dispute["claim_b"]["character"]
-                        callout_msg, intended = await generate_orchestrator_message(
+                        callout_msg, intended = await _generate_boru_message_safely(
                             ledger, current_phase, transcript, characters, story.title or "",
                             event_type="dispute_callout",
                             context={"char_a": callout_char_a,
@@ -871,7 +898,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
 
             if is_first_round:
                 # Grand opening — introduce himself + topic
-                opening_msg, intended = await generate_orchestrator_message(
+                opening_msg, intended = await _generate_boru_message_safely(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="opening_with_invite",
                     context={"speakers": char_names, "divergence": debate.divergence_description},
@@ -932,7 +959,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 )
                 pair_duel_target = _ctx.get("speaker")
                 if pair_duel_target and pair_duel_target not in recent_char_turns[-5:]:
-                    pair_duel_msg, intended = await generate_orchestrator_message(
+                    pair_duel_msg, intended = await _generate_boru_message_safely(
                         ledger, current_phase, transcript, characters, story.title or "",
                         event_type="invite_speaker",
                         context={
@@ -1009,7 +1036,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         # (stable, deterministic — matches how the picker scores ties today)
                         rotate_target = next((c["name"] for c in characters if c["name"] in silent), None)
                         if rotate_target:
-                            rotation_msg, intended = await generate_orchestrator_message(
+                            rotation_msg, intended = await _generate_boru_message_safely(
                                 ledger, current_phase, transcript, characters, story.title or "",
                                 event_type="invite_speaker",
                                 context={
@@ -1057,9 +1084,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 is_stalling = valid_scores and max(valid_scores) < 1.0 and round_number > len(characters)
                 if is_stalling:
                     # Pick a forced question from the ledger or redirect
+                    await _flush_pending_ledger()
                     open_qs = ledger.open_questions[:1]
                     if open_qs:
-                        forced_msg, intended = await generate_orchestrator_message(
+                        forced_msg, intended = await _generate_boru_message_safely(
                             ledger, current_phase, transcript, characters, story.title or "",
                             event_type="forced_question",
                             context={"target": next_speaker_name, "question": open_qs[0]["question"]},
@@ -1232,9 +1260,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 round_number += 1
                 continue
 
-            # ── 7. Judge + Ledger in PARALLEL (biggest speed win) ──
-            # These are independent: judge scores quality, ledger tracks arguments.
-            # Running them together cuts the gap between speakers by ~50%.
+            # ── 7. Judge (awaited) + Ledger (fire-and-track) ──
+            # Judge result is needed immediately for target resolution / SSE.
+            # Ledger update runs in background; it's flushed before Boru next
+            # reads the ledger (any orchestrator message / phase decision / end
+            # check). This removes the per-turn ~2-5s ledger LLM wait.
             traits = phase_state.get("personality_traits", [])
             last_entry = transcript[-1] if transcript else {}
             obs_names = [o["name"] for o in active_observers] if active_observers else []
@@ -1253,12 +1283,18 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 except Exception:
                     return {"score": 7, "in_character": True, "feedback": "", "issue": None, "needs_continuation": False, "continuation_reason": None, "dominant_emotion": "neutral"}
 
-            async def _run_ledger():
-                if round_number % 2 == 0:
-                    return await update_ledger(ledger, next_speaker_name, full_response, transcript, observer_names=obs_names, round_number=round_number)
-                return None
+            # Fire ledger update in background — don't block the turn loop.
+            if round_number % 2 == 0:
+                _ledger_task = asyncio.create_task(
+                    update_ledger(
+                        ledger, next_speaker_name, full_response, transcript,
+                        observer_names=obs_names, round_number=round_number,
+                    )
+                )
+                pending_ledger_tasks.append(_ledger_task)
 
-            judge_result, ledger_update = await asyncio.gather(_run_judge(), _run_ledger())
+            judge_result = await _run_judge()
+            ledger_update = None
 
             # ── 8. Target resolution + emit character_end ──
             judge_addressed = judge_result.get("addressed_targets", [])
@@ -1385,7 +1421,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 repetition_counts[next_speaker_name] = repetition_counts.get(next_speaker_name, 0) + 1
                 strike = repetition_counts[next_speaker_name]
 
-                callout_msg, intended = await generate_orchestrator_message(
+                callout_msg, intended = await _generate_boru_message_safely(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="call_out_repetition",
                     context={
@@ -1423,17 +1459,20 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     f"raise a new consequence, confess something you've been hiding, or flip your position."
                 )
 
-            # ── 10. Process ledger result + Boru replies ──
-            # Boru responds if character asked a direct question
+            # ── 10. Boru replies — heuristic-only detection ──
+            # Since ledger runs in the background now, the LLM-derived
+            # `addresses_boru` / `boru_question` fields are no longer available
+            # synchronously. Fall back to the heuristic _extract_boru_question
+            # + _is_addressing_boru pair (same fallback the original code used
+            # when the LLM didn't detect it).
             boru_question = _extract_boru_question(full_response)
 
-            if ledger_update:
-                # Ledger ran this turn — check if it detected a Boru question too
-                if not ledger_update.get("addresses_boru") and not ledger_update.get("boru_question"):
-                    if boru_question:
-                        ledger_update["addresses_boru"] = True
-                        ledger_update["boru_question"] = boru_question
-
+            # Emit a best-effort ledger snapshot every other turn so the
+            # frontend keeps updating. Snapshot reflects the state BEFORE this
+            # turn's ledger update lands — the delta arrives on a later turn,
+            # which matches the previous "update_ledger every 2nd turn"
+            # cadence that already produced sparse updates.
+            if round_number % 2 == 0:
                 yield sse("ledger_update", {
                     "open_questions": ledger.open_questions[:10],
                     "resolved_questions": ledger.resolved_questions[-6:],
@@ -1443,17 +1482,13 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     "phase": current_phase,
                 })
 
-                # If character addressed Boru directly — Boru responds
-                if ledger_update.get("addresses_boru") and ledger_update.get("boru_question"):
-                    boru_question = ledger_update["boru_question"]
-
             # Boru responds ONLY if the character EXPLICITLY addressed Boru —
             # via target_characters/target_character OR an @Boru mention. A mere
             # rhetorical mention of "Boru" in the response is not enough: the
             # sabha is a debate between characters, not a Q&A with the host.
             last_turn_entry = transcript[-1] if transcript else {}
             if boru_question and _is_addressing_boru(last_turn_entry):
-                boru_reply, intended = await generate_orchestrator_message(
+                boru_reply, intended = await _generate_boru_message_safely(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="respond_to_character",
                     context={"speaker": next_speaker_name, "question": boru_question},
@@ -1504,7 +1539,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             if observer is not None:
                 # First appearance: Boru formally introduces the observer.
                 if observer_mode == "intro":
-                    obs_intro, intended = await generate_orchestrator_message(
+                    obs_intro, intended = await _generate_boru_message_safely(
                         ledger, current_phase, transcript, characters, story.title or "",
                         event_type="observer_intro",
                         context={"observer_name": observer["name"], "is_returning": False},
@@ -1591,7 +1626,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                         obs_lower = obs_response.lower()
                         is_dismissive = sum(1 for w in dismissive_signals if w in obs_lower) >= 2
                         if is_dismissive:
-                            boru_defense, intended = await generate_orchestrator_message(
+                            boru_defense, intended = await _generate_boru_message_safely(
                                 ledger, current_phase, transcript, characters, story.title or "",
                                 event_type="defend_sabha",
                                 context={
@@ -1650,7 +1685,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     yield sse("audience", {"name": audience_name, "message": audience_text, "directed_to": directed_to})
                     transcript.append({"character": audience_name, "message": audience_text, "round": round_number, "phase": current_phase, "isAudience": True})
 
-                    boru_response, intended = await generate_orchestrator_message(
+                    boru_response, intended = await _generate_boru_message_safely(
                         ledger, current_phase, transcript, characters, story.title or "",
                         event_type="audience_question",
                         context={"audience_name": audience_name, "audience_message": audience_text, "directed_to": directed_to or ""},
@@ -1695,8 +1730,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         _audience_queues.pop(debate_id, None)
 
         # ── Closing summary from Boru — with structured verdict ──
+        # Flush before reading the ledger for the verdict, so no late updates
+        # are lost from the closing context.
+        await _flush_pending_ledger()
         verdict = ledger.generate_closing_verdict()
-        closing_msg, intended = await generate_orchestrator_message(
+        closing_msg, intended = await _generate_boru_message_safely(
             ledger, current_phase, transcript, characters, story.title or "",
             event_type="closing_summary",
             context=verdict,
@@ -1716,6 +1754,9 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         # Synthesize debate summary first
         debate_summary = ""
         try:
+            # Make sure any in-flight ledger updates are applied before the
+            # narrator reads `ledger` for the closing summary.
+            await _flush_pending_ledger()
             yield sse("summary_start", {"message": "Summarizing the debate..."})
             async for token in synthesize_debate_summary_stream(
                 story_title=story.title or "the story",
@@ -1752,6 +1793,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         ))
 
     finally:
+        # Final flush — any in-flight ledger updates must complete before we
+        # snapshot the ledger into the DB, otherwise the saved state can lag
+        # behind the transcript by one or two turns.
+        await _flush_pending_ledger()
         # Await any remaining background tasks before final persist
         tasks = _bg_tasks.pop(debate_id, [])
         if tasks:
