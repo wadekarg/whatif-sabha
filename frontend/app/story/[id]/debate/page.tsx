@@ -737,7 +737,9 @@ export default function DebatePage() {
         const isQ = e.questions > 0;
         const hasResponses = e.count > e.questions;
         const isBoruEdge = e.targetId === "Boru" || e.sourceId === "Boru";
-        const col = isBoruEdge ? "#c07820" : src.color;  // amber for Boru edges, source color otherwise
+        // Color by source character regardless of whether the edge touches Boru.
+        // Boru edges remain distinctively STYLED (thicker + solid).
+        const col = src.color;
         const strandCount = Math.min(e.count, 8);
 
         const el = d3.select(this);

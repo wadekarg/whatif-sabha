@@ -310,7 +310,9 @@ export default function DebateViewPage() {
         const px = -uy, py = ux;
         const isQ = e.questions > 0;
         const isBoruEdge = e.target === "Boru" || e.source === "Boru";
-        const col = isBoruEdge ? "#c07820" : (isQ ? "#f0c060" : src.color);
+        // Color by source character regardless of whether the edge touches Boru.
+        // Boru edges remain distinctively STYLED (thicker + solid + larger arrowhead).
+        const col = isQ ? "#f0c060" : src.color;
         const strandCount = e.count;
         const spacing = strandCount > 1 ? Math.min(3.2, 32 / (strandCount - 1)) : 0;
         const hasMirror = edges.some(e2 => e2.source === e.target && e2.target === e.source);
