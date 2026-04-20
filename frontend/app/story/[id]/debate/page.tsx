@@ -765,7 +765,7 @@ export default function DebatePage() {
         el.select("path")
           .attr("d", pathsData.trim() || `M${src.x},${src.y} L${tgt.x},${tgt.y}`)
           .attr("stroke", col)
-          .attr("stroke-width", isBoruEdge ? 2.2 : 1.2)
+          .attr("stroke-width", 1.5)
           .attr("stroke-dasharray", "none")
           .attr("opacity", isBoruEdge
             ? Math.min(0.6 + responseCount * 0.05, 0.9)
@@ -793,7 +793,7 @@ export default function DebatePage() {
           qPath
             .attr("d", qPathsData.trim())
             .attr("stroke", col)
-            .attr("stroke-width", isBoruEdge ? 2.2 : 1.2)
+            .attr("stroke-width", 1.5)
             .attr("stroke-dasharray", isBoruEdge ? "none" : "4,3")
             .attr("opacity", Math.min(0.4 + questionCount * 0.1, 0.8));
         } else {

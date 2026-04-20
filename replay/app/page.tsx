@@ -324,7 +324,8 @@ export default function DebateViewPage() {
         const strandCount = e.count;
         const spacing = strandCount > 1 ? Math.min(3.2, 32 / (strandCount - 1)) : 0;
         const hasMirror = edges.some(e2 => e2.source === e.target && e2.target === e.source);
-        const baseCurve = hasMirror ? 28 : 0;
+        // Every edge gets at least some curve so nothing renders as a bare straight line.
+        const baseCurve = hasMirror ? 28 : 10;
 
         for (let si = 0; si < strandCount; si++) {
           const strandOff = (si - (strandCount - 1) / 2) * spacing;
@@ -340,8 +341,8 @@ export default function DebateViewPage() {
           ctx.save();
           ctx.beginPath(); ctx.moveTo(sxe, sye); ctx.quadraticCurveTo(cpX, cpY, txe, tye);
           ctx.strokeStyle = col + Math.round(alpha * 255).toString(16).padStart(2, "0");
-          ctx.lineWidth = isBoruEdge ? 2.2 : 1.2;
-          if (isBoruEdge) ctx.setLineDash([]);
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([]);
           ctx.stroke();
           ctx.restore();
         }
