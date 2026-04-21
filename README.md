@@ -9,11 +9,11 @@
 
 ---
 
-## 💭 The itch
+## 💭 Where it came from
 
 I've always been curious about the books I read. Some endings I just couldn't let go of — I'd keep rewriting them in my head on the bus, or before falling asleep, wondering what the characters would actually say if they got one more round on the stage.
 
-WhatIfSabha is a side project born from that itch. You upload a story, type a "what if", and watch the characters themselves argue it out — hosted by **Boru the Elephant**, who plays moderator. You won't get canon. You'll get a conversation between AI versions of them, which is a different thing, and sometimes a more interesting one.
+WhatIfSabha is a side project born from that wondering. You upload a story, type a "what if", and watch the characters themselves argue it out — hosted by **Boru the Elephant**, who plays moderator. You won't get canon. You'll get a conversation between AI versions of them, which is a different thing, and sometimes a more interesting one.
 
 > 📝 This is a side project — I work on it whenever I get some free time. It's rough in places and that's fine.
 
