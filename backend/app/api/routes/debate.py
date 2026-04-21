@@ -2266,6 +2266,70 @@ async def get_summary_audio(debate_id: str, db: AsyncSession = Depends(get_db)):
     )
 
 
+class _LedgerView:
+    """Read-only shim that exposes a persisted ledger_snapshot with the same
+    attribute surface `synthesize_debate_summary_stream` reads from ArgumentLedger."""
+    def __init__(self, snapshot: dict | None):
+        s = snapshot or {}
+        self.character_positions = s.get("positions") or {}
+        self.claims = s.get("claims") or []
+        self.open_questions = s.get("open_questions") or []
+        self.resolved_questions = s.get("resolved_questions") or []
+        self.disputes = s.get("disputes") or []
+        self.progress_summary = s.get("progress") or ""
+
+
+@router.post("/{debate_id}/summary/regenerate")
+async def regenerate_summary(debate_id: str, db: AsyncSession = Depends(get_db)):
+    """Re-run the narrator summary over the stored transcript, stream SSE tokens,
+    and persist the result to alternate_ending."""
+    result = await db.execute(select(Debate).where(Debate.id == debate_id))
+    debate = result.scalar_one_or_none()
+    if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+
+    transcript = debate.transcript or []
+    if not transcript:
+        raise HTTPException(status_code=400, detail="No transcript to summarize.")
+
+    story_result = await db.execute(select(Story).where(Story.id == debate.story_id))
+    story = story_result.scalar_one_or_none()
+    story_title = (story.title if story else "") or "the story"
+    ledger = _LedgerView(debate.ledger_snapshot)
+    divergence = debate.divergence_description or ""
+
+    async def stream():
+        def sse(event: str, data: dict):
+            return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+        summary = ""
+        try:
+            yield sse("summary_start", {"message": "Summarizing the debate..."})
+            async for token in synthesize_debate_summary_stream(
+                story_title=story_title,
+                divergence_description=divergence,
+                debate_transcript=transcript,
+                ledger=ledger,
+            ):
+                summary += token
+                yield sse("summary_token", {"text": token})
+        except Exception as e:
+            logger.warning(f"Summary regenerate failed: {e}")
+            yield sse("error", {"message": str(e)})
+            return
+
+        if summary.strip():
+            sm = get_session_maker()
+            async with sm() as db2:
+                d = (await db2.execute(select(Debate).where(Debate.id == debate_id))).scalar_one()
+                d.alternate_ending = summary
+                await db2.commit()
+
+        yield sse("summary_end", {"debate_summary": summary})
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
 @router.delete("/{debate_id}")
 async def delete_debate(debate_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Debate).where(Debate.id == debate_id))

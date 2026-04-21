@@ -81,6 +81,10 @@ export default function DebateViewPage() {
   const isDraggingRef     = useRef(false);
   const bottomRef         = useRef<HTMLDivElement>(null);
 
+  // Graph focus: click a node → spotlight its outgoing edges
+  const focusedNodeIdRef = useRef<string | null>(null);
+  const [, setFocusedNodeId] = useState<string | null>(null);
+
   const [chatMessages, setChatMessages] = useState<{role:"user"|"assistant";content:string}[]>([]);
   const [chatInput, setChatInput]       = useState("");
   const [chatLoading, setChatLoading]   = useState(false);
@@ -241,16 +245,30 @@ export default function DebateViewPage() {
       panRef.current.y = my - (my - panRef.current.y) * (newZoom / zoomRef.current);
       zoomRef.current = newZoom;
     };
+    let mouseDownX = 0, mouseDownY = 0, mouseMoved = false;
     const onCanvasDown = (e: MouseEvent) => {
+      mouseDownX = e.clientX; mouseDownY = e.clientY; mouseMoved = false;
       graphDragRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: panRef.current.x, py: panRef.current.y };
       canvas.style.cursor = "grabbing";
     };
     const onDragMove = (e: MouseEvent) => {
       if (!graphDragRef.current.active) return;
+      if (!mouseMoved && Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) > 3) mouseMoved = true;
       panRef.current.x = graphDragRef.current.px + (e.clientX - graphDragRef.current.sx);
       panRef.current.y = graphDragRef.current.py + (e.clientY - graphDragRef.current.sy);
     };
-    const onDragUp = () => { graphDragRef.current.active = false; canvas.style.cursor = "grab"; };
+    const onDragUp = (e: MouseEvent) => {
+      graphDragRef.current.active = false;
+      canvas.style.cursor = "grab";
+      if (mouseMoved) return;
+      const rect = canvas.getBoundingClientRect();
+      const wx = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
+      const wy = (e.clientY - rect.top - panRef.current.y) / zoomRef.current;
+      const hit = graphNodesRef.current.find(n => Math.hypot(wx - n.x, wy - n.y) <= n.r + 4);
+      const next = hit ? (focusedNodeIdRef.current === hit.id ? null : hit.id) : null;
+      focusedNodeIdRef.current = next;
+      setFocusedNodeId(next);
+    };
 
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("mousedown", onCanvasDown);
@@ -309,9 +327,11 @@ export default function DebateViewPage() {
       ctx.scale(zoomRef.current, zoomRef.current);
 
       // Edges — parallel strand bundle (one strand per interaction)
+      const focused = focusedNodeIdRef.current;
       for (const e of edges) {
         const src = nodes.find(n => n.id === e.source), tgt = nodes.find(n => n.id === e.target);
         if (!src || !tgt) continue;
+        const focusAlpha = focused ? (e.source === focused ? 1 : 0.3) : 1;
         const dx = tgt.x - src.x, dy = tgt.y - src.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
         const ux = dx/d, uy = dy/d;
@@ -337,7 +357,7 @@ export default function DebateViewPage() {
           const txe = tgt.x - ux * tgt.r + px * strandOff * 0.4;
           const tye = tgt.y - uy * tgt.r + py * strandOff * 0.4;
           const edgeFade = 1 - Math.abs(si - (strandCount - 1) / 2) / (strandCount * 0.8);
-          const alpha = Math.min(0.55 + edgeFade * 0.35, 0.9);
+          const alpha = Math.min(0.55 + edgeFade * 0.35, 0.9) * focusAlpha;
           ctx.save();
           ctx.beginPath(); ctx.moveTo(sxe, sye); ctx.quadraticCurveTo(cpX, cpY, txe, tye);
           ctx.strokeStyle = col + Math.round(alpha * 255).toString(16).padStart(2, "0");
@@ -353,7 +373,8 @@ export default function DebateViewPage() {
         const txe0 = tgt.x - ux * tgt.r, tye0 = tgt.y - uy * tgt.r;
         const arrowDx = txe0 - cpX0, arrowDy = tye0 - cpY0;
         const arrowD = Math.sqrt(arrowDx*arrowDx + arrowDy*arrowDy) || 1;
-        ctx.fillStyle = col + "cc";
+        const arrowAlpha = Math.round(0.8 * focusAlpha * 255).toString(16).padStart(2, "0");
+        ctx.fillStyle = col + arrowAlpha;
         drawArrow(ctx, txe0, tye0, arrowDx/arrowD, arrowDy/arrowD, isBoruEdge ? 9 : 7);
       }
 

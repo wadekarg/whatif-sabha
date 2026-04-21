@@ -63,6 +63,31 @@ function classifySpeechAct(message: string, targetCharacters: string[]): SpeechA
   return "response";
 }
 
+function LedgerSection({ title, count, badge, defaultOpen, empty, children }: {
+  title: string; count: number; badge?: React.ReactNode; defaultOpen: boolean;
+  empty: string; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-white/10 rounded-xl overflow-hidden bg-white/5">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors text-left">
+        <span className="text-[10px] text-white/50 uppercase tracking-widest font-semibold">{title}</span>
+        {count > 0 && <span className="text-[10px] bg-white/10 text-white/70 px-1.5 py-0.5 rounded-full font-medium">{count}</span>}
+        {badge && <span className="text-[10px] ml-auto">{badge}</span>}
+        <span className={`text-white/30 text-xs transition-transform ${open ? "" : "-rotate-90"}`}>▾</span>
+      </button>
+      {open && (
+        <div className="px-2 pb-2 space-y-1.5">
+          {count === 0 && empty ? (
+            <p className="text-xs text-white/30 italic py-2 px-1">{empty}</p>
+          ) : children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DebateViewPage() {
   const { id, debateId } = useParams<{ id: string; debateId: string }>();
 
@@ -77,11 +102,15 @@ export default function DebateViewPage() {
   const [oracleHistory, setOracleHistory] = useState<{role:string;content:string;character?:string}[]>([]);
   const [oracleStreaming, setOracleStreaming] = useState("");
   const [oracleLoading, setOracleLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"graph"|"heatmap"|"emotions">("graph");
+  const [activeTab, setActiveTab] = useState<"graph"|"heatmap"|"emotions"|"ledger"|"positions">("graph");
   const [splitPct, setSplitPct] = useState(42);
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef     = useRef(false);
   const bottomRef         = useRef<HTMLDivElement>(null);
+
+  // Graph focus: click a node → spotlight its outgoing edges
+  const focusedNodeIdRef = useRef<string | null>(null);
+  const [, setFocusedNodeId] = useState<string | null>(null);
 
   const [chatMessages, setChatMessages] = useState<{role:"user"|"assistant";content:string}[]>([]);
   const [chatInput, setChatInput]       = useState("");
@@ -198,6 +227,51 @@ export default function DebateViewPage() {
       .catch(() => setLoading(false));
   }, [debateId]);
 
+  // Summary regeneration
+  const [regenerating, setRegenerating] = useState(false);
+  const [streamingSummary, setStreamingSummary] = useState("");
+  const regenerateSummary = async () => {
+    if (regenerating) return;
+    setRegenerating(true);
+    setStreamingSummary("");
+    try {
+      const res = await fetch(`${API}/debates/${debateId}/summary/regenerate`, { method: "POST" });
+      if (!res.ok || !res.body) throw new Error(`Regenerate failed ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "", acc = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const chunks = buf.split("\n\n");
+        buf = chunks.pop() || "";
+        for (const chunk of chunks) {
+          const lines = chunk.split("\n");
+          let ev = "", data = "";
+          for (const l of lines) {
+            if (l.startsWith("event: ")) ev = l.slice(7).trim();
+            else if (l.startsWith("data: ")) data = l.slice(6);
+          }
+          if (!ev) continue;
+          try {
+            const payload = JSON.parse(data || "{}");
+            if (ev === "summary_token") { acc += payload.text || ""; setStreamingSummary(acc); }
+            else if (ev === "summary_end") {
+              const final = payload.debate_summary || acc;
+              setDebate((d: any) => d ? { ...d, alternate_ending: final } : d);
+              setStreamingSummary("");
+            } else if (ev === "error") { console.error("Summary regen error:", payload.message); }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.error("Summary regenerate failed:", e);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   // Build graph once canvas is ready + debate loaded
   useEffect(() => {
     if (!debate || graphReady.current) return;
@@ -233,16 +307,32 @@ export default function DebateViewPage() {
       panRef.current.y = my - (my - panRef.current.y) * (newZoom / zoomRef.current);
       zoomRef.current = newZoom;
     };
+    // Track if a mousedown→up was a genuine click (no drag) so we can node-hit-test.
+    let mouseDownX = 0, mouseDownY = 0, mouseMoved = false;
     const onCanvasDown = (e: MouseEvent) => {
+      mouseDownX = e.clientX; mouseDownY = e.clientY; mouseMoved = false;
       graphDragRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: panRef.current.x, py: panRef.current.y };
       canvas.style.cursor = "grabbing";
     };
     const onDragMove = (e: MouseEvent) => {
       if (!graphDragRef.current.active) return;
+      if (!mouseMoved && Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) > 3) mouseMoved = true;
       panRef.current.x = graphDragRef.current.px + (e.clientX - graphDragRef.current.sx);
       panRef.current.y = graphDragRef.current.py + (e.clientY - graphDragRef.current.sy);
     };
-    const onDragUp = () => { graphDragRef.current.active = false; canvas.style.cursor = "grab"; };
+    const onDragUp = (e: MouseEvent) => {
+      graphDragRef.current.active = false;
+      canvas.style.cursor = "grab";
+      if (mouseMoved) return;
+      // Genuine click — hit-test nodes in world coordinates
+      const rect = canvas.getBoundingClientRect();
+      const wx = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
+      const wy = (e.clientY - rect.top - panRef.current.y) / zoomRef.current;
+      const hit = graphNodesRef.current.find(n => Math.hypot(wx - n.x, wy - n.y) <= n.r + 4);
+      const next = hit ? (focusedNodeIdRef.current === hit.id ? null : hit.id) : null;
+      focusedNodeIdRef.current = next;
+      setFocusedNodeId(next);
+    };
 
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("mousedown", onCanvasDown);
@@ -301,9 +391,12 @@ export default function DebateViewPage() {
       ctx.scale(zoomRef.current, zoomRef.current);
 
       // Edges — parallel strand bundle (one strand per interaction)
+      const focused = focusedNodeIdRef.current;
       for (const e of edges) {
         const src = nodes.find(n => n.id === e.source), tgt = nodes.find(n => n.id === e.target);
         if (!src || !tgt) continue;
+        // Focus dimming: when a node is selected, highlight ONLY its outgoing edges.
+        const focusAlpha = focused ? (e.source === focused ? 1 : 0.3) : 1;
         const dx = tgt.x - src.x, dy = tgt.y - src.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
         const ux = dx/d, uy = dy/d;
@@ -329,7 +422,7 @@ export default function DebateViewPage() {
           const txe = tgt.x - ux * tgt.r + px * strandOff * 0.4;
           const tye = tgt.y - uy * tgt.r + py * strandOff * 0.4;
           const edgeFade = 1 - Math.abs(si - (strandCount - 1) / 2) / (strandCount * 0.8);
-          const alpha = Math.min(0.55 + edgeFade * 0.35, 0.9);
+          const alpha = Math.min(0.55 + edgeFade * 0.35, 0.9) * focusAlpha;
           ctx.save();
           ctx.beginPath(); ctx.moveTo(sxe, sye); ctx.quadraticCurveTo(cpX, cpY, txe, tye);
           ctx.strokeStyle = col + Math.round(alpha * 255).toString(16).padStart(2, "0");
@@ -345,7 +438,8 @@ export default function DebateViewPage() {
         const txe0 = tgt.x - ux * tgt.r, tye0 = tgt.y - uy * tgt.r;
         const arrowDx = txe0 - cpX0, arrowDy = tye0 - cpY0;
         const arrowD = Math.sqrt(arrowDx*arrowDx + arrowDy*arrowDy) || 1;
-        ctx.fillStyle = col + "cc";
+        const arrowAlpha = Math.round(0.8 * focusAlpha * 255).toString(16).padStart(2, "0");
+        ctx.fillStyle = col + arrowAlpha;
         drawArrow(ctx, txe0, tye0, arrowDx/arrowD, arrowDy/arrowD, isBoruEdge ? 9 : 7);
       }
 
@@ -768,12 +862,50 @@ export default function DebateViewPage() {
                 >
                   <span className="text-[#f0c060]">✦</span> Read the Alternate Ending
                 </button>
-                <Link
-                  href={`/story/${id}/debate`}
-                  className="block text-center text-xs text-[#a09282] hover:text-[#6b5c4e] transition-colors py-1"
+                <button
+                  onClick={regenerateSummary}
+                  disabled={regenerating}
+                  className="block w-full text-center text-xs text-[#a09282] hover:text-[#6b5c4e] transition-colors py-1 disabled:opacity-50"
+                >
+                  {regenerating ? "Regenerating summary…" : "↻ Regenerate summary"}
+                </button>
+                <button
+                  onClick={() => { window.location.href = `/story/${id}/debate`; }}
+                  className="block w-full text-center text-xs text-[#a09282] hover:text-[#6b5c4e] transition-colors py-1"
                 >
                   Start another debate →
-                </Link>
+                </button>
+              </div>
+            )}
+            {!debate.alternate_ending && (debate.transcript?.length ?? 0) > 0 && (
+              <div className="mt-8 pt-8 border-t border-[#e8e0d5] space-y-3">
+                {streamingSummary ? (
+                  <div className="py-5 px-5 rounded-2xl border border-[#e8e0d5] bg-white">
+                    <div className="flex items-center gap-2 text-xs text-[#a09282] mb-3 uppercase tracking-widest font-medium">
+                      <span className="animate-pulse text-[#c07820]">✦</span> Summarizing the debate…
+                    </div>
+                    <div className="text-[#2d1f14] leading-relaxed text-sm whitespace-pre-wrap">
+                      {streamingSummary}<span className="animate-pulse text-[#c07820]">▌</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 px-4 rounded-2xl border border-[#e8e0d5] bg-white">
+                    <p className="text-sm text-[#6b5c4e] mb-4">No written summary exists for this debate.</p>
+                    <button
+                      onClick={regenerateSummary}
+                      disabled={regenerating}
+                      className="px-5 py-2.5 rounded-xl bg-[#1c1410] text-white text-sm font-semibold hover:bg-[#2d1f14] transition-colors disabled:opacity-60"
+                    >
+                      {regenerating ? "Summarizing…" : "✦ Summarize this debate"}
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={() => { window.location.href = `/story/${id}/debate`; }}
+                  className="block w-full text-center text-xs text-[#a09282] hover:text-[#6b5c4e] transition-colors py-1"
+                >
+                  Start a new debate →
+                </button>
               </div>
             )}
 
@@ -872,13 +1004,13 @@ export default function DebateViewPage() {
         <div data-print-hide="true" className="flex flex-col overflow-hidden bg-[#09090b]" style={{ flex: 1 }}>
 
           {/* Tab bar */}
-          <div className="shrink-0 flex border-b border-white/10 bg-black/30">
-            {(["graph", "heatmap", "emotions"] as const).map(tab => (
+          <div className="shrink-0 flex border-b border-white/10 bg-black/30 overflow-x-auto">
+            {(["graph", "heatmap", "emotions", "ledger", "positions"] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
+                className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 whitespace-nowrap ${
                   activeTab === tab ? "text-white border-[#c07820]" : "text-white/35 border-transparent hover:text-white/60"
                 }`}>
-                {tab === "graph" ? "⬡ Graph" : tab === "heatmap" ? "▦ Heatmap" : "◉ Emotions"}
+                {tab === "graph" ? "⬡ Graph" : tab === "heatmap" ? "▦ Heatmap" : tab === "emotions" ? "◉ Emotions" : tab === "ledger" ? "📋 Ledger" : "🎭 Positions"}
               </button>
             ))}
           </div>
@@ -921,6 +1053,164 @@ export default function DebateViewPage() {
             {/* Emotions */}
             <div style={{ position:"absolute", inset:0, opacity: activeTab==="emotions"?1:0, pointerEvents: activeTab==="emotions"?"auto":"none", transition:"opacity 0.15s" }}>
               <canvas ref={emotionsCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
+            </div>
+
+            {/* Ledger */}
+            <div className="overflow-y-auto p-3 space-y-2" style={{ position:"absolute", inset:0, opacity: activeTab==="ledger"?1:0, pointerEvents: activeTab==="ledger"?"auto":"none", transition:"opacity 0.15s" }}>
+              {(() => {
+                const snap = debate?.ledger_snapshot || {};
+                const progress: string = snap.progress || "";
+                const openQs: any[] = snap.open_questions || [];
+                const resolvedQs: any[] = snap.resolved_questions || [];
+                const claims: any[] = snap.claims || [];
+                const hasAnything = progress || openQs.length || resolvedQs.length || claims.length;
+
+                if (!hasAnything) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <span className="text-2xl mb-2">🐘</span>
+                      <p className="text-sm text-white/50">No ledger was recorded for this debate.</p>
+                    </div>
+                  );
+                }
+                return (
+                  <>
+                    {progress && (
+                      <div className="border border-[#c07820]/30 rounded-xl px-3 py-2.5" style={{ background: "rgba(192,120,32,0.08)" }}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-sm">🐘</span>
+                          <span className="text-[10px] text-[#f0c060] uppercase tracking-widest font-semibold">Boru&apos;s Notes</span>
+                        </div>
+                        <p className="text-xs text-white/85 leading-relaxed">{progress}</p>
+                      </div>
+                    )}
+
+                    <LedgerSection
+                      title="Open Questions"
+                      count={openQs.length}
+                      badge={<span className="text-amber-400">{openQs.filter((q: any) => q.status === "unanswered").length} unanswered</span>}
+                      defaultOpen={true}
+                      empty="No open questions recorded"
+                    >
+                      {openQs.map((q: any, i: number) => (
+                        <div key={q.id ?? i} className={`border rounded-lg overflow-hidden ${q.status === "unanswered" ? "border-amber-500/30" : "border-white/10"}`}>
+                          <div className={`px-3 py-2 ${q.status === "unanswered" ? "bg-amber-400/5" : "bg-white/5"}`}>
+                            <p className="text-xs text-white/90 leading-relaxed font-medium">{q.question}</p>
+                            <div className="flex items-center gap-1.5 mt-1 text-[10px] text-white/40">
+                              <span>Asked by <span className="font-medium text-white/70">{q.asked_by}</span></span>
+                              {q.directed_to?.length > 0 && (<><span>→</span><span className="font-medium text-white/70">{q.directed_to.join(", ")}</span></>)}
+                              <span className={`ml-auto px-1.5 py-0.5 rounded font-medium ${q.status === "unanswered" ? "text-amber-300 bg-amber-500/10" : q.status === "resolved" ? "text-emerald-300 bg-emerald-500/10" : "text-blue-300 bg-blue-500/10"}`}>{q.status}</span>
+                            </div>
+                          </div>
+                          {q.answers && Object.keys(q.answers).length > 0 && (
+                            <div className="border-t border-white/10 bg-black/20 px-3 py-2 space-y-1.5">
+                              {Object.entries(q.answers).map(([who, answer]: [string, any]) => (
+                                <div key={who} className="flex gap-2 text-[11px]">
+                                  <span className="font-semibold text-white/70 shrink-0">{who}:</span>
+                                  <span className="text-white/85 leading-relaxed">{String(answer)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </LedgerSection>
+
+                    {resolvedQs.length > 0 && (
+                      <LedgerSection
+                        title="Resolved"
+                        count={resolvedQs.length}
+                        badge={<span className="text-emerald-400">✓</span>}
+                        defaultOpen={false}
+                        empty=""
+                      >
+                        {resolvedQs.map((q: any, i: number) => (
+                          <div key={q.id ?? i} className="border border-emerald-500/20 rounded-lg overflow-hidden">
+                            <div className="px-3 py-2 bg-emerald-500/5">
+                              <p className="text-xs text-white/60 leading-relaxed line-through decoration-emerald-400/60">{q.question}</p>
+                            </div>
+                            {q.answers && Object.keys(q.answers).length > 0 && (
+                              <div className="border-t border-emerald-500/10 bg-black/20 px-3 py-2 space-y-1">
+                                {Object.entries(q.answers).map(([who, answer]: [string, any]) => (
+                                  <div key={who} className="flex gap-2 text-[11px]">
+                                    <span className="font-semibold text-emerald-300 shrink-0">{who}:</span>
+                                    <span className="text-white/70">{String(answer)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </LedgerSection>
+                    )}
+
+                    {claims.length > 0 && (
+                      <LedgerSection
+                        title="Claims & Disputes"
+                        count={claims.length}
+                        badge={<span className="text-[#f0c060]">{claims.filter((c: any) => c.status === "disputed").length} disputed</span>}
+                        defaultOpen={true}
+                        empty=""
+                      >
+                        {claims.map((c: any, i: number) => (
+                          <div key={i} className={`border rounded-lg px-3 py-2 ${c.status === "disputed" ? "border-red-500/30 bg-red-500/5" : c.status === "resolved" ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10 bg-white/5"}`}>
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-xs font-bold text-white/90 shrink-0">{c.character}:</span>
+                              <span className="text-xs text-white/75 leading-relaxed">&ldquo;{c.claim}&rdquo;</span>
+                            </div>
+                            {c.challenged_by?.length > 0 && (
+                              <div className="mt-1.5 pl-2 border-l-2 border-red-500/30">
+                                <span className="text-[10px] text-red-300 font-medium">Challenged by {c.challenged_by.join(", ")}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-end mt-1">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${c.status === "disputed" ? "text-red-300 bg-red-500/10" : c.status === "resolved" ? "text-emerald-300 bg-emerald-500/10" : "text-white/50 bg-white/5"}`}>{c.status}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </LedgerSection>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Positions */}
+            <div className="overflow-y-auto p-4 space-y-3" style={{ position:"absolute", inset:0, opacity: activeTab==="positions"?1:0, pointerEvents: activeTab==="positions"?"auto":"none", transition:"opacity 0.15s" }}>
+              {(() => {
+                const positions: Record<string, string> = debate?.ledger_snapshot?.positions || {};
+                const chars: string[] = debate?.participating_characters || [];
+                const entries = chars.map((name, i) => ({ name, i, pos: positions[name] })).filter(x => x.pos);
+                if (entries.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <span className="text-2xl mb-2">🎭</span>
+                      <p className="text-sm text-white/50">No character positions recorded.</p>
+                    </div>
+                  );
+                }
+                return entries.map(({ name, i, pos }) => {
+                  const col = CHAR_COLORS[i % CHAR_COLORS.length];
+                  const stats = graphStats.find(g => g.id === name);
+                  return (
+                    <div key={name} className="bg-white/5 border border-white/10 rounded-xl p-3.5">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs"
+                          style={{ backgroundColor: col.hex }}>
+                          {name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-white/90">{name}</span>
+                        </div>
+                        {stats && (
+                          <span className="text-[10px] text-white/40 shrink-0">{stats.speeches} turns</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/75 leading-relaxed">{pos}</p>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
 
@@ -973,7 +1263,7 @@ export default function DebateViewPage() {
                 >
                   📥 Export PDF
                 </button>
-                <Link href={`/story/${id}/debate`} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">New debate →</Link>
+                <button onClick={() => { window.location.href = `/story/${id}/debate`; }} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">New debate →</button>
                 <button onClick={() => setShowConclusion(false)} className="text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-colors">← Back</button>
               </div>
             </div>

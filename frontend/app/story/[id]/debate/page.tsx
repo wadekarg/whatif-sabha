@@ -329,6 +329,49 @@ export default function DebatePage() {
     setSummaryLoading(false);
   };
 
+  const [regenerating, setRegenerating] = useState(false);
+  const regenerateSummary = async () => {
+    const did = debateIdRef.current || debateId;
+    if (!did || regenerating) return;
+    setRegenerating(true);
+    setStreamingSummary("");
+    setDebateSummary("");
+    try {
+      const res = await fetch(`${API}/debates/${did}/summary/regenerate`, { method: "POST" });
+      if (!res.ok || !res.body) throw new Error(`Regenerate failed ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let acc = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const chunks = buf.split("\n\n");
+        buf = chunks.pop() || "";
+        for (const chunk of chunks) {
+          const lines = chunk.split("\n");
+          let ev = "", data = "";
+          for (const l of lines) {
+            if (l.startsWith("event: ")) ev = l.slice(7).trim();
+            else if (l.startsWith("data: ")) data = l.slice(6);
+          }
+          if (!ev) continue;
+          try {
+            const payload = JSON.parse(data || "{}");
+            if (ev === "summary_token") { acc += payload.text || ""; setStreamingSummary(acc); }
+            else if (ev === "summary_end") { setDebateSummary(payload.debate_summary || acc); setStreamingSummary(""); }
+            else if (ev === "error") { console.error("Summary regen error:", payload.message); }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.error("Summary regenerate failed:", e);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -348,6 +391,8 @@ export default function DebatePage() {
   const graphEdgesRef       = useRef<GraphEdge[]>([]);
   const activeNodeRef       = useRef<string | null>(null);
   const d3SimRef            = useRef<d3.Simulation<GraphNode, any> | null>(null);
+  // Graph focus: click a node → spotlight its outgoing edges
+  const focusedNodeIdRef    = useRef<string | null>(null);
   const [graphStats, setGraphStats] = useState<{id: string; color: string; speeches: number}[]>([]);
   const [ledgerState, setLedgerState] = useState<{
     open_questions: any[]; resolved_questions: any[]; claims: any[];
@@ -762,14 +807,17 @@ export default function DebatePage() {
           pathsData += `M${sxi},${syi} Q${cpXi},${cpYi} ${txi},${tyi} `;
         }
 
+        const focused = focusedNodeIdRef.current;
+        const focusAlpha = focused ? (e.sourceId === focused ? 1 : 0.3) : 1;
+
         el.select("path")
           .attr("d", pathsData.trim() || `M${src.x},${src.y} L${tgt.x},${tgt.y}`)
           .attr("stroke", col)
           .attr("stroke-width", 1.5)
           .attr("stroke-dasharray", "none")
-          .attr("opacity", isBoruEdge
+          .attr("opacity", (isBoruEdge
             ? Math.min(0.6 + responseCount * 0.05, 0.9)
-            : (hasResponses ? Math.min(0.35 + responseCount * 0.06, 0.75) : 0));
+            : (hasResponses ? Math.min(0.35 + responseCount * 0.06, 0.75) : 0)) * focusAlpha);
 
         // Draw question strands (dotted, slightly offset)
         if (questionCount > 0) {
@@ -795,7 +843,7 @@ export default function DebatePage() {
             .attr("stroke", col)
             .attr("stroke-width", 1.5)
             .attr("stroke-dasharray", isBoruEdge ? "none" : "4,3")
-            .attr("opacity", Math.min(0.4 + questionCount * 0.1, 0.8));
+            .attr("opacity", Math.min(0.4 + questionCount * 0.1, 0.8) * focusAlpha);
         } else {
           el.select("path.q-strand").remove();
         }
@@ -821,7 +869,7 @@ export default function DebatePage() {
         el.select("polygon.arrow")
           .attr("points", `${tx0},${ty0} ${a1x},${a1y} ${a2x},${a2y}`)
           .attr("fill", col)
-          .attr("opacity", isBoruEdge ? 0.95 : 0.7);
+          .attr("opacity", (isBoruEdge ? 0.95 : 0.7) * focusAlpha);
 
         // Label
         const labelX = 0.25 * sx0 + 0.5 * cpX0 + 0.25 * tx0;
@@ -841,6 +889,12 @@ export default function DebatePage() {
       const nodesEnter = nodesSel.enter().append("g").attr("class", "node")
         .attr("filter", "url(#node-shadow)")
         .style("cursor", "pointer")
+        .on("click", (event, d) => {
+          event.stopPropagation();
+          const cur = focusedNodeIdRef.current;
+          focusedNodeIdRef.current = cur === d.id ? null : d.id;
+          render();
+        })
         .call(d3.drag<SVGGElement, GraphNode>()
           .on("start", (event, d) => {
             if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -939,6 +993,14 @@ export default function DebatePage() {
       simulation.alpha(0.1).restart();
     };
     window.addEventListener("resize", onResize);
+
+    // Click on empty SVG background clears node focus
+    svg.on("click", () => {
+      if (focusedNodeIdRef.current) {
+        focusedNodeIdRef.current = null;
+        render();
+      }
+    });
 
     // Tooltip on edge hover
     svg.on("mousemove", (event: MouseEvent) => {
@@ -2149,25 +2211,39 @@ export default function DebatePage() {
                 >
                   <span className="text-[#f0c060]">&#9670;</span> Read the Debate Summary
                 </button>
-                <Link
-                  href={`/story/${id}/debate`}
-                  className="block text-center text-sm text-[#a09282] hover:text-[#6b5c4e] transition-colors py-2 font-medium"
+                <button
+                  onClick={regenerateSummary}
+                  disabled={regenerating}
+                  className="block w-full text-center text-xs text-[#a09282] hover:text-[#6b5c4e] transition-colors py-1.5 disabled:opacity-50"
+                >
+                  {regenerating ? "Regenerating summary…" : "↻ Regenerate summary"}
+                </button>
+                <button
+                  onClick={() => { window.location.href = `/story/${id}/debate`; }}
+                  className="block w-full text-center text-sm text-[#a09282] hover:text-[#6b5c4e] transition-colors py-2 font-medium"
                 >
                   Start another debate →
-                </Link>
+                </button>
               </div>
             )}
             {status === "done" && !debateSummary && !alternateEnding && transcript.length > 0 && (
               <div className="mt-8 pt-8 border-t border-[#e8e0d5] space-y-3">
                 <div className="text-center py-6 px-4 rounded-2xl border border-[#e8e0d5] bg-white">
-                  <p className="text-sm text-[#6b5c4e]">No written summary was generated for this debate.</p>
+                  <p className="text-sm text-[#6b5c4e] mb-4">No written summary was generated for this debate.</p>
+                  <button
+                    onClick={regenerateSummary}
+                    disabled={regenerating}
+                    className="px-5 py-2.5 rounded-xl bg-[#1c1410] text-white text-sm font-semibold hover:bg-[#2d1f14] transition-colors disabled:opacity-60"
+                  >
+                    {regenerating ? "Summarizing…" : "✦ Summarize this debate"}
+                  </button>
                 </div>
-                <Link
-                  href={`/story/${id}/debate`}
-                  className="block text-center text-sm text-[#a09282] hover:text-[#6b5c4e] transition-colors py-2 font-medium"
+                <button
+                  onClick={() => { window.location.href = `/story/${id}/debate`; }}
+                  className="block w-full text-center text-sm text-[#a09282] hover:text-[#6b5c4e] transition-colors py-2 font-medium"
                 >
                   Start a new debate →
-                </Link>
+                </button>
               </div>
             )}
 
@@ -2694,7 +2770,7 @@ export default function DebatePage() {
           <div className="shrink-0 border-b border-[#e8e0d5] flex items-center justify-between px-8 py-3" style={{ background: "rgba(247,243,237,0.97)", backdropFilter: "blur(12px)" }}>
             <span className="text-[#c07820] font-bold text-sm tracking-wider">✦ WhatIfSabha</span>
             <div className="flex items-center gap-2">
-              <Link href={`/story/${id}/debate`} className="text-sm text-[#6b5c4e] hover:text-[#1c1410] border border-[#e8e0d5] hover:border-[#c8b89a] px-4 py-2 rounded-lg transition-colors font-medium">New debate →</Link>
+              <button onClick={() => { window.location.href = `/story/${id}/debate`; }} className="text-sm text-[#6b5c4e] hover:text-[#1c1410] border border-[#e8e0d5] hover:border-[#c8b89a] px-4 py-2 rounded-lg transition-colors font-medium">New debate →</button>
               <button onClick={() => setShowConclusion(false)} className="text-sm text-[#6b5c4e] hover:text-[#1c1410] border border-[#e8e0d5] hover:border-[#c8b89a] px-4 py-2 rounded-lg transition-colors font-medium">← Back</button>
             </div>
           </div>
