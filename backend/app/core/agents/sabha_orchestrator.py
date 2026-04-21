@@ -1191,6 +1191,46 @@ def intended_speaker_from_result(
     return _extract_strong_vocative(message, cast_names)
 
 
+# Style rotation for Boru's invite / respond events — breaks the "X's claim
+# about Y prompts a question for Z" template rut by rotating forms.
+_BORU_STYLES: dict[str, str] = {
+    "bare": (
+        "STYLE: BARE QUESTION. Drop all setup. Just address the character by name and ask the question. "
+        "No recap, no preamble. Example: \"@Benjamin — when the dogs go hungry, whose boot do they answer?\""
+    ),
+    "bridge": (
+        "STYLE: BRIDGE. Name what two earlier speakers said (one phrase each) and throw the fork at a third. "
+        "Example: \"Napoleon said fear feeds loyalty. Snowball said fear starves it. Boxer — where do YOU stand?\""
+    ),
+    "silence_break": (
+        "STYLE: SILENCE BREAK. Note that the invited character has been quiet, "
+        "then pull them in with ONE pointed question. Example: "
+        "\"Clover has watched all of this without a word. Clover — what have you been counting in your head?\""
+    ),
+    "provocation": (
+        "STYLE: PROVOCATION. Skip the question mark entirely. Give the character a sharp statement or dare to react to. "
+        "Example: \"@Squealer. You'd lie about the weather if it helped the pigs. Prove me wrong.\""
+    ),
+    "observation": (
+        "STYLE: OBSERVATION. Open with ONE short observation about the room, the mood, or the fault line. "
+        "Then address the character and ask. Example: "
+        "\"The room's gone quiet on the food question. @Benjamin — what is nobody willing to say out loud?\""
+    ),
+}
+
+
+def _pick_boru_style() -> str:
+    """Pick a random orchestrator style.
+
+    Purely random — over many turns in a debate, all five styles surface
+    roughly equally. Cheaper and just as effective as history-aware rotation,
+    because the style's INSTRUCTION is what varies Boru's output, not the
+    picking logic.
+    """
+    import random
+    return random.choice(list(_BORU_STYLES.keys()))
+
+
 async def generate_orchestrator_message(
     ledger: ArgumentLedger,
     current_phase: str,
@@ -1219,14 +1259,22 @@ async def generate_orchestrator_message(
         ),
         "opening_with_invite": (
             f"This is the GRAND OPENING of the Sabha. You are Boru the Elephant, Speaker of the Sabha. "
-            f"Do TWO things ONLY: "
+            f"Do THREE things ONLY: "
             f"1. Introduce yourself — who you are, your role as Speaker. Show personality. "
             f"2. State today's topic by quoting the user's exact question VERBATIM: "
             f"\"{context.get('divergence', ledger.divergence)}\" "
             f"You MUST include this exact text in quotes in your opening. Do NOT paraphrase, do NOT reword, "
             f"do NOT simplify. If the user asks about 'Snowball creating an egalitarian society on another farm' "
-            f"you must say those words. After the quote you may add one sentence of reaction. "
-            f"3-4 sentences total. Grand, warm, with elephant wisdom."
+            f"you must say those words. "
+            + (
+                f"3. Anchor the world as it now stands — state this FACT plainly and present-tense: "
+                f"\"{context.get('world_anchor')}\" "
+                f"Weave it in naturally (not as a quote) so everyone understands the debate happens "
+                f"in the WAKE of this change, not before it. "
+                if context.get("world_anchor") else ""
+            )
+            + f"After the quote and anchor you may add one sentence of reaction. "
+            f"4-5 sentences total. Grand, warm, with elephant wisdom."
         ),
         "invite_multiple": (
             f"You are inviting MULTIPLE characters to speak in this round: {', '.join(context.get('speakers', []))}. "
@@ -1465,6 +1513,11 @@ async def generate_orchestrator_message(
     }
 
     instruction = event_instructions.get(event_type, "Moderate the debate. 1-2 sentences.")
+
+    # Style rotation for bridging events — breaks the "X's claim about Y prompts
+    # a question for Z" template rut.
+    if event_type in ("invite_speaker", "respond_to_character"):
+        instruction = instruction + "\n\n" + _BORU_STYLES[_pick_boru_style()]
 
     # Anti-repetition: remind Boru what his last few openings were
     recent_openers = _extract_recent_boru_openers(transcript, limit=5)

@@ -159,11 +159,43 @@ def _summarize_own_arguments(character_name, debate_history):
     )
 
 
+def _world_state_block(character_name: str, world_state: dict | None) -> str:
+    """Per-character status injection based on the divergence's world_state.
+
+    Dead → speak from recollection/grave, past or conditional tense.
+    Empowered/weakened → one-line state reminder.
+    Returns "" when no status applies.
+    """
+    if not world_state:
+        return ""
+    if character_name in (world_state.get("dead") or []):
+        return (
+            "\n\n[WORLD STATE] In this what-if, you are DEAD. "
+            "Speak from the grave or in recollection only — past tense or conditional "
+            "(\"I would have…\", \"I said back then…\"). "
+            "Do NOT make active plans for future winters, do NOT give orders, do NOT threaten. "
+            "You are a memory and a voice — not a force in the room."
+        )
+    if character_name in (world_state.get("empowered") or []):
+        return (
+            "\n\n[WORLD STATE] In this what-if, you now HOLD POWER on the farm. "
+            "Speak from that fact — the authority is yours now. "
+            "Do not argue as if you are still the challenger; argue as the one who won."
+        )
+    if character_name in (world_state.get("weakened") or []):
+        return (
+            "\n\n[WORLD STATE] In this what-if, you have LOST POWER — exiled, deposed, or broken. "
+            "Speak from that fact. Your arguments now come from the margin, not the throne."
+        )
+    return ""
+
+
 def _build_turn_prompt(
     character_name,
     debate_history,
     correction_hint=None,
     pending_questions=None,
+    world_state=None,
 ):
     """
     Build a context-aware turn prompt.
@@ -242,6 +274,9 @@ def _build_turn_prompt(
             f"Imagine the specific day, the specific choice, the specific consequence."
         )
         # Don't inflate token budget — pending questions are a nudge, not a direct address
+
+    # ── World-state status (dead / empowered / weakened in this divergence) ──
+    prompt += _world_state_block(character_name, world_state)
 
     # ── In-character reminder — the last nudge before the LLM speaks ──
     prompt += (
@@ -326,6 +361,7 @@ async def character_respond_stream(
     ledger=None,
     current_phase="",
     round_number=0,
+    world_state=None,
 ):
     character["story_title"] = story_title
     system_prompt = build_character_system_prompt(character, phase, divergence)
@@ -402,7 +438,7 @@ async def character_respond_stream(
     if dispute_callout:
         messages.append(HumanMessage(content=dispute_callout))
 
-    turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history, correction_hint, pending_questions)
+    turn_prompt, is_direct = _build_turn_prompt(character["name"], debate_history, correction_hint, pending_questions, world_state=world_state)
 
     # Inject summary of what this character already argued — prevents repetition
     own_summary = _summarize_own_arguments(character["name"], debate_history)

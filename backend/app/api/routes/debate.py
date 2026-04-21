@@ -432,6 +432,21 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     characters = [c for c in all_characters if c["name"] in participating]
     char_names = [c["name"] for c in characters]
 
+    # Classify the divergence into an initial world_state. Baked into Boru's
+    # opening (as an anchor) and injected per-character so that, e.g., a
+    # character killed by the divergence speaks from the grave instead of
+    # planning next winter.
+    from app.core.agents.divergence_classifier import classify_divergence_world_state
+    try:
+        world_state = await classify_divergence_world_state(
+            story_title=story.title or "",
+            divergence=debate.divergence_description or "",
+            char_names=char_names,
+        )
+    except Exception as e:
+        logger.warning(f"World-state classification failed: {e}")
+        world_state = {"dead": [], "empowered": [], "weakened": [], "anchor": ""}
+
     exploration_rates: dict[str, float] = debate.character_exploration or {}
 
     # Build model pool for parallel execution
@@ -1044,7 +1059,11 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 opening_msg, intended = await _generate_boru_message_safely(
                     ledger, current_phase, transcript, characters, story.title or "",
                     event_type="opening_with_invite",
-                    context={"speakers": char_names, "divergence": debate.divergence_description},
+                    context={
+                        "speakers": char_names,
+                        "divergence": debate.divergence_description,
+                        "world_anchor": world_state.get("anchor", ""),
+                    },
                 )
                 if opening_msg:
                     yield sse("orchestrator", {"message": opening_msg, "phase": current_phase, "event": "opening", "target": "all", "intended_speaker": intended})
@@ -1335,6 +1354,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     ledger=ledger,
                     current_phase=current_phase,
                     round_number=round_number,
+                    world_state=world_state,
                 ):
                     if not first_line_extracted:
                         # Buffer tokens until we find the first newline
