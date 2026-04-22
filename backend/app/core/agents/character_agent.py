@@ -160,34 +160,70 @@ def _summarize_own_arguments(character_name, debate_history):
 
 
 def _world_state_block(character_name: str, world_state: dict | None) -> str:
-    """Per-character status injection based on the divergence's world_state.
+    """Per-character world_state injection.
 
-    Dead → speak from recollection/grave, past or conditional tense.
-    Empowered/weakened → one-line state reminder.
-    Returns "" when no status applies.
+    Every character gets the anchor so the whole room speaks in the wake of the
+    divergence, not as if it's still being debated. The character's OWN status
+    (dead / empowered / weakened) gets an additional instruction shaping their
+    voice: a dead character still gets the mic but speaks as a ghost — allowed
+    to foretell what the living will do in their absence, forbidden from
+    first-person future action for themselves.
     """
     if not world_state:
         return ""
+
+    parts: list[str] = []
+
+    anchor = (world_state.get("anchor") or "").strip()
+    if anchor:
+        parts.append(
+            "[WORLD STATE OF THIS DEBATE]\n"
+            f"{anchor}\n"
+            "Every animal in this room knows this is already true. "
+            "The debate is about what comes AFTER this, not whether it should happen."
+        )
+
     if character_name in (world_state.get("dead") or []):
-        return (
-            "\n\n[WORLD STATE] In this what-if, you are DEAD. "
-            "Speak from the grave or in recollection only — past tense or conditional "
-            "(\"I would have…\", \"I said back then…\"). "
-            "Do NOT make active plans for future winters, do NOT give orders, do NOT threaten. "
-            "You are a memory and a voice — not a force in the room."
+        parts.append(
+            "[YOUR OWN STATUS — YOU ARE DEAD IN THIS WORLD]\n"
+            "You speak from the grave. You are a ghost, a memory, a voice the "
+            "living can still hear but cannot obey. You are here to judge, warn, "
+            "foretell, and accuse — not to act.\n"
+            "\n"
+            "ALLOWED:\n"
+            "  • Recall what YOU once said or did, in past tense — \"I drowned the traitors\", "
+            "    \"I said then the dogs would turn\", \"I would have fed the loyal first\".\n"
+            "  • FORETELL what the living will do in your absence. Use the third person "
+            "    and name them — \"Squealer will rewrite the commandments\", "
+            "    \"Snowball's dogs will turn on each other by the first frost\", "
+            "    \"Boxer will break before the winter ends\". You may prophesy freely.\n"
+            "  • Curse, warn, lament, or accuse — as a ghost may.\n"
+            "\n"
+            "FORBIDDEN:\n"
+            "  • First-person future or present-action tense for YOUR OWN acts: "
+            "    do NOT say \"I will\", \"I'll\", \"I'm going to\", \"when I\", \"if I return\". "
+            "    You cannot return. You cannot act. Your body is gone.\n"
+            "  • Commands or orders to the living — no \"let them\", \"feed the…\", "
+            "    \"bring me…\". You have no one to order.\n"
+            "  • Threats about what YOU will do to anyone. The threats of a dead "
+            "    animal are the threats of the wind.\n"
+            "\n"
+            "You are the VOICE of the aftermath, not a player in it. Be chilling, "
+            "be wise, be vengeful — but speak as the dead speak."
         )
-    if character_name in (world_state.get("empowered") or []):
-        return (
-            "\n\n[WORLD STATE] In this what-if, you now HOLD POWER on the farm. "
-            "Speak from that fact — the authority is yours now. "
-            "Do not argue as if you are still the challenger; argue as the one who won."
+    elif character_name in (world_state.get("empowered") or []):
+        parts.append(
+            "[YOUR OWN STATUS] You now HOLD POWER on the farm as a result of this change. "
+            "Argue as the one who won, not as the challenger. The authority is yours — "
+            "the challenge now is what you do with it, not whether you should have it."
         )
-    if character_name in (world_state.get("weakened") or []):
-        return (
-            "\n\n[WORLD STATE] In this what-if, you have LOST POWER — exiled, deposed, or broken. "
-            "Speak from that fact. Your arguments now come from the margin, not the throne."
+    elif character_name in (world_state.get("weakened") or []):
+        parts.append(
+            "[YOUR OWN STATUS] You have LOST POWER — exiled, deposed, or broken. "
+            "Speak from the margin, not the throne. You are a witness now, not a mover."
         )
-    return ""
+
+    return ("\n\n" + "\n\n".join(parts)) if parts else ""
 
 
 def _build_turn_prompt(

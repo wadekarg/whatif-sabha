@@ -1258,23 +1258,21 @@ async def generate_orchestrator_message(
             f"Opening the '{current_phase}' phase. 1 sentence setting the tone. No character names."
         ),
         "opening_with_invite": (
-            f"This is the GRAND OPENING of the Sabha. You are Boru the Elephant, Speaker of the Sabha. "
-            f"Do THREE things ONLY: "
-            f"1. Introduce yourself — who you are, your role as Speaker. Show personality. "
-            f"2. State today's topic by quoting the user's exact question VERBATIM: "
-            f"\"{context.get('divergence', ledger.divergence)}\" "
-            f"You MUST include this exact text in quotes in your opening. Do NOT paraphrase, do NOT reword, "
-            f"do NOT simplify. If the user asks about 'Snowball creating an egalitarian society on another farm' "
-            f"you must say those words. "
+            f"This is the GRAND OPENING of the Sabha. You are Boru the Elephant, Speaker of the Sabha.\n"
             + (
-                f"3. Anchor the world as it now stands — state this FACT plainly and present-tense: "
-                f"\"{context.get('world_anchor')}\" "
-                f"Weave it in naturally (not as a quote) so everyone understands the debate happens "
-                f"in the WAKE of this change, not before it. "
+                f"FIRST — anchor the world as it now stands. Open your turn by stating this FACT "
+                f"plainly, in PRESENT TENSE, so the room understands the debate happens in the WAKE "
+                f"of this change, not before it:\n"
+                f"  \"{context.get('world_anchor')}\"\n"
+                f"Weave the fact into your opening words. Do NOT say \"the anchor is\" or quote it in quotes. "
+                f"Do NOT skip this — the debate makes no sense if the room thinks we are discussing a hypothetical.\n\n"
                 if context.get("world_anchor") else ""
             )
-            + f"After the quote and anchor you may add one sentence of reaction. "
-            f"4-5 sentences total. Grand, warm, with elephant wisdom."
+            + f"THEN introduce yourself briefly — who you are, your role as Speaker. Show personality.\n\n"
+            + f"THEN state today's question by quoting the user's exact text VERBATIM:\n"
+            + f"  \"{context.get('divergence', ledger.divergence)}\"\n"
+            + f"You MUST include this exact text in quotes. Do NOT paraphrase, reword, or simplify.\n\n"
+            + f"4-5 sentences total. Grand, warm, with elephant wisdom. Anchor first, then introduction, then quote."
         ),
         "invite_multiple": (
             f"You are inviting MULTIPLE characters to speak in this round: {', '.join(context.get('speakers', []))}. "
@@ -1515,9 +1513,15 @@ async def generate_orchestrator_message(
     instruction = event_instructions.get(event_type, "Moderate the debate. 1-2 sentences.")
 
     # Style rotation for bridging events — breaks the "X's claim about Y prompts
-    # a question for Z" template rut.
+    # a question for Z" template rut. Style is a REPLACEMENT for the default
+    # template, not an addition, so Boru doesn't stack two styles in one turn.
     if event_type in ("invite_speaker", "respond_to_character"):
-        instruction = instruction + "\n\n" + _BORU_STYLES[_pick_boru_style()]
+        instruction = instruction + (
+            "\n\nSTRUCTURE OVERRIDE — you MUST use ONLY the form described below. "
+            "Do NOT combine it with other forms. Do NOT stack two styles in one turn. "
+            "Pick this exact shape and keep to it:\n"
+            + _BORU_STYLES[_pick_boru_style()]
+        )
 
     # Anti-repetition: remind Boru what his last few openings were
     recent_openers = _extract_recent_boru_openers(transcript, limit=5)

@@ -432,6 +432,38 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     characters = [c for c in all_characters if c["name"] in participating]
     char_names = [c["name"] for c in characters]
 
+    # Clean up the raw user divergence for prompt/display use (DB record stays
+    # untouched so we don't rewrite history). Fixes common typos like "what id",
+    # restores capitalization of known character names, and catches fuzzy
+    # misspellings (e.g. "napolean" → "Napoleon").
+    def _normalize_divergence(text: str, names: list[str]) -> str:
+        if not text:
+            return text
+        import difflib
+        s = text.strip()
+        # Obvious typos
+        s = re.sub(r"\bwhat\s+id\b", "what if", s, flags=re.IGNORECASE)
+        # Capitalize first letter
+        if s and s[0].islower():
+            s = s[0].upper() + s[1:]
+        # Exact-match case restoration for known cast names
+        for name in names:
+            s = re.sub(rf"\b{re.escape(name)}\b", name, s, flags=re.IGNORECASE)
+        # Fuzzy match — catches misspellings that slipped past the exact pass
+        lower_names = {n.lower() for n in names}
+        def _fuzzy(match: "re.Match") -> str:
+            word = match.group(0)
+            if word in names or word.lower() in lower_names:
+                return word
+            if len(word) < 4:
+                return word
+            candidates = difflib.get_close_matches(word, names, n=1, cutoff=0.75)
+            return candidates[0] if candidates else word
+        s = re.sub(r"\b[A-Za-z][a-z]{3,}\b", _fuzzy, s)
+        return s
+
+    divergence_clean = _normalize_divergence(debate.divergence_description or "", char_names)
+
     # Classify the divergence into an initial world_state. Baked into Boru's
     # opening (as an anchor) and injected per-character so that, e.g., a
     # character killed by the divergence speaks from the grave instead of
@@ -440,12 +472,20 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     try:
         world_state = await classify_divergence_world_state(
             story_title=story.title or "",
-            divergence=debate.divergence_description or "",
+            divergence=divergence_clean,
             char_names=char_names,
         )
     except Exception as e:
         logger.warning(f"World-state classification failed: {e}")
         world_state = {"dead": [], "empowered": [], "weakened": [], "anchor": ""}
+
+    # world_state is informational — dead characters stay in the rotation but
+    # their per-character prompt tells them to speak from the grave (foretell
+    # what others will do, no first-person-future for themselves). See
+    # character_agent._world_state_block.
+    dead_names: set[str] = set(world_state.get("dead") or [])
+    if dead_names:
+        logger.info(f"Dead characters (will speak as ghosts, not filtered): {sorted(dead_names)}")
 
     exploration_rates: dict[str, float] = debate.character_exploration or {}
 
@@ -1061,10 +1101,18 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     event_type="opening_with_invite",
                     context={
                         "speakers": char_names,
-                        "divergence": debate.divergence_description,
+                        "divergence": divergence_clean,
                         "world_anchor": world_state.get("anchor", ""),
                     },
                 )
+                # Safety net: if Boru dropped the world-state anchor from his opening,
+                # prepend it so the debate still lands in the wake of the divergence.
+                anchor = (world_state.get("anchor") or "").strip()
+                if anchor and opening_msg:
+                    fingerprint = " ".join(anchor.split()[:4]).lower()
+                    if fingerprint and fingerprint not in opening_msg.lower():
+                        opening_msg = f"The Sabha gathers after this: {anchor} " + opening_msg
+                        logger.info(f"Opening anchor missing — prepended for debate {debate_id}")
                 if opening_msg:
                     yield sse("orchestrator", {"message": opening_msg, "phase": current_phase, "event": "opening", "target": "all", "intended_speaker": intended})
                     transcript.append({
@@ -1180,22 +1228,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 }
                 silent = [n for n, t in speaker_turn_counts.items() if t == 0]
                 # Fire when >=40% of the cast is silent OR at least 3 silent characters exist.
-                # In large casts (15+ silent of 19), this triggers aggressively; in small casts
-                # (2 of 3 silent), the ratio check still fires. Avoids the "only 1 silent left"
-                # edge where a single straggler keeps triggering.
                 silent_ratio = len(silent) / max(1, len(characters))
                 if silent_ratio >= 0.4 or len(silent) >= 3:
                     # Cooldown: don't rotate two turns in a row.
-                    # Widened window to 6 and loosened to any _rotation marker,
-                    # letting the trigger condition itself be more assertive.
                     recent_orch = [e for e in transcript[-6:] if e.get("isOrchestrator")]
                     recent_rotation = any(
                         e.get("_rotation") is True
                         for e in recent_orch
                     )
                     if not recent_rotation:
-                        # Pick the silent character at the lowest index of the characters list
-                        # (stable, deterministic — matches how the picker scores ties today)
                         rotate_target = next((c["name"] for c in characters if c["name"] in silent), None)
                         if rotate_target:
                             rotation_msg, intended = await _generate_boru_message_safely(
