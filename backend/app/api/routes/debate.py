@@ -1983,7 +1983,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             debate_summary = ""
             logger.warning(f"Debate summary failed (non-fatal): {e}")
 
-        # Alternate ending + timeline + oracle removed — summary is the conclusion
+        # Alternate ending + timeline removed — summary is the conclusion.
+        # Oracle no longer needs a separately-built alternate_world_state; the
+        # endpoint synthesises one on demand from ledger + summary, so Oracle
+        # is "ready" the moment the debate has a transcript to talk about.
         alternate_timeline = []
         alternate_world_state = {}
 
@@ -1993,7 +1996,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
             "debate_summary": debate_summary,
             "alternate_timeline": alternate_timeline,
             "total_rounds": round_number,
-            "oracle_ready": bool(alternate_world_state),
+            "oracle_ready": bool(transcript),
         })
 
         # Character evolution — run in background after debate ends (tracked)
@@ -2047,6 +2050,46 @@ class OracleRequest(BaseModel):
     history: list[dict] = Field(default=[], max_length=50)
 
 
+def _synthesize_world_state_for_oracle(debate: Debate) -> dict:
+    """Build a minimal alternate_world_state from data we already persisted.
+
+    Used when `alternate_world_state` wasn't written at debate end (the current
+    summary-only flow, where the expensive world-state LLM call was dropped).
+    Ledger positions + summary + open questions give Oracle enough context to
+    answer in-character without another LLM call.
+    """
+    snap = debate.ledger_snapshot or {}
+    positions: dict = snap.get("positions") or {}
+    characters: dict[str, dict] = {}
+    for name in (debate.participating_characters or []):
+        pos = positions.get(name)
+        characters[name] = {
+            "survived": True,
+            "new_role": "unchanged from the original story",
+            "new_beliefs": [pos] if pos else [],
+            "what_they_know": pos or "the full weight of what has happened in the Sabha",
+            "emotional_state": "shaped by what was said in the Sabha",
+            "relationship_changes": {},
+        }
+    summary_text = (debate.alternate_ending or "").strip()
+    world_summary = summary_text[:800] if summary_text else f"A world shaped by: {debate.divergence_description}"
+    return {
+        "world_summary": world_summary,
+        "characters": characters,
+        "world_state": {
+            "power_structure": snap.get("progress") or "",
+            "time_passed": "shortly after the divergence",
+            "major_changes": [],
+            "unresolved_tensions": [
+                q.get("question", "")
+                for q in (snap.get("open_questions") or [])[:3]
+                if q.get("question")
+            ],
+        },
+        "new_events": [],
+    }
+
+
 @router.get("/{debate_id}/oracle")
 async def get_oracle_state(debate_id: str, db: AsyncSession = Depends(get_db)):
     """Return the alternate world state — which characters are queryable and what changed."""
@@ -2054,13 +2097,12 @@ async def get_oracle_state(debate_id: str, db: AsyncSession = Depends(get_db)):
     debate = result.scalar_one_or_none()
     if not debate:
         raise HTTPException(status_code=404, detail="Debate not found.")
-    if not debate.alternate_world_state:
-        raise HTTPException(status_code=404, detail="Oracle not ready — debate may still be running or world state not generated.")
+    world_state = debate.alternate_world_state or _synthesize_world_state_for_oracle(debate)
     return {
         "debate_id": debate_id,
         "divergence": debate.divergence_description,
-        "world_state": debate.alternate_world_state,
-        "queryable_characters": list(debate.alternate_world_state.get("characters", {}).keys()),
+        "world_state": world_state,
+        "queryable_characters": list((world_state.get("characters") or {}).keys()),
     }
 
 
@@ -2076,8 +2118,12 @@ async def oracle_stream(
     debate = result.scalar_one_or_none()
     if not debate:
         raise HTTPException(status_code=404, detail="Debate not found.")
-    if not debate.alternate_world_state:
-        raise HTTPException(status_code=400, detail="Oracle not available — alternate world state not built.")
+    if not (debate.transcript or []):
+        raise HTTPException(status_code=400, detail="No transcript — can't talk to the oracle yet.")
+
+    # Use the persisted world_state if we have it; otherwise synthesize from
+    # ledger + summary (the common case under the summary-only flow).
+    world_state = debate.alternate_world_state or _synthesize_world_state_for_oracle(debate)
 
     story_result = await db.execute(select(Story).where(Story.id == debate.story_id))
     story = story_result.scalar_one_or_none()
@@ -2095,7 +2141,7 @@ async def oracle_stream(
             async for token in oracle_respond_stream(
                 character_name=body.character_name,
                 character_data=character_data,
-                alternate_world_state=debate.alternate_world_state,
+                alternate_world_state=world_state,
                 divergence=debate.divergence_description,
                 story_title=story.title if story else "",
                 question=body.question,
@@ -2328,9 +2374,10 @@ async def get_summary_audio(debate_id: str, db: AsyncSession = Depends(get_db)):
 
 
 class _LedgerView:
-    """Read-only shim that exposes a persisted ledger_snapshot with the same
-    attribute surface `synthesize_debate_summary_stream` reads from ArgumentLedger."""
-    def __init__(self, snapshot: dict | None):
+    """Read-only shim that exposes a persisted ledger_snapshot with the
+    attribute surface both `synthesize_debate_summary_stream` and
+    `generate_orchestrator_message` read from ArgumentLedger."""
+    def __init__(self, snapshot: dict | None, divergence: str = "", character_names: list[str] | None = None):
         s = snapshot or {}
         self.character_positions = s.get("positions") or {}
         self.claims = s.get("claims") or []
@@ -2338,6 +2385,58 @@ class _LedgerView:
         self.resolved_questions = s.get("resolved_questions") or []
         self.disputes = s.get("disputes") or []
         self.progress_summary = s.get("progress") or ""
+        self.divergence = divergence
+        self.character_names = list(character_names or [])
+
+    def to_context(self) -> str:
+        """Mirror ArgumentLedger.to_context() shape closely enough for prompt use."""
+        lines: list[str] = []
+        if self.progress_summary:
+            lines.append(f"PROGRESS: {self.progress_summary}")
+        if self.character_positions:
+            lines.append("POSITIONS:")
+            for name, pos in self.character_positions.items():
+                lines.append(f"  {name}: {pos}")
+        if self.open_questions:
+            lines.append(f"OPEN QUESTIONS ({len(self.open_questions)}):")
+            for q in self.open_questions[:5]:
+                lines.append(f"  - \"{q.get('question', '')[:100]}\" (asked by {q.get('asked_by', '?')})")
+        if self.resolved_questions:
+            lines.append(f"RESOLVED QUESTIONS: {len(self.resolved_questions)}")
+        if self.disputes:
+            unresolved = [d for d in self.disputes if d.get("status") == "unresolved"]
+            lines.append(f"DISPUTES: {len(self.disputes)} total ({len(unresolved)} unresolved)")
+        return "\n".join(lines) if lines else "(ledger is empty)"
+
+    def generate_closing_verdict(self) -> dict:
+        """Mirror ArgumentLedger.generate_closing_verdict()."""
+        total_disputes = len(self.disputes)
+        resolved_d = [d for d in self.disputes if d.get("status") != "unresolved"]
+        unresolved_d = [d for d in self.disputes if d.get("status") == "unresolved"]
+        pairs: dict[tuple, int] = {}
+        for d in self.disputes:
+            a = (d.get("claim_a") or {}).get("character", "?")
+            b = (d.get("claim_b") or {}).get("character", "?")
+            pair = tuple(sorted([a, b]))
+            pairs[pair] = pairs.get(pair, 0) + 1
+        fiercest_pair = max(pairs, key=lambda p: pairs[p]) if pairs else None
+        return {
+            "total_disputes": total_disputes,
+            "resolved_disputes": len(resolved_d),
+            "unresolved_disputes": len(unresolved_d),
+            "unresolved_details": [
+                f"{(d.get('claim_a') or {}).get('character', '?')} vs {(d.get('claim_b') or {}).get('character', '?')}: \"{(d.get('claim_a') or {}).get('claim', '')[:80]}\""
+                for d in unresolved_d[:3]
+            ],
+            "fiercest_pair": list(fiercest_pair) if fiercest_pair else [],
+            "total_questions": len(self.open_questions) + len(self.resolved_questions),
+            "resolved_questions": len(self.resolved_questions),
+            "open_questions_remaining": len(self.open_questions),
+            "open_question_details": [
+                f"\"{q.get('question', '')[:80]}\" (asked by {q.get('asked_by', '?')})"
+                for q in self.open_questions[:3]
+            ],
+        }
 
 
 @router.post("/{debate_id}/summary/regenerate")
@@ -2389,6 +2488,77 @@ async def regenerate_summary(debate_id: str, db: AsyncSession = Depends(get_db))
         yield sse("summary_end", {"debate_summary": summary})
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@router.post("/{debate_id}/closing/regenerate")
+async def regenerate_closing(debate_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate Boru's closing_summary for a debate that never reached it
+    (common when the client disconnected mid-stream). Appends the closing as
+    a Boru orchestrator entry in the transcript and returns the message.
+
+    Safe to call on a debate that already has a closing — a new entry is
+    appended; the frontend can re-fetch to see the latest."""
+    from app.core.agents.sabha_orchestrator import generate_orchestrator_message
+
+    result = await db.execute(select(Debate).where(Debate.id == debate_id))
+    debate = result.scalar_one_or_none()
+    if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+    transcript = list(debate.transcript or [])
+    if not transcript:
+        raise HTTPException(status_code=400, detail="No transcript to close.")
+
+    story_result = await db.execute(select(Story).where(Story.id == debate.story_id))
+    story = story_result.scalar_one_or_none()
+    story_title = (story.title if story else "") or "the story"
+
+    participating = set(debate.participating_characters or [])
+    all_characters = story.analysis.get("characters", []) if story and story.analysis else []
+    characters = [c for c in all_characters if c.get("name") in participating]
+
+    ledger = _LedgerView(
+        debate.ledger_snapshot,
+        divergence=debate.divergence_description or "",
+        character_names=list(participating),
+    )
+    verdict = ledger.generate_closing_verdict()
+
+    try:
+        closing_msg, intended = await generate_orchestrator_message(
+            ledger=ledger,
+            current_phase="closing",
+            transcript=transcript,
+            characters=characters,
+            story_title=story_title,
+            event_type="closing_summary",
+            context=verdict,
+        )
+    except Exception as e:
+        logger.warning(f"Closing regenerate failed for {debate_id}: {e}")
+        raise HTTPException(status_code=500, detail="Closing generation failed.")
+
+    if not closing_msg:
+        raise HTTPException(status_code=500, detail="Closing came back empty.")
+
+    last_round = max((e.get("round", 0) or 0) for e in transcript) if transcript else 0
+    entry = {
+        "character": "Boru",
+        "message": closing_msg,
+        "round": last_round,
+        "phase": "closing",
+        "isOrchestrator": True,
+        "orchestratorEvent": "closing_summary",
+        "intended_speaker": intended,
+    }
+    transcript.append(entry)
+
+    sm = get_session_maker()
+    async with sm() as db2:
+        d = (await db2.execute(select(Debate).where(Debate.id == debate_id))).scalar_one()
+        d.transcript = transcript
+        await db2.commit()
+
+    return {"ok": True, "entry": entry}
 
 
 @router.delete("/{debate_id}")

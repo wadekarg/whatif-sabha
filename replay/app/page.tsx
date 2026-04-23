@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import bundledDebate from "../public/debates/fd512903-c963-4516-b14e-800e27a50966.json";
+import * as d3 from "d3";
+import bundledDebate from "../public/debates/e3a5cbc9-5458-4ef5-a1f2-1247090823cb.json";
 import { exportDebateToPdf } from "./lib/exportDebate";
 
 const REPO_URL = "https://github.com/wadekarg/What-If-Sabha";
@@ -40,9 +41,9 @@ const EMOTION_STYLE: Record<string, { bg: string; label: string; dot: string }> 
 };
 
 type DebateEntry = { character: string; message: string; round: number; target?: string; target_character?: string; target_characters?: string[]; emotion?: string; isObserver?: boolean; observerEra?: string; };
-type GraphNode   = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; };
+type GraphNode = { id: string; x: number; y: number; vx: number; vy: number; r: number; color: string; speeches: number; role: string; shape: string; fx?: number | null; fy?: number | null; };
 type SpeechAct   = "question" | "response" | "statement";
-type GraphEdge   = { source: string; target: string; count: number; questions: number; speech_act?: SpeechAct; };
+type GraphEdge = { source: string | any; target: string | any; sourceId: string; targetId: string; count: number; questions: number; speech_act?: SpeechAct; };
 
 function classifySpeechAct(message: string, targetCharacters: string[]): SpeechAct {
   if (!targetCharacters || targetCharacters.length === 0) return "statement";
@@ -63,6 +64,31 @@ function classifySpeechAct(message: string, targetCharacters: string[]): SpeechA
   return "response";
 }
 
+function LedgerSection({ title, count, badge, defaultOpen, empty, children }: {
+  title: string; count: number; badge?: React.ReactNode; defaultOpen: boolean;
+  empty: string; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-[#e8e0d5] rounded-xl overflow-hidden bg-white">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f3ed] transition-colors text-left">
+        <span className="text-[10px] text-[#a09282] uppercase tracking-widest font-semibold">{title}</span>
+        {count > 0 && <span className="text-[10px] bg-[#f0ebe4] text-[#6b5c4e] px-1.5 py-0.5 rounded-full font-medium">{count}</span>}
+        {badge && <span className="text-[10px] ml-auto">{badge}</span>}
+        <span className={`text-[#c8b89a] text-xs transition-transform ${open ? "" : "-rotate-90"}`}>▾</span>
+      </button>
+      {open && (
+        <div className="px-2 pb-2 space-y-1.5">
+          {count === 0 && empty ? (
+            <p className="text-xs text-[#c8b89a] italic py-2 px-1">{empty}</p>
+          ) : children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DebateViewPage() {
   const [debate, setDebate]     = useState<any>(null);
   const [loading, setLoading]   = useState(true);
@@ -75,7 +101,10 @@ export default function DebateViewPage() {
   const [oracleHistory, setOracleHistory] = useState<{role:string;content:string;character?:string}[]>([]);
   const [oracleStreaming, setOracleStreaming] = useState("");
   const [oracleLoading, setOracleLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"graph"|"heatmap"|"emotions">("graph");
+  const [activeTab, setActiveTab] = useState<"graph"|"ledger"|"positions">("graph");
+  const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(true);
+  const [showStats, setShowStats] = useState(false);
+  const [graphHover, setGraphHover] = useState<{ x: number; y: number; source: string; target: string; count: number; questions: number; snippet: string } | null>(null);
   const [splitPct, setSplitPct] = useState(42);
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef     = useRef(false);
@@ -90,16 +119,13 @@ export default function DebateViewPage() {
   const [chatLoading, setChatLoading]   = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Graph
-  const graphCanvasRef = useRef<HTMLCanvasElement>(null);
-  const graphNodesRef  = useRef<GraphNode[]>([]);
-  const graphEdgesRef  = useRef<GraphEdge[]>([]);
-  const graphAnimRef   = useRef<number>(0);
-  const zoomRef        = useRef(1);
-  const panRef         = useRef({ x: 0, y: 0 });
-  const graphDragRef   = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0 });
-  const heatmapCanvasRef  = useRef<HTMLCanvasElement>(null);
-  const emotionsCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Graph (D3 SVG — matches the live debate page)
+  const graphSvgRef     = useRef<SVGSVGElement>(null);
+  const graphWrapperRef = useRef<HTMLDivElement>(null);
+  const graphNodesRef   = useRef<GraphNode[]>([]);
+  const graphEdgesRef   = useRef<GraphEdge[]>([]);
+  const d3SimRef        = useRef<any>(null);
+  const activeNodeRef   = useRef<string | null>(null);
   const [graphStats, setGraphStats] = useState<{id: string; color: string; speeches: number}[]>([]);
   const graphReady     = useRef(false); // prevent re-building graph on re-renders
 
@@ -122,12 +148,12 @@ export default function DebateViewPage() {
     return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
   }, []);
 
-  // Build graph from full transcript
+  // Build graph from the bundled transcript (D3-friendly shape).
+  // Matches the live page's sync logic.
   const buildGraph = (transcript: DebateEntry[], chars: string[]) => {
-    const canvas = graphCanvasRef.current;
-    if (!canvas) return;
-    const W = canvas.offsetWidth || 500, H = canvas.offsetHeight || 500;
-    canvas.width = W; canvas.height = H;
+    const wrapper = graphWrapperRef.current;
+    const W = wrapper?.clientWidth || 600, H = wrapper?.clientHeight || 400;
+
     graphNodesRef.current = [];
     graphEdgesRef.current = [];
 
@@ -141,55 +167,126 @@ export default function DebateViewPage() {
         const dist = Math.min(W, H) * 0.3;
         node = name === "Boru"
           ? {
-              id: name,
-              x: W / 2, y: H / 2,
-              vx: 0, vy: 0, r: 20, color: hex, speeches: 0,
+              id: name, x: W / 2, y: H / 2, vx: 0, vy: 0,
+              r: 26, color: hex, speeches: 0,
+              role: "speaker", shape: "circle",
             }
           : {
               id: name,
               x: W / 2 + Math.cos(angle) * dist + (Math.random() - 0.5) * 30,
               y: H / 2 + Math.sin(angle) * dist + (Math.random() - 0.5) * 30,
               vx: 0, vy: 0, r: 18, color: hex, speeches: 0,
+              role: "neutral", shape: "circle",
             };
         graphNodesRef.current.push(node);
       }
       return node;
     };
 
-    // Ensure Boru node exists (he may not appear as a speaker if no character addressed him before)
     ensureNode("Boru");
 
-    for (const entry of transcript) {
-      // Skip non-dialogue entries (orchestrator, reactions, stage directions)
-      if ((entry as any).isOrchestrator || (entry as any).isReaction || (entry as any).isStageDirection || (entry as any).isAudience) continue;
-      const node = ensureNode(entry.character);
-      node.speeches++;
-      node.r = Math.min(18 + node.speeches * 1.5, 34);
-      // Backend stores as target_characters (array); frontend SSE stored as targets (array) or target_character (string for backward compat)
-      const targetNames = (entry as any).target_characters || (entry as any).targets ||
-                          ((entry as any).target_character ? [(entry as any).target_character] : []) ||
-                          (entry.target ? [entry.target] : []);
+    for (let i = 0; i < transcript.length; i++) {
+      const entry = transcript[i];
+      if ((entry as any).isReaction || (entry as any).isStageDirection) continue;
 
-      // Create an edge for each target
+      if ((entry as any).isObserver) {
+        const obsNode = ensureNode(entry.character);
+        obsNode.speeches++;
+        obsNode.r = Math.min(14 + obsNode.speeches * 0.5, 18);
+        obsNode.shape = "square";
+        obsNode.color = "#64748b";
+        const primaryTarget = entry.target && entry.target !== entry.character ? entry.target : "Boru";
+        ensureNode(primaryTarget);
+        const existing = graphEdgesRef.current.find(e => e.sourceId === entry.character && e.targetId === primaryTarget);
+        if (existing) { existing.count++; if (primaryTarget !== "Boru") existing.questions++; }
+        else graphEdgesRef.current.push({
+          source: entry.character, target: primaryTarget,
+          sourceId: entry.character, targetId: primaryTarget,
+          count: 1, questions: primaryTarget !== "Boru" ? 1 : 0,
+        });
+        continue;
+      }
+
+      if ((entry as any).isOrchestrator) {
+        const boruNode = graphNodesRef.current.find(n => n.id === "Boru");
+        if (boruNode) {
+          boruNode.speeches++;
+          boruNode.r = Math.min(26 + boruNode.speeches * 0.3, 34);
+        }
+        const allTargets: string[] = [];
+        if ((entry as any).target_characters && Array.isArray((entry as any).target_characters)) {
+          allTargets.push(...((entry as any).target_characters as string[]).filter(t => t !== "Boru" && t !== "all"));
+        } else if ((entry as any).targets && Array.isArray((entry as any).targets)) {
+          allTargets.push(...(entry as any).targets);
+        } else if (entry.target && entry.target !== "Boru" && entry.target !== "all") {
+          allTargets.push(entry.target);
+        }
+        for (const t of allTargets) {
+          ensureNode(t);
+          const existing = graphEdgesRef.current.find(e => e.sourceId === "Boru" && e.targetId === t);
+          if (existing) { existing.count++; }
+          else graphEdgesRef.current.push({
+            source: "Boru", target: t,
+            sourceId: "Boru", targetId: t,
+            count: 1, questions: 0,
+          });
+        }
+        continue;
+      }
+
+      const isAudience = (entry as any).isAudience;
+      const lastNode = ensureNode(entry.character);
+      if (!isAudience) {
+        lastNode.speeches++;
+        lastNode.r = Math.min(18 + lastNode.speeches * 1.5, 34);
+      } else {
+        lastNode.r = 12;
+      }
+
+      let allTargets: string[] = [];
+      if (entry.target_characters && entry.target_characters.length > 0) {
+        allTargets = entry.target_characters.filter(t => t !== entry.character && t !== "all");
+      } else if (entry.target && entry.target !== "all") {
+        allTargets = [entry.target];
+      }
+      if (allTargets.length === 0) {
+        for (let j = i - 1; j >= Math.max(0, i - 4); j--) {
+          const prev = transcript[j];
+          if ((prev as any).isReaction || (prev as any).isStageDirection) continue;
+          if ((prev as any).isOrchestrator) continue;
+          if (!(prev as any).isObserver && !(prev as any).isAudience && prev.character !== entry.character) {
+            allTargets = [prev.character];
+            break;
+          }
+        }
+        if (allTargets.length === 0) allTargets = ["Boru"];
+      }
+
       const act = classifySpeechAct(
         entry.message,
-        (entry.target_characters as string[] | undefined) ?? (entry.target_character ? [entry.target_character] : []),
+        (entry.target_characters as string[] | undefined) ?? (entry.target ? [entry.target] : []),
       );
-      const isQ = act === "question";
-      for (const targetName of targetNames) {
-        if (targetName && targetName !== entry.character && targetName !== "all") {
-          ensureNode(targetName);
-          const existing = graphEdgesRef.current.find(e => e.source === entry.character && e.target === targetName);
-          if (existing) { existing.count++; if (isQ) existing.questions++; }
-          else graphEdgesRef.current.push({
+      const isQuestion = act === "question";
+
+      for (const targetName of allTargets) {
+        ensureNode(targetName);
+        const existing = graphEdgesRef.current.find(e => e.sourceId === entry.character && e.targetId === targetName);
+        if (existing) {
+          existing.count++;
+          if (isQuestion) existing.questions++;
+        } else {
+          graphEdgesRef.current.push({
             source: entry.character, target: targetName,
-            count: 1, questions: isQ ? 1 : 0,
+            sourceId: entry.character, targetId: targetName,
+            count: 1, questions: isQuestion ? 1 : 0,
             speech_act: act,
           });
         }
       }
     }
+
     setGraphStats(graphNodesRef.current.map(n => ({ id: n.id, color: n.color, speeches: n.speeches })));
+    if (d3SimRef.current && d3SimRef.current.update) d3SimRef.current.update();
   };
 
   // Load debate from bundled JSON — adapt {characters:[{name,...}]} to the live API
@@ -222,280 +319,348 @@ export default function DebateViewPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debate]);
 
-  // Graph physics + render loop
+  // D3 force simulation + SVG rendering — identical to the live debate page.
   useEffect(() => {
     if (!debate) return;
-    const canvas = graphCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    let frame = 0;
+    const svgEl = graphSvgRef.current;
+    if (!svgEl) return;
 
-    const resize = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
-    resize();
-    window.addEventListener("resize", resize);
+    const svg = d3.select(svgEl);
+    const container = svgEl.parentElement!;
+    const W = container.clientWidth || 600;
+    const H = container.clientHeight || 400;
+    svg.attr("viewBox", `0 0 ${W} ${H}`);
+    svg.selectAll("*").remove();
 
-    // Wheel zoom
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-      const factor = e.deltaY > 0 ? 0.85 : 1 / 0.85;
-      const newZoom = Math.max(0.25, Math.min(4, zoomRef.current * factor));
-      panRef.current.x = mx - (mx - panRef.current.x) * (newZoom / zoomRef.current);
-      panRef.current.y = my - (my - panRef.current.y) * (newZoom / zoomRef.current);
-      zoomRef.current = newZoom;
-    };
-    let mouseDownX = 0, mouseDownY = 0, mouseMoved = false;
-    const onCanvasDown = (e: MouseEvent) => {
-      mouseDownX = e.clientX; mouseDownY = e.clientY; mouseMoved = false;
-      graphDragRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: panRef.current.x, py: panRef.current.y };
-      canvas.style.cursor = "grabbing";
-    };
-    const onDragMove = (e: MouseEvent) => {
-      if (!graphDragRef.current.active) return;
-      if (!mouseMoved && Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) > 3) mouseMoved = true;
-      panRef.current.x = graphDragRef.current.px + (e.clientX - graphDragRef.current.sx);
-      panRef.current.y = graphDragRef.current.py + (e.clientY - graphDragRef.current.sy);
-    };
-    const onDragUp = (e: MouseEvent) => {
-      graphDragRef.current.active = false;
-      canvas.style.cursor = "grab";
-      if (mouseMoved) return;
-      const rect = canvas.getBoundingClientRect();
-      const wx = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
-      const wy = (e.clientY - rect.top - panRef.current.y) / zoomRef.current;
-      const hit = graphNodesRef.current.find(n => Math.hypot(wx - n.x, wy - n.y) <= n.r + 4);
-      const next = hit ? (focusedNodeIdRef.current === hit.id ? null : hit.id) : null;
-      focusedNodeIdRef.current = next;
-      setFocusedNodeId(next);
+    const defs = svg.append("defs");
+    const filter = defs.append("filter").attr("id", "node-shadow-replay").attr("x", "-30%").attr("y", "-30%").attr("width", "160%").attr("height", "160%");
+    filter.append("feDropShadow").attr("dx", 0).attr("dy", 1).attr("stdDeviation", 2).attr("flood-color", "#00000018");
+
+    const g = svg.append("g");
+    svg.call(d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.3, 4])
+      .on("zoom", (event) => g.attr("transform", event.transform)));
+
+    const nodePath = (shape: string, r: number): string => {
+      if (shape === "diamond") { const s = r * 1.3; return `M0,${-s} L${s},0 L0,${s} L${-s},0 Z`; }
+      if (shape === "square") { const s = r * 0.95; return `M${-s},${-s} L${s},${-s} L${s},${s} L${-s},${s} Z`; }
+      return `M${-r},0 A${r},${r} 0 1,1 ${r},0 A${r},${r} 0 1,1 ${-r},0 Z`;
     };
 
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    canvas.addEventListener("mousedown", onCanvasDown);
-    document.addEventListener("mousemove", onDragMove);
-    document.addEventListener("mouseup", onDragUp);
+    const linkGroup = g.append("g").attr("class", "links");
+    const nodeGroup = g.append("g").attr("class", "nodes");
 
-    const drawArrow = (ctx: CanvasRenderingContext2D, tx: number, ty: number, ux: number, uy: number, size: number) => {
-      const ax = tx - ux*size - uy*(size*0.6), ay = ty - uy*size + ux*(size*0.6);
-      const bx = tx - ux*size + uy*(size*0.6), by = ty - uy*size - ux*(size*0.6);
-      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(ax, ay); ctx.lineTo(bx, by); ctx.closePath(); ctx.fill();
+    const safeEdges = () => {
+      const nodeIds = new Set(graphNodesRef.current.map(n => n.id));
+      return graphEdgesRef.current
+        .filter(e => nodeIds.has(e.sourceId) && nodeIds.has(e.targetId))
+        .map(e => ({ source: e.sourceId, target: e.targetId, sourceId: e.sourceId, targetId: e.targetId, count: e.count, questions: e.questions }));
     };
 
-    const tick = () => {
-      frame++;
+    const simulation = d3.forceSimulation<GraphNode>(graphNodesRef.current)
+      .force("charge", d3.forceManyBody<GraphNode>().strength((d: GraphNode) => -350 - d.r * 15).distanceMax(500))
+      .force("center", d3.forceCenter(W / 2, H / 2))
+      .force("collide", d3.forceCollide<GraphNode>().radius((d: GraphNode) => d.r + 40).strength(0.9).iterations(3))
+      .force("x", d3.forceX<GraphNode>(W / 2).strength((d: GraphNode) => d.id === "Boru" ? 0.3 : 0.02))
+      .force("y", d3.forceY<GraphNode>(H / 2).strength((d: GraphNode) => d.id === "Boru" ? 0.3 : 0.02))
+      .force("radial", d3.forceRadial<GraphNode>(
+        Math.min(W, H) * 0.3, W / 2, H / 2
+      ).strength((d: GraphNode) => d.id === "Boru" ? 0 : 0.06))
+      .force("link", d3.forceLink<GraphNode, any>(safeEdges())
+        .id((d: any) => d.id)
+        .distance(180)
+        .strength((d: any) => Math.min(0.3, 0.08 + (d.count || 1) * 0.02)))
+      .velocityDecay(0.4)
+      .alphaDecay(0.012)
+      .on("tick", render);
+
+    d3SimRef.current = simulation;
+
+    function render() {
       const nodes = graphNodesRef.current;
       const edges = graphEdgesRef.current;
-      const W = canvas.width, H = canvas.height;
-      const cx = W / 2, cy = H / 2;
+      const activeId = activeNodeRef.current;
 
-      // Repulsion
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
-          const d2 = dx*dx + dy*dy + 1;
-          const f = 1800 / d2;
-          nodes[i].vx -= dx*f; nodes[i].vy -= dy*f;
-          nodes[j].vx += dx*f; nodes[j].vy += dy*f;
-        }
-      }
-      // Springs
-      for (const e of edges) {
-        const src = nodes.find(n => n.id === e.source), tgt = nodes.find(n => n.id === e.target);
-        if (!src || !tgt) continue;
-        const dx = tgt.x - src.x, dy = tgt.y - src.y;
-        const d = Math.sqrt(dx*dx + dy*dy) || 1;
-        const ideal = 110 + src.r + tgt.r;
-        const f = (d - ideal) * 0.025;
-        src.vx += (dx/d)*f; src.vy += (dy/d)*f;
-        tgt.vx -= (dx/d)*f; tgt.vy -= (dy/d)*f;
-      }
-      // Gravity + damping + bounds
-      for (const n of nodes) {
-        n.vx += (cx - n.x) * 0.008; n.vy += (cy - n.y) * 0.008;
-        n.vx *= 0.85; n.vy *= 0.85;
-        n.x += n.vx; n.y += n.vy;
-        n.x = Math.max(n.r + 12, Math.min(W - n.r - 12, n.x));
-        n.y = Math.max(n.r + 12, Math.min(H - n.r - 12, n.y));
-      }
+      const edgeData = edges.filter(e => {
+        const s = nodes.find(n => n.id === e.sourceId);
+        const t = nodes.find(n => n.id === e.targetId);
+        return s && t && isFinite(s.x) && isFinite(t.x);
+      });
 
-      // Draw
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = "#09090b"; ctx.fillRect(0, 0, W, H);
+      const links = linkGroup.selectAll<SVGGElement, GraphEdge>("g.edge")
+        .data(edgeData, (d: GraphEdge) => `${d.sourceId}->${d.targetId}`);
 
-      ctx.save();
-      ctx.translate(panRef.current.x, panRef.current.y);
-      ctx.scale(zoomRef.current, zoomRef.current);
+      const linksEnter = links.enter().append("g").attr("class", "edge");
+      linksEnter.append("path").attr("fill", "none").attr("stroke-linecap", "round");
+      linksEnter.append("polygon").attr("class", "arrow");
+      linksEnter.append("text")
+        .attr("font-size", 9).attr("font-weight", "bold")
+        .attr("text-anchor", "middle").attr("dy", 3)
+        .style("pointer-events", "none");
 
-      // Edges — parallel strand bundle (one strand per interaction)
-      const focused = focusedNodeIdRef.current;
-      for (const e of edges) {
-        const src = nodes.find(n => n.id === e.source), tgt = nodes.find(n => n.id === e.target);
-        if (!src || !tgt) continue;
-        const focusAlpha = focused ? (e.source === focused ? 1 : 0.3) : 1;
+      links.exit().remove();
+
+      const allLinks = linkGroup.selectAll<SVGGElement, GraphEdge>("g.edge");
+
+      allLinks.each(function(e: GraphEdge) {
+        const src = nodes.find(n => n.id === e.sourceId);
+        const tgt = nodes.find(n => n.id === e.targetId);
+        if (!src || !tgt) return;
+
         const dx = tgt.x - src.x, dy = tgt.y - src.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
         const ux = dx/d, uy = dy/d;
         const px = -uy, py = ux;
-        const isQ = e.questions > 0;
-        const isBoruEdge = e.target === "Boru" || e.source === "Boru";
-        // Color by source character regardless of whether the edge touches Boru.
-        // Boru edges remain distinctively STYLED (thicker + solid + larger arrowhead).
-        const col = isQ ? "#f0c060" : src.color;
-        const strandCount = e.count;
-        const spacing = strandCount > 1 ? Math.min(3.2, 32 / (strandCount - 1)) : 0;
-        const hasMirror = edges.some(e2 => e2.source === e.target && e2.target === e.source);
-        // Every edge gets at least some curve so nothing renders as a bare straight line.
-        const baseCurve = hasMirror ? 28 : 10;
+        const hasMirror = edges.some(e2 => e2.sourceId === e.targetId && e2.targetId === e.sourceId);
+        const baseCurve = hasMirror ? 35 : 20;
 
-        for (let si = 0; si < strandCount; si++) {
-          const strandOff = (si - (strandCount - 1) / 2) * spacing;
-          const curveOff = baseCurve + strandOff * 0.6;
-          const cpX = (src.x + tgt.x) / 2 + px * (strandOff + curveOff);
-          const cpY = (src.y + tgt.y) / 2 + py * (strandOff + curveOff);
-          const sxe = src.x + ux * src.r + px * strandOff * 0.4;
-          const sye = src.y + uy * src.r + py * strandOff * 0.4;
-          const txe = tgt.x - ux * tgt.r + px * strandOff * 0.4;
-          const tye = tgt.y - uy * tgt.r + py * strandOff * 0.4;
-          const edgeFade = 1 - Math.abs(si - (strandCount - 1) / 2) / (strandCount * 0.8);
-          const alpha = Math.min(0.55 + edgeFade * 0.35, 0.9) * focusAlpha;
-          ctx.save();
-          ctx.beginPath(); ctx.moveTo(sxe, sye); ctx.quadraticCurveTo(cpX, cpY, txe, tye);
-          ctx.strokeStyle = col + Math.round(alpha * 255).toString(16).padStart(2, "0");
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([]);
-          ctx.stroke();
-          ctx.restore();
+        const isQ = e.questions > 0;
+        const hasResponses = e.count > e.questions;
+        const isBoruEdge = e.targetId === "Boru" || e.sourceId === "Boru";
+        const col = src.color;
+
+        const el = d3.select(this);
+        let pathsData = "";
+        const mirrorOff = hasMirror ? 4 : 0;
+        const responseCount = Math.min(e.count - e.questions, 6);
+        const questionCount = Math.min(e.questions, 4);
+
+        for (let si = 0; si < responseCount; si++) {
+          const curveMult = baseCurve + si * 12;
+          const sxi = src.x + ux * (src.r + 2) + px * mirrorOff;
+          const syi = src.y + uy * (src.r + 2) + py * mirrorOff;
+          const txi = tgt.x - ux * (tgt.r + 6) + px * mirrorOff;
+          const tyi = tgt.y - uy * (tgt.r + 6) + py * mirrorOff;
+          const cpXi = (src.x + tgt.x) / 2 + px * curveMult;
+          const cpYi = (src.y + tgt.y) / 2 + py * curveMult;
+          pathsData += `M${sxi},${syi} Q${cpXi},${cpYi} ${txi},${tyi} `;
         }
 
-        // Arrowhead on central strand
+        const focused = focusedNodeIdRef.current;
+        const focusAlpha = focused ? (e.sourceId === focused ? 1 : 0.3) : 1;
+
+        el.select("path")
+          .attr("d", pathsData.trim() || `M${src.x},${src.y} L${tgt.x},${tgt.y}`)
+          .attr("stroke", col)
+          .attr("stroke-width", 1.5)
+          .attr("stroke-dasharray", "none")
+          .attr("opacity", (isBoruEdge
+            ? Math.min(0.6 + responseCount * 0.05, 0.9)
+            : (hasResponses ? Math.min(0.35 + responseCount * 0.06, 0.75) : 0)) * focusAlpha);
+
+        if (questionCount > 0) {
+          let qPathsData = "";
+          const qOffset = mirrorOff + (hasResponses ? 6 : 0);
+          for (let qi = 0; qi < questionCount; qi++) {
+            const curveMult = baseCurve + (responseCount + qi) * 12 + 8;
+            const sxi = src.x + ux * (src.r + 2) + px * qOffset;
+            const syi = src.y + uy * (src.r + 2) + py * qOffset;
+            const txi = tgt.x - ux * (tgt.r + 6) + px * qOffset;
+            const tyi = tgt.y - uy * (tgt.r + 6) + py * qOffset;
+            const cpXi = (src.x + tgt.x) / 2 + px * curveMult;
+            const cpYi = (src.y + tgt.y) / 2 + py * curveMult;
+            qPathsData += `M${sxi},${syi} Q${cpXi},${cpYi} ${txi},${tyi} `;
+          }
+          let qPath: any = el.select("path.q-strand");
+          if (qPath.empty()) {
+            qPath = el.append("path").attr("class", "q-strand").attr("fill", "none");
+          }
+          qPath
+            .attr("d", qPathsData.trim())
+            .attr("stroke", col)
+            .attr("stroke-width", 1.5)
+            .attr("stroke-dasharray", isBoruEdge ? "none" : "4,3")
+            .attr("opacity", Math.min(0.4 + questionCount * 0.1, 0.8) * focusAlpha);
+        } else {
+          el.select("path.q-strand").remove();
+        }
+
+        const sx0 = src.x + ux * (src.r + 2) + px * (hasMirror ? 4 : 0);
+        const sy0 = src.y + uy * (src.r + 2) + py * (hasMirror ? 4 : 0);
+        const tx0 = tgt.x - ux * (tgt.r + 6) + px * (hasMirror ? 4 : 0);
+        const ty0 = tgt.y - uy * (tgt.r + 6) + py * (hasMirror ? 4 : 0);
         const cpX0 = (src.x + tgt.x) / 2 + px * baseCurve;
         const cpY0 = (src.y + tgt.y) / 2 + py * baseCurve;
-        const txe0 = tgt.x - ux * tgt.r, tye0 = tgt.y - uy * tgt.r;
-        const arrowDx = txe0 - cpX0, arrowDy = tye0 - cpY0;
-        const arrowD = Math.sqrt(arrowDx*arrowDx + arrowDy*arrowDy) || 1;
-        const arrowAlpha = Math.round(0.8 * focusAlpha * 255).toString(16).padStart(2, "0");
-        ctx.fillStyle = col + arrowAlpha;
-        drawArrow(ctx, txe0, tye0, arrowDx/arrowD, arrowDy/arrowD, isBoruEdge ? 9 : 7);
-      }
+        const t2 = 0.92;
+        const bx = (1-t2)*(1-t2)*sx0 + 2*(1-t2)*t2*cpX0 + t2*t2*tx0;
+        const by = (1-t2)*(1-t2)*sy0 + 2*(1-t2)*t2*cpY0 + t2*t2*ty0;
+        const adx = tx0 - bx, ady = ty0 - by;
+        const ad = Math.sqrt(adx*adx + ady*ady) || 1;
+        const aSize = 8;
+        const aUx = adx/ad, aUy = ady/ad;
+        const a1x = tx0 - aUx*aSize - aUy*(aSize*0.6);
+        const a1y = ty0 - aUy*aSize + aUx*(aSize*0.6);
+        const a2x = tx0 - aUx*aSize + aUy*(aSize*0.6);
+        const a2y = ty0 - aUy*aSize - aUx*(aSize*0.6);
+        el.select("polygon.arrow")
+          .attr("points", `${tx0},${ty0} ${a1x},${a1y} ${a2x},${a2y}`)
+          .attr("fill", col)
+          .attr("opacity", (isBoruEdge ? 0.95 : 0.7) * focusAlpha);
 
-      // Nodes
-      const pulse = Math.sin(frame * 0.05) * 0.3 + 0.7;
-      for (const n of nodes) {
-        const glowR = n.r * 2;
-        const grd = ctx.createRadialGradient(n.x, n.y, n.r * 0.5, n.x, n.y, glowR);
-        grd.addColorStop(0, n.color + "33"); grd.addColorStop(1, "transparent");
-        ctx.beginPath(); ctx.arc(n.x, n.y, glowR, 0, 2*Math.PI);
-        ctx.fillStyle = grd; ctx.fill();
-        ctx.beginPath(); ctx.arc(n.x + 2, n.y + 3, n.r, 0, 2*Math.PI);
-        ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fill();
-        ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 2*Math.PI);
-        ctx.fillStyle = n.color; ctx.fill();
-        const fontSize = Math.max(10, Math.min(13, n.r * 0.65));
-        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(255,255,255,0.95)";
-        ctx.fillText(n.id.split(" ").map((w:string) => w[0]).join("").slice(0,2).toUpperCase(), n.x, n.y);
-        const name = n.id.split(" ").slice(0, 2).join(" ");
-        ctx.font = `600 ${Math.max(9, Math.min(11, n.r * 0.5))}px Inter, sans-serif`;
-        ctx.textBaseline = "top";
-        ctx.fillStyle = `rgba(255,255,255,${0.55 + pulse * 0.1})`;
-        ctx.fillText(name, n.x, n.y + n.r + 4);
-        if (n.speeches > 0) {
-          const bx = n.x + n.r * 0.7, by = n.y - n.r * 0.7;
-          ctx.beginPath(); ctx.arc(bx, by, 7, 0, 2*Math.PI);
-          ctx.fillStyle = "#1a1a2e"; ctx.fill();
-          ctx.font = "bold 7px Inter, sans-serif";
-          ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillStyle = n.color;
-          ctx.fillText(String(n.speeches), bx, by);
+        const labelX = 0.25 * sx0 + 0.5 * cpX0 + 0.25 * tx0;
+        const labelY = 0.25 * sy0 + 0.5 * cpY0 + 0.25 * ty0;
+        const labelText = isQ ? (e.questions === 1 ? "?" : `${e.questions}?`) : (e.count > 1 ? `${e.count}×` : "");
+        el.select("text")
+          .attr("x", labelX).attr("y", labelY)
+          .attr("fill", col)
+          .text(labelText);
+      });
+
+      const nodeData = nodes.filter(n => isFinite(n.x) && isFinite(n.y));
+      const nodesSel = nodeGroup.selectAll<SVGGElement, GraphNode>("g.node")
+        .data(nodeData, (d: GraphNode) => d.id);
+
+      const nodesEnter = nodesSel.enter().append("g").attr("class", "node")
+        .attr("filter", "url(#node-shadow-replay)")
+        .style("cursor", "pointer")
+        .on("click", (event, d) => {
+          event.stopPropagation();
+          const cur = focusedNodeIdRef.current;
+          focusedNodeIdRef.current = cur === d.id ? null : d.id;
+          setFocusedNodeId(focusedNodeIdRef.current);
+          render();
+        })
+        .call(d3.drag<SVGGElement, GraphNode>()
+          .on("start", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x; d.fy = d.y;
+          })
+          .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+          .on("end", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null; d.fy = null;
+          }));
+
+      nodesEnter.append("path").attr("class", "shape");
+      nodesEnter.append("text").attr("class", "initials")
+        .attr("text-anchor", "middle").attr("dominant-baseline", "central")
+        .attr("fill", "white").attr("font-weight", "bold")
+        .style("pointer-events", "none");
+      nodesEnter.append("text").attr("class", "label")
+        .attr("text-anchor", "middle")
+        .attr("fill", "#6b5c4e").attr("font-weight", "600")
+        .style("pointer-events", "none");
+      nodesEnter.append("circle").attr("class", "speaking-ring")
+        .attr("fill", "none").attr("stroke-width", 2).attr("opacity", 0);
+      nodesEnter.append("circle").attr("class", "badge-bg").attr("r", 7).attr("fill", "white").attr("stroke-width", 1.2);
+      nodesEnter.append("text").attr("class", "badge-text")
+        .attr("text-anchor", "middle").attr("dominant-baseline", "central")
+        .attr("font-size", 7).attr("font-weight", "bold")
+        .style("pointer-events", "none");
+
+      nodesSel.exit().remove();
+
+      const allNodes = nodeGroup.selectAll<SVGGElement, GraphNode>("g.node");
+      allNodes.attr("transform", (d: GraphNode) => `translate(${d.x},${d.y})`);
+
+      allNodes.each(function(d: GraphNode) {
+        const el = d3.select(this);
+        const isActive = d.id === activeId;
+
+        el.select("path.shape")
+          .attr("d", nodePath(d.shape, d.r))
+          .attr("fill", d.color)
+          .attr("stroke", isActive ? d.color : "#fff")
+          .attr("stroke-width", isActive ? 3.5 : 2.5)
+          .attr("opacity", 0.9);
+
+        const fontSize = Math.max(10, Math.min(13, d.r * 0.65));
+        el.select("text.initials")
+          .attr("font-size", fontSize)
+          .text(d.id.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase());
+
+        el.select("text.label")
+          .attr("y", d.r + 14)
+          .attr("font-size", Math.max(9, Math.min(11, d.r * 0.5)))
+          .attr("fill", isActive ? "#3d2f20" : "#8a7260")
+          .text(d.id.split(" ").slice(0, 2).join(" "));
+
+        el.select("circle.speaking-ring")
+          .attr("r", d.r + 6)
+          .attr("stroke", d.color)
+          .attr("opacity", isActive ? 0.6 : 0);
+
+        const bx = d.r * 0.7, by = -d.r * 0.7;
+        el.select("circle.badge-bg")
+          .attr("cx", bx).attr("cy", by)
+          .attr("stroke", d.color + "88")
+          .attr("opacity", d.speeches > 0 ? 1 : 0);
+        el.select("text.badge-text")
+          .attr("x", bx).attr("y", by)
+          .attr("fill", d.color)
+          .text(d.speeches > 0 ? String(d.speeches) : "");
+      });
+    }
+
+    const updateSim = () => {
+      simulation.nodes(graphNodesRef.current);
+      const linkForce = simulation.force("link") as d3.ForceLink<GraphNode, any>;
+      if (linkForce) linkForce.links(safeEdges());
+      simulation.alpha(0.6).restart();
+    };
+    (d3SimRef as any).current = { sim: simulation, update: updateSim };
+    if (graphNodesRef.current.length > 0) updateSim();
+
+    const onResize = () => {
+      const nW = container.clientWidth || 600;
+      const nH = container.clientHeight || 400;
+      svg.attr("viewBox", `0 0 ${nW} ${nH}`);
+      simulation.force("center", d3.forceCenter(nW / 2, nH / 2));
+      simulation.force("x", d3.forceX<GraphNode>(nW / 2).strength(0.035));
+      simulation.force("y", d3.forceY<GraphNode>(nH / 2).strength(0.035));
+      simulation.alpha(0.1).restart();
+    };
+    window.addEventListener("resize", onResize);
+
+    svg.on("click", () => {
+      if (focusedNodeIdRef.current) {
+        focusedNodeIdRef.current = null;
+        setFocusedNodeId(null);
+        render();
+      }
+    });
+
+    svg.on("mousemove", (event: MouseEvent) => {
+      const [mx, my] = d3.pointer(event, g.node());
+      const nodes = graphNodesRef.current;
+      const edges = graphEdgesRef.current;
+      if (nodes.some(n => Math.sqrt((n.x - mx)**2 + (n.y - my)**2) <= n.r + 6)) { setGraphHover(null); return; }
+      for (const edge of edges) {
+        const src = nodes.find(n => n.id === edge.sourceId);
+        const tgt = nodes.find(n => n.id === edge.targetId);
+        if (!src || !tgt || !isFinite(src.x) || !isFinite(tgt.x)) continue;
+        const dx = tgt.x - src.x, dy = tgt.y - src.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const px = -(tgt.y - src.y)/dist, py = (tgt.x - src.x)/dist;
+        const hasMirror = edges.some(e2 => e2.sourceId === edge.targetId && e2.targetId === edge.sourceId);
+        const curve = hasMirror ? 35 : 20;
+        const cpX = (src.x + tgt.x)/2 + px*curve, cpY = (src.y + tgt.y)/2 + py*curve;
+        let minD = Infinity;
+        for (let t = 0; t <= 1; t += 1/12) {
+          const bx = (1-t)*(1-t)*src.x + 2*(1-t)*t*cpX + t*t*tgt.x;
+          const by = (1-t)*(1-t)*src.y + 2*(1-t)*t*cpY + t*t*tgt.y;
+          minD = Math.min(minD, Math.sqrt((mx-bx)**2 + (my-by)**2));
+        }
+        if (minD < 14) {
+          const transcript: DebateEntry[] = debate?.transcript || [];
+          const msgs = transcript.filter((e: any) => e.character === edge.sourceId && e.target === edge.targetId);
+          const last = msgs[msgs.length - 1];
+          const snippet = last ? last.message.slice(0, 120).trimEnd() + (last.message.length > 120 ? "…" : "") : "";
+          setGraphHover({ x: event.offsetX, y: event.offsetY, source: edge.sourceId, target: edge.targetId, count: edge.count, questions: edge.questions, snippet });
+          return;
         }
       }
+      setGraphHover(null);
+    });
+    svg.on("mouseleave", () => setGraphHover(null));
 
-      ctx.restore();
-
-      if (nodes.length === 0) {
-        ctx.font = "13px Inter, sans-serif";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(255,255,255,0.18)";
-        ctx.fillText("Building graph…", W/2, H/2);
-      }
-
-      graphAnimRef.current = requestAnimationFrame(tick);
-    };
-
-    graphAnimRef.current = requestAnimationFrame(tick);
     return () => {
-      cancelAnimationFrame(graphAnimRef.current);
-      window.removeEventListener("resize", resize);
-      canvas.removeEventListener("wheel", onWheel);
-      canvas.removeEventListener("mousedown", onCanvasDown);
-      document.removeEventListener("mousemove", onDragMove);
-      document.removeEventListener("mouseup", onDragUp);
+      simulation.stop();
+      d3SimRef.current = null;
+      window.removeEventListener("resize", onResize);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debate]);
-
-  // Heatmap
-  useEffect(() => {
-    if (!debate) return;
-    const canvas = heatmapCanvasRef.current;
-    const transcript: any[] = debate.transcript || [];
-    const chars: string[] = debate.participating_characters || [];
-    if (!canvas || chars.length === 0) return;
-    canvas.width = canvas.offsetWidth || 400; canvas.height = canvas.offsetHeight || 400;
-    const ctx = canvas.getContext("2d")!;
-    const N = chars.length, W = canvas.width, H = canvas.height;
-    ctx.fillStyle = "#09090b"; ctx.fillRect(0, 0, W, H);
-    if (transcript.length === 0) { ctx.font="13px Inter,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillStyle="rgba(255,255,255,0.18)"; ctx.fillText("No transcript",W/2,H/2); return; }
-    const counts: number[][] = Array.from({length:N},()=>Array(N).fill(0));
-    let maxCount = 0;
-    for (const e of transcript) { const i=chars.indexOf(e.character),j=e.target_character?chars.indexOf(e.target_character):-1; if(i>=0&&j>=0&&i!==j){counts[i][j]++;maxCount=Math.max(maxCount,counts[i][j]);} }
-    const pad=Math.min(W,H)*0.18, cellSize=Math.min((W-pad)/N,(H-pad)/N,64), gridLeft=pad, gridTop=pad;
-    for (let i=0;i<N;i++) for (let j=0;j<N;j++) {
-      const x=gridLeft+j*cellSize,y=gridTop+i*cellSize,intensity=maxCount>0?counts[i][j]/maxCount:0;
-      ctx.fillStyle=i===j?"rgba(255,255,255,0.04)":`rgba(${Math.round(192*intensity+20*(1-intensity))},${Math.round(100*intensity+20*(1-intensity))},${Math.round(20*intensity)},${0.15+intensity*0.8})`;
-      ctx.fillRect(x,y,cellSize-2,cellSize-2);
-      if(counts[i][j]>0){ctx.font=`bold ${Math.max(9,cellSize*0.32)}px Inter,sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillStyle=`rgba(255,255,255,${0.45+intensity*0.55})`;ctx.fillText(String(counts[i][j]),x+cellSize/2,y+cellSize/2);}
-    }
-    for(let i=0;i<N;i++){ctx.font=`600 ${Math.min(11,cellSize*0.38)}px Inter,sans-serif`;ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillStyle=(CHAR_COLORS[i%CHAR_COLORS.length]).hex;ctx.fillText(chars[i].split(" ")[0],gridLeft-6,gridTop+i*cellSize+cellSize/2);}
-    for(let j=0;j<N;j++){ctx.save();ctx.translate(gridLeft+j*cellSize+cellSize/2,gridTop-6);ctx.rotate(-Math.PI/4);ctx.font=`600 ${Math.min(11,cellSize*0.38)}px Inter,sans-serif`;ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillStyle=(CHAR_COLORS[j%CHAR_COLORS.length]).hex;ctx.fillText(chars[j].split(" ")[0],0,0);ctx.restore();}
-    ctx.font="9px Inter,sans-serif";ctx.textAlign="left";ctx.textBaseline="bottom";ctx.fillStyle="rgba(255,255,255,0.2)";ctx.fillText("row = speaker   col = spoken to",4,H-4);
-  }, [debate, activeTab]);
-
-  // Emotions arc
-  useEffect(() => {
-    if (!debate) return;
-    const canvas = emotionsCanvasRef.current;
-    const transcript: any[] = debate.transcript || [];
-    const chars: string[] = debate.participating_characters || [];
-    if (!canvas || chars.length === 0 || transcript.length === 0) return;
-    canvas.width = canvas.offsetWidth || 400; canvas.height = canvas.offsetHeight || 400;
-    const ctx = canvas.getContext("2d")!;
-    const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = "#09090b"; ctx.fillRect(0, 0, W, H);
-    const padL=72,padR=16,padT=16,padB=24, rowH=(H-padT-padB)/chars.length, totalTurns=transcript.length;
-    const xOf=(idx:number)=>padL+(totalTurns<=1?0.5:idx/(totalTurns-1))*(W-padL-padR);
-    for (let ci=0;ci<chars.length;ci++) {
-      const charName=chars[ci], color=CHAR_COLORS[ci%CHAR_COLORS.length].hex, y=padT+ci*rowH+rowH/2;
-      ctx.strokeStyle="rgba(255,255,255,0.05)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(padL,padT+ci*rowH);ctx.lineTo(W-padR,padT+ci*rowH);ctx.stroke();
-      ctx.font="600 10px Inter,sans-serif";ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillStyle=color;ctx.fillText(charName.split(" ")[0],padL-6,y);
-      const turns=transcript.map((e:any,idx:number)=>({...e,idx})).filter((e:any)=>e.character===charName);
-      if(!turns.length)continue;
-      ctx.strokeStyle=color+"25";ctx.lineWidth=1.2;ctx.setLineDash([]);ctx.beginPath();
-      turns.forEach((t:any,ti:number)=>{const x=xOf(t.idx);ti===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
-      ctx.stroke();
-      for(const turn of turns){
-        const x=xOf(turn.idx),em=EMOTION_STYLE[turn.emotion||"neutral"]||EMOTION_STYLE.neutral;
-        const grd=ctx.createRadialGradient(x,y,2,x,y,11);grd.addColorStop(0,em.dot+"70");grd.addColorStop(1,"transparent");
-        ctx.beginPath();ctx.arc(x,y,11,0,2*Math.PI);ctx.fillStyle=grd;ctx.fill();
-        ctx.beginPath();ctx.arc(x,y,5,0,2*Math.PI);ctx.fillStyle=em.dot;ctx.fill();
-        if(em.label&&W/Math.max(totalTurns,1)>36){ctx.font="8px Inter,sans-serif";ctx.textAlign="center";ctx.textBaseline="top";ctx.fillStyle=em.dot+"aa";ctx.fillText(em.label,x,y+8);}
-      }
-    }
-    ctx.font="9px Inter,sans-serif";ctx.textAlign="center";ctx.textBaseline="top";ctx.fillStyle="rgba(255,255,255,0.18)";
-    const step=Math.max(1,Math.floor(totalTurns/8));
-    for(let i=0;i<totalTurns;i+=step)ctx.fillText(String(i+1),xOf(i),H-padB+4);
-  }, [debate, activeTab]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, chatLoading]);
 
@@ -551,7 +716,7 @@ export default function DebateViewPage() {
   const handleExport = async () => {
     try {
       await exportDebateToPdf({
-        graphElement: graphCanvasRef.current,
+        graphElement: graphSvgRef.current,
         turns: transcript as any,
         meta: {
           storyTitle: debate.story?.title || debate.divergence_description || "Debate",
@@ -572,6 +737,32 @@ export default function DebateViewPage() {
   };
 
   return (
+    <>
+      {/* ── Top header — same shape as the live app's NavBar ── */}
+      <header className="sticky top-0 left-0 right-0 z-50 bg-[#f7f3ed]/95 backdrop-blur-md border-b border-[#e8e0d5]">
+        <div className="px-8 lg:px-12 h-14 flex items-center justify-between">
+          <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 group shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-[#c07820] flex items-center justify-center shadow-sm group-hover:bg-[#a86a18] transition-colors overflow-hidden">
+              <span style={{ color: "#fef9c3", fontSize: "28px", lineHeight: 1 }}>☸</span>
+            </div>
+            <span className="font-bold text-lg tracking-tight text-[#1c1410]">
+              WhatIf<span className="text-[#c07820]">Sabha</span>
+            </span>
+            <span className="ml-2 text-[10px] uppercase tracking-widest text-[#a09282] bg-[#f0ebe4] border border-[#e8e0d5] px-2 py-0.5 rounded-full">Demo</span>
+          </a>
+          <div className="flex items-center gap-1.5">
+            <a href={REPO_URL} target="_blank" rel="noreferrer"
+              className="text-sm font-medium transition-colors px-4 py-2 rounded-full border text-[#6b5c4e] hover:text-[#1c1410] border-[#e8e0d5] hover:border-[#c8b89a] bg-white/60 hover:bg-white">
+              View on GitHub
+            </a>
+            <a href={REPO_URL} target="_blank" rel="noreferrer"
+              className="text-sm font-medium transition-colors px-4 py-2 rounded-full border bg-[#c07820] text-white border-[#c07820] hover:bg-[#a86a18]">
+              Try it yourself →
+            </a>
+          </div>
+        </div>
+      </header>
+
     <main className="relative flex flex-col bg-[#f7f3ed] overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
       {/* Sub-header */}
       <div className="sticky top-14 z-40 border-b border-[#e8e0d5] bg-white/95 backdrop-blur-sm shrink-0">
@@ -864,77 +1055,208 @@ export default function DebateViewPage() {
           onMouseDown={() => { isDraggingRef.current = true; }}
         />
 
-        {/* RIGHT: Visualization panel */}
-        <div data-print-hide="true" className="flex flex-col overflow-hidden bg-[#09090b]" style={{ flex: 1 }}>
+        {/* RIGHT: Visualization panel — matches the live debate page */}
+        <div data-print-hide="true" className="flex flex-col overflow-hidden bg-[#f7f3ed]" style={{ flex: 1 }}>
 
           {/* Tab bar */}
-          <div className="shrink-0 flex border-b border-white/10 bg-black/30">
-            {(["graph", "heatmap", "emotions"] as const).map(tab => (
+          <div className="shrink-0 flex border-b border-[#e8e0d5] bg-[#f0ece5]">
+            {(["graph", "ledger", "positions"] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
-                  activeTab === tab ? "text-white border-[#c07820]" : "text-white/35 border-transparent hover:text-white/60"
+                  activeTab === tab ? "text-[#3d2f20] border-[#c07820]" : "text-[#a09282] border-transparent hover:text-[#6b5c4e]"
                 }`}>
-                {tab === "graph" ? "⬡ Graph" : tab === "heatmap" ? "▦ Heatmap" : "◉ Emotions"}
+                {tab === "graph" ? "⬡ Graph" : tab === "ledger" ? "📋 Ledger" : "🎭 Positions"}
               </button>
             ))}
           </div>
 
-          {/* Canvas layers */}
+          {/* Panel layers */}
           <div className="flex-1 relative min-h-0">
             {/* Graph */}
-            <div style={{ position:"absolute", inset:0, opacity: activeTab==="graph"?1:0, pointerEvents: activeTab==="graph"?"auto":"none", transition:"opacity 0.15s" }}>
-              <canvas ref={graphCanvasRef} style={{ display:"block", width:"100%", height:"100%", cursor:"grab" }} />
-              <div className="absolute top-3 right-3 flex flex-col gap-1">
-                {[
-                  { label: "+", title: "Zoom in",  action: () => { zoomRef.current = Math.min(4, zoomRef.current * 1.25); } },
-                  { label: "⊡", title: "Fit view",  action: () => {
-                    const nodes = graphNodesRef.current; const c = graphCanvasRef.current;
-                    if (!nodes.length || !c) { zoomRef.current=1; panRef.current={x:0,y:0}; return; }
-                    const xs=nodes.map(n=>n.x),ys=nodes.map(n=>n.y);
-                    const minX=Math.min(...xs)-40,maxX=Math.max(...xs)+40,minY=Math.min(...ys)-40,maxY=Math.max(...ys)+40;
-                    const scale=Math.min(c.width/(maxX-minX),c.height/(maxY-minY),2);
-                    zoomRef.current=scale; panRef.current={x:c.width/2-(minX+maxX)/2*scale,y:c.height/2-(minY+maxY)/2*scale};
-                  }},
-                  { label: "−", title: "Zoom out", action: () => { zoomRef.current = Math.max(0.25, zoomRef.current * 0.8); } },
-                ].map(({ label, title, action }) => (
-                  <button key={label} title={title} onClick={action}
-                    className="w-7 h-7 rounded-lg bg-black/60 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-sm flex items-center justify-center transition-colors font-mono">
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm border border-white/10 rounded-xl px-3 py-2.5 space-y-1.5">
-                <div className="text-white/30 text-xs uppercase tracking-widest font-medium mb-1">Legend</div>
-                <div className="flex items-center gap-2"><div className="w-8 h-px bg-white/50" /><span className="text-white/50 text-xs">Replied</span></div>
-                <div className="flex items-center gap-2"><div className="w-8 h-px bg-[#f0c060]/70" /><span className="text-[#f0c060]/70 text-xs">Asked</span></div>
-                <span className="text-white/30 text-xs">Node size = speech count</span>
+            <div ref={graphWrapperRef} style={{ position:"absolute", inset:0, opacity: activeTab==="graph" ? 1 : 0, pointerEvents: activeTab==="graph" ? "auto" : "none", transition:"opacity 0.15s", background: "#ffffff" }}>
+              <svg ref={graphSvgRef} style={{ display:"block", width:"100%", height:"100%" }} />
+              {graphHover && (
+                <div className="absolute pointer-events-none z-10 max-w-[220px]"
+                  style={{ left: graphHover.x + 14, top: graphHover.y - 8 }}>
+                  <div className="rounded-xl border border-[#e0d8ce] shadow-xl px-3 py-2.5 space-y-1.5" style={{ background: "rgba(255,252,248,0.97)", backdropFilter: "blur(8px)" }}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold" style={{ color: CHAR_COLORS[(debate?.participating_characters || []).indexOf(graphHover.source) % CHAR_COLORS.length]?.hex }}>{graphHover.source}</span>
+                      <span className="text-[#a09282] text-xs">→</span>
+                      <span className="text-xs font-bold" style={{ color: CHAR_COLORS[(debate?.participating_characters || []).indexOf(graphHover.target) % CHAR_COLORS.length]?.hex }}>{graphHover.target}</span>
+                    </div>
+                    <div className="flex gap-2 text-xs text-[#a09282]">
+                      <span>{graphHover.count} exchange{graphHover.count !== 1 ? "s" : ""}</span>
+                      {graphHover.questions > 0 && <><span>·</span><span className="text-[#c07820]/80">{graphHover.questions} question{graphHover.questions !== 1 ? "s" : ""}</span></>}
+                    </div>
+                    {graphHover.snippet && (
+                      <p className="text-xs text-[#6b5c4e] leading-relaxed border-t border-[#e8e0d5] pt-1.5 italic">"{graphHover.snippet}"</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Legend */}
+              <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm border border-[#d8cfc5] rounded-xl shadow-sm overflow-hidden">
+                <button className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#f7f3ed] transition-colors"
+                  onClick={() => setGraphLegendCollapsed(v => !v)}>
+                  <span className="text-[#a09282] text-xs uppercase tracking-widest font-medium">Legend</span>
+                  <span className="text-[#a09282] text-xs ml-3">{graphLegendCollapsed ? "▸" : "▾"}</span>
+                </button>
+                {!graphLegendCollapsed && (
+                  <div className="px-3 pb-2.5 space-y-1.5 border-t border-[#e8e0d5]">
+                    <div className="flex items-center gap-2 pt-1.5"><div className="w-8 h-px bg-[#8a7260]/50" /><span className="text-[#8a7260] text-xs">Response (solid)</span></div>
+                    <div className="flex items-center gap-2"><div className="w-8 border-t border-dashed border-[#8a7260]/70" /><span className="text-[#8a7260] text-xs">Question (dotted)</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#8a7260]/40 border border-[#8a7260]/40" /><span className="text-[#a09282] text-xs">Node size = speeches</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-0.5 bg-[#8a7260]/50" /><span className="text-[#a09282] text-xs">Color = speaker</span></div>
+                  </div>
+                )}
               </div>
             </div>
-            {/* Heatmap */}
-            <div style={{ position:"absolute", inset:0, opacity: activeTab==="heatmap"?1:0, pointerEvents: activeTab==="heatmap"?"auto":"none", transition:"opacity 0.15s" }}>
-              <canvas ref={heatmapCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
+
+            {/* Argument Ledger */}
+            <div className="overflow-y-auto p-3 space-y-2" style={{ position:"absolute", inset:0, opacity: activeTab==="ledger" ? 1 : 0, pointerEvents: activeTab==="ledger" ? "auto" : "none", transition:"opacity 0.15s" }}>
+              {(() => {
+                const snap = debate?.ledger_snapshot || {};
+                const progress: string = snap.progress || "";
+                const openQs: any[] = snap.open_questions || [];
+                const resolvedQs: any[] = snap.resolved_questions || [];
+                const claims: any[] = snap.claims || [];
+                const hasAnything = progress || openQs.length || resolvedQs.length || claims.length;
+                if (!hasAnything) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <span className="text-2xl mb-2">🐘</span>
+                      <p className="text-sm text-[#a09282]">No ledger was recorded for this debate.</p>
+                    </div>
+                  );
+                }
+                return (
+                  <>
+                    {progress && (
+                      <div className="bg-[#fef9f0] border border-[#f0c060]/30 rounded-xl px-3 py-2.5">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-sm">🐘</span>
+                          <span className="text-[10px] text-[#c07820] uppercase tracking-widest font-semibold">Boru&apos;s Notes</span>
+                        </div>
+                        <p className="text-xs text-[#3d2f20] leading-relaxed">{progress}</p>
+                      </div>
+                    )}
+
+                    <LedgerSection
+                      title="Open Questions"
+                      count={openQs.length}
+                      badge={<span className="text-amber-600">{openQs.filter((q: any) => q.status === "unanswered").length} unanswered</span>}
+                      defaultOpen={true}
+                      empty="No open questions recorded"
+                    >
+                      {openQs.map((q: any, i: number) => (
+                        <div key={q.id ?? i} className={`border rounded-lg overflow-hidden ${q.status === "unanswered" ? "border-amber-200" : "border-[#e8e0d5]"}`}>
+                          <div className={`px-3 py-2 ${q.status === "unanswered" ? "bg-amber-50/60" : "bg-white"}`}>
+                            <p className="text-xs text-[#1c1410] leading-relaxed font-medium">{q.question}</p>
+                            <div className="flex items-center gap-1.5 mt-1 text-[10px] text-[#a09282]">
+                              <span>Asked by <span className="font-medium text-[#6b5c4e]">{q.asked_by}</span></span>
+                              {q.directed_to?.length > 0 && (<><span>→</span><span className="font-medium text-[#6b5c4e]">{q.directed_to.join(", ")}</span></>)}
+                              <span className={`ml-auto px-1.5 py-0.5 rounded font-medium ${q.status === "unanswered" ? "text-amber-700 bg-amber-100" : q.status === "resolved" ? "text-emerald-700 bg-emerald-50" : "text-blue-600 bg-blue-50"}`}>{q.status}</span>
+                            </div>
+                          </div>
+                          {q.answers && Object.keys(q.answers).length > 0 && (
+                            <div className="border-t border-[#e8e0d5] bg-[#f7f3ed] px-3 py-2 space-y-1.5">
+                              {Object.entries(q.answers).map(([who, answer]: [string, any]) => (
+                                <div key={who} className="flex gap-2 text-[11px]">
+                                  <span className="font-semibold text-[#6b5c4e] shrink-0">{who}:</span>
+                                  <span className="text-[#1c1410] leading-relaxed">{String(answer)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </LedgerSection>
+
+                    {resolvedQs.length > 0 && (
+                      <LedgerSection title="Resolved" count={resolvedQs.length} badge={<span className="text-emerald-600">✓</span>} defaultOpen={false} empty="">
+                        {resolvedQs.map((q: any, i: number) => (
+                          <div key={q.id ?? i} className="border border-emerald-200 rounded-lg overflow-hidden">
+                            <div className="px-3 py-2 bg-emerald-50/40">
+                              <p className="text-xs text-[#6b5c4e] leading-relaxed line-through decoration-emerald-300">{q.question}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </LedgerSection>
+                    )}
+
+                    {claims.length > 0 && (
+                      <LedgerSection title="Claims & Disputes" count={claims.length} badge={<span className="text-[#c07820]">{claims.filter((c: any) => c.status === "disputed").length} disputed</span>} defaultOpen={true} empty="">
+                        {claims.map((c: any, i: number) => (
+                          <div key={i} className={`border rounded-lg px-3 py-2 ${c.status === "disputed" ? "border-red-200 bg-red-50/30" : c.status === "resolved" ? "border-emerald-200 bg-emerald-50/20" : "border-[#e8e0d5] bg-white"}`}>
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-xs font-bold text-[#1c1410] shrink-0">{c.character}:</span>
+                              <span className="text-xs text-[#6b5c4e] leading-relaxed">&ldquo;{c.claim}&rdquo;</span>
+                            </div>
+                          </div>
+                        ))}
+                      </LedgerSection>
+                    )}
+                  </>
+                );
+              })()}
             </div>
-            {/* Emotions */}
-            <div style={{ position:"absolute", inset:0, opacity: activeTab==="emotions"?1:0, pointerEvents: activeTab==="emotions"?"auto":"none", transition:"opacity 0.15s" }}>
-              <canvas ref={emotionsCanvasRef} style={{ display:"block", width:"100%", height:"100%" }} />
+
+            {/* Character Positions */}
+            <div className="overflow-y-auto p-4 space-y-3" style={{ position:"absolute", inset:0, opacity: activeTab==="positions" ? 1 : 0, pointerEvents: activeTab==="positions" ? "auto" : "none", transition:"opacity 0.15s" }}>
+              {(() => {
+                const positions: Record<string, string> = debate?.ledger_snapshot?.positions || {};
+                const chars: string[] = debate?.participating_characters || [];
+                const entries = chars.map((name, i) => ({ name, i, pos: positions[name] })).filter(x => x.pos);
+                if (entries.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <span className="text-2xl mb-2">🎭</span>
+                      <p className="text-sm text-[#a09282]">No character positions recorded.</p>
+                    </div>
+                  );
+                }
+                return entries.map(({ name, i, pos }) => {
+                  const col = CHAR_COLORS[i % CHAR_COLORS.length];
+                  const stats = graphStats.find(g => g.id === name);
+                  return (
+                    <div key={name} className="bg-white border border-[#e8e0d5] rounded-xl p-3.5">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: col.hex }}>
+                          {name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-[#1c1410]">{name}</span>
+                        </div>
+                        {stats && (<span className="text-[10px] text-[#c8b89a] shrink-0">{stats.speeches} turns</span>)}
+                      </div>
+                      <p className="text-xs text-[#6b5c4e] leading-relaxed">{pos}</p>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
 
+          {/* Voice share */}
           {graphStats.length > 0 && activeTab === "graph" && (() => {
             const sorted = [...graphStats].sort((a, b) => b.speeches - a.speeches);
-            const maxS = sorted[0]?.speeches || 1;
+            const maxSpeeches = sorted[0]?.speeches || 1;
             const total = sorted.reduce((s, n) => s + n.speeches, 0) || 1;
             return (
-              <div className="shrink-0 border-t border-white/10 px-3 py-2.5 space-y-1.5 bg-black/40">
-                {sorted.map(n => (
+              <div className="shrink-0 border-t border-[#e8e0d5] bg-[#f0ece5]">
+                <button onClick={() => setShowStats(v => !v)} className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e8e0d5]/60 transition-colors">
+                  <span className="text-xs uppercase tracking-widest text-[#a09282] font-medium">Voice share</span>
+                  <span className="text-[#a09282] text-xs">{showStats ? "▾" : "▸"}</span>
+                </button>
+                {showStats && <div className="px-3 pb-2.5 space-y-1.5">{sorted.map(n => (
                   <div key={n.id} className="flex items-center gap-2">
-                    <span className="text-xs text-white/45 w-16 shrink-0 truncate">{n.id.split(" ")[0]}</span>
-                    <div className="flex-1 h-1.5 bg-white/8 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(n.speeches/maxS)*100}%`, backgroundColor: n.color }} />
+                    <span className="text-xs text-[#8a7260] w-14 shrink-0 truncate">{n.id.split(" ")[0]}</span>
+                    <div className="flex-1 h-1.5 bg-[#d8cfc5] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(n.speeches / maxSpeeches) * 100}%`, backgroundColor: n.color }} />
                     </div>
-                    <span className="text-xs font-bold w-10 text-right shrink-0" style={{ color: n.color }}>{Math.round((n.speeches/total)*100)}%</span>
+                    <span className="text-xs font-bold w-8 text-right shrink-0" style={{ color: n.color }}>{Math.round((n.speeches / total) * 100)}%</span>
                   </div>
-                ))}
+                ))}</div>}
               </div>
             );
           })()}
@@ -1148,5 +1470,36 @@ export default function DebateViewPage() {
         );
       })()}
     </main>
+
+    {/* ── Footer — same as the home page ── */}
+    <footer className="bg-[#faf7f2] border-t border-[#e8e0d5] py-8 px-6">
+      <div className="max-w-2xl mx-auto flex flex-col items-center gap-4">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-[#c07820] flex items-center justify-center">
+            <span style={{ color: "#fef9c3", fontSize: "18px", lineHeight: 1 }}>☸</span>
+          </div>
+          <span className="font-bold text-sm text-[#1c1410]">WhatIf<span className="text-[#c07820]">Sabha</span></span>
+        </div>
+        <p className="text-xs text-[#a09282] text-center leading-relaxed max-w-md">
+          Upload any book. Watch the characters debate what would have happened differently.
+          A curiosity-driven side project — debate engine powered by multiple LLM providers.
+        </p>
+        <div className="flex items-center gap-4">
+          <a href="https://github.com/wadekarg/What-If-Sabha" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-[#6b5c4e] hover:text-[#c07820] transition-colors">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub
+          </a>
+          <span className="text-[#e8e0d5]">|</span>
+          <a href="https://github.com/wadekarg" target="_blank" rel="noopener noreferrer"
+            className="text-xs text-[#6b5c4e] hover:text-[#c07820] transition-colors">
+            Built by @wadekarg
+          </a>
+          <span className="text-[#e8e0d5]">|</span>
+          <span className="text-xs text-[#c8b89a]">MIT License</span>
+        </div>
+      </div>
+    </footer>
+    </>
   );
 }

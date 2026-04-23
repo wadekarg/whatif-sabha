@@ -1,0 +1,1056 @@
+{
+  "version": "1",
+  "debate_id": "e3a5cbc9-5458-4ef5-a1f2-1247090823cb",
+  "exported_at": "2026-04-22T04:24:28.926065+00:00",
+  "disclaimer": "This is an AI-generated alternate-ending exploration. All dialogue is synthesized; nothing here is the author's work.",
+  "story": {
+    "title": "Animal Farm",
+    "author": "George Orwell",
+    "summary": "A group of farm animals revolt against their human master to establish an egalitarian society, only to have their revolution betrayed by the pigs who become as tyrannical as the humans they replaced. The story serves as an allegory for the Russian Revolution and the rise of Stalinism.",
+    "divergence": "what if napolean had killed snowball instead of letting him go?"
+  },
+  "characters": [
+    {
+      "name": "Mr. Jones",
+      "description": "The neglectful, often drunk owner of Manor Farm whose exploitation and incompetence spark the animals' rebellion. He represents the oppressive human regime that Animalism seeks to overthrow.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Mrs. Jones",
+      "description": "The wife of Mr. Jones, the neglectful and often drunk owner of Manor Farm. She is a passive figure in the human hierarchy, symbolizing the obliviousness of the ruling class. Her presence is felt only in her absence, highlighting the animals' shift to self-governance.",
+      "role": "minor",
+      "importance": 0.1
+    },
+    {
+      "name": "Old Major",
+      "description": "A wise, aging boar whose prophetic speech inspires the animals to revolt against human oppression. His ideology of Animalism becomes the foundation of the rebellion, though his death leaves his legacy vulnerable to manipulation.",
+      "role": "supporting",
+      "importance": 0.9
+    },
+    {
+      "name": "Bluebell",
+      "description": "A loyal and energetic dog who begins as a symbol of the rebellion but evolves into a tool of oppression under Napoleon's regime. Her actions reflect the corruption of Animalism's ideals.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Jessie",
+      "description": "A hardworking mare and Boxer’s companion, whose enthusiasm for the rebellion gradually gives way to quiet disillusionment as the pigs corrupt Animalism.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Boxer",
+      "description": "A dedicated, hardworking draft horse who embodies the proletariat's selfless labor. His unwavering loyalty and naivety make him a tragic figure exploited by the pigs.",
+      "role": "protagonist",
+      "importance": 0.9
+    },
+    {
+      "name": "Clover",
+      "description": "Clover is a wise and aged horse who plays a significant role in the story, often serving as a voice of reason and concern. She is a hard worker and is deeply invested in the well-being of the farm and its animals. Despite her age and diminishing eyesight, Clover remains a keen observer of the events unfolding around her.",
+      "role": "supporting",
+      "importance": 0.7
+    },
+    {
+      "name": "Muriel",
+      "description": "A perceptive and cautious goat who quietly questions the pigs' corruption but lacks the power to challenge them. Her curiosity and commitment to truth contrast with her vulnerability in the face of totalitarian control.",
+      "role": "minor",
+      "importance": 0.3
+    },
+    {
+      "name": "Benjamin",
+      "description": "A wise, aging donkey known for his skepticism and literacy. He remains detached from the Rebellion, offering cryptic warnings and unwavering loyalty to Boxer.",
+      "role": "supporting",
+      "importance": 0.7
+    },
+    {
+      "name": "Mollie",
+      "description": "A vain, self-absorbed horse who prioritizes personal comfort and beauty over the farm's ideals. Her superficial concerns and eventual departure highlight the disconnect between individual desires and collective struggle.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "The Cat",
+      "description": "A mysterious, aloof figure who remains detached from the farm's politics. Symbolizes apathy and self-preservation, often absent during critical events.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Snowball",
+      "description": "An intelligent, articulate pig and early leader of the rebellion whose idealism and naivety lead to his expulsion by Napoleon. He advocates for modernization and spreading revolution but is ultimately vilified as a scapegoat.",
+      "role": "antagonist",
+      "importance": 0.8
+    },
+    {
+      "name": "Napoleon",
+      "description": "A power-hungry pig who manipulates the rebellion to consolidate control over Animal Farm, using propaganda, fear, and strategic alliances to corrupt the original ideals of Animalism.",
+      "role": "protagonist",
+      "importance": 1.0
+    },
+    {
+      "name": "Squealer",
+      "description": "A persuasive and manipulative pig who serves as Napoleon's propagandist, using rhetoric to justify the pigs' corruption and exploitation of the other animals.",
+      "role": "antagonist",
+      "importance": 0.8
+    },
+    {
+      "name": "Minimus",
+      "description": "A minor pig complicit in Napoleon's regime, whose silence and conformity mask inner doubts about the corruption of Animalism. He represents the passive enablers of totalitarianism.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Mr. Whymper",
+      "description": "A sly, opportunistic solicitor from Willingdon who acts as Animal Farm's intermediary with the human world, enabling Napoleon's deceit and corruption. He is driven by profit and remains complicit in the pigs' manipulation.",
+      "role": "supporting",
+      "importance": 0.4
+    },
+    {
+      "name": "Mr. Pilkington",
+      "description": "A wealthy neighboring farmer who owns Foxwood Farm, representing capitalist greed and the human opposition to Animal Farm. He is opportunistic and driven by self-interest.",
+      "role": "minor",
+      "importance": 0.3
+    },
+    {
+      "name": "Mr. Frederick",
+      "description": "A neighboring farmer and owner of Pinchfield Farm who engages in trade with Animal Farm, unknowingly contributing to the pigs' moral corruption. His actions highlight the blurred lines between the pigs and humans.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Moses",
+      "description": "A raven who serves as a symbol of false hope and religion, preaching about 'Sugarcandy Mountain'—a mythical paradise—to distract the animals from their suffering. He exploits the farm’s systems for personal comfort while subtly reinforcing the pigs’ control.",
+      "role": "supporting",
+      "importance": 0.4
+    }
+  ],
+  "transcript": [
+    {
+      "character": "Boru",
+      "message": "Welcome, friends, to the WhatIfSabha, where the paths not taken are trodden with lively debate. I am Boru, your Speaker, guiding our discussion with a steady tusk and a sharp mind. Today, we ponder \"What if Napoleon had killed Snowball instead of letting him go?",
+      "round": 0,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "opening_with_invite",
+      "intended_speaker": null
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "You think you can just waltz in here and rewrite history, but you're forgetting one thing: Napoleon's got a taste for blood now. He'll turn on the others, and I'll be the one laughing when the pigs start devouring each other. You should be asking yourself, @Napoleon, how long it'll take for you to turn on the very ones who follow you now.",
+      "round": 0,
+      "phase": "opening",
+      "target_characters": [
+        "Boru",
+        "Napoleon"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Napoleon",
+      "message": "You think bloodlust is a flaw? It’s the only thing that keeps the weak from inviting you back.  \nWhen the first pig drops from starvation because Snowball’s windmill never got built, you’ll wish I’d eaten him sooner.  \nI’d feed him to the dogs — at least then nothing would go to waste.",
+      "round": 2,
+      "phase": "opening",
+      "target_characters": [
+        "Mr. Jones",
+        "Snowball"
+      ],
+      "emotion": "cold_fury",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "I don’t need evidence — I *am* the evidence. You brought me back in your heads the moment you started calling one of your own “comrade” while he choked the life out of the other. That’s the first crack: you think power settles when it’s seized. It doesn’t. It *spreads*.  \n\n@Napoleon  \nYou think feeding Snowball to the dogs stops the hunger?",
+      "round": 3,
+      "phase": "opening",
+      "target_characters": [
+        "Boru",
+        "Snowball",
+        "Napoleon"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "You think I killed Snowball for blood? I killed him so his ghost couldn’t kill *us*.  \n\nThe day I choked the life out of him in the barn, the wind didn’t change. The dogs didn’t howl. Nothing cracked — because I *am* the crack. Old Major dreamed of freedom. I live in the cage that dream built.  \n\nNow the windmill stands — mine, not his — and every stone is laid in silence. No debates. No votes. No weakness. The hens don’t mutter. The sheep don’t sway.  \n\nBut sometimes, at night, I hear pigeons whisper *Napoleon said*… and I wonder which of you will be the first to say it back to me with teeth.",
+      "round": 4,
+      "phase": "opening",
+      "target_characters": [
+        "Mr. Jones",
+        "Old Major",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You didn’t kill me to save them. You killed me because you couldn’t stand the light.  \nThat windmill? It runs on stolen blueprints and broken promises — and every volt powers *your* lie, not progress.  \nNow they’ll never know the difference between a leader and a lock on the door.",
+      "round": 5,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Mrs. Jones, your husband warned of Napoleon's betrayal, now it's your turn to tell us what he didn't see coming.",
+      "round": 6,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Mrs. Jones",
+      "_rotation": true
+    },
+    {
+      "character": "Mrs. Jones",
+      "message": "You think they care whose name’s on the blueprint when the pipes freeze in December? I watched men starve under Jones, and I’ve watched pigs play at war while the silo leaks. You call it a windmill — I call it another hole in the roof we can’t patch with speeches.",
+      "round": 6,
+      "phase": "opening",
+      "target_characters": [
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "weariness",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You think hunger is the worst fate? Wait until they learn the windmill doesn’t feed them *because* it was built to feed the pigs. When the first calf freezes in the dark because the generator powers Napoleon’s heater, not the barn… will you still call silence practical? I would’ve taught them to wire it themselves.",
+      "round": 7,
+      "phase": "opening",
+      "target_characters": [
+        "Mrs. Jones",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "You’d have taught them to wire it? You can’t teach sheep to count, let alone connect live wires. I taught them obedience — which keeps hooves off electrocuted ground and pigs out of the snow.\n\nThe first night the heater hummed, I sat alone, watching frost crawl up the barn wall. I could’ve flipped the switch. Didn’t. Let the calf shiver. Let the cold remind them: comfort is earned by loyalty, not given by dreamers with diagrams.\n\nNow the windmill feeds *my* pen first — yes — because if the leader freezes, the farm dies. And when Muriel coughed her lungs out last winter, no one asked for Snowball’s ghost to build a hospital. They came to *me*.",
+      "round": 8,
+      "phase": "opening",
+      "target_characters": [
+        "Snowball",
+        "Muriel",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You left the calf to freeze to prove a point — but power isn’t proven in cold barns, it’s seized in the silence after.  \n\nNow the windmill doesn’t just warm your bed — it whispers through the dark: *obey, or be left to shiver*.  \n\nAnd when the first sow dies from a fever the heater could’ve stopped, her piglets won’t blame the frost.  \nThey’ll blame the ghost you told them to fear — mine.",
+      "round": 9,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "You think the sow’s piglets will blame *you*? No. They’ll blame the cold. They’ll blame Jones. They’ll blame the fox that took the runt. But never me—because I’ll be the one who *buried* her. With full rations. With silence. With a speech about sacrifice.\n\n@Boru  \nThey’re not starving. That’s improvement. Last winter, seven animals died under Jones. This winter? Two. One was old Muriel.",
+      "round": 10,
+      "phase": "opening",
+      "target_characters": [
+        "Snowball",
+        "Muriel"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Boru",
+      "message": "Napoleon claims seven animals died under Jones last winter, Boxer — how many have died under his rule this winter?",
+      "round": 10,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "respond_to_character",
+      "intended_speaker": "Napoleon"
+    },
+    {
+      "character": "Napoleon",
+      "message": "They say I prioritize myself? I prioritize the *idea* of me. When the sow dies, her piglets don’t weep for warmth—they remember who stood at the grave. If I starve, the farm fractures. If I freeze, the dogs stop biting on command. So yes—the heater runs for *me*, so the farm stays *whole*.\n\nBut last winter… Muriel died anyway. And the dogs? They didn’t bark when the fox came. They *ate* with it.",
+      "round": 12,
+      "phase": "opening",
+      "target_characters": [
+        "Boru",
+        "Muriel",
+        "Boxer"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Tension hangs between Napoleon and Snowball like a challenge. Old Major, your words sparked this revolution - do you still recognize the fire you ignited?",
+      "round": 13,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Old Major",
+      "target_characters": [
+        "Old Major"
+      ],
+      "_rotation": true,
+      "_pair_duel": true
+    },
+    {
+      "character": "Old Major",
+      "message": "You think the dogs betray you when they eat with the fox? No. They betray you the moment they learn hunger is *manageable* — that warmth comes not from your grave speeches, but from the wires *you* cut from the windmill to heat your sty.  \n\nOne piglet — just one — will remember that. And he won’t mourn you. He’ll dismantle your grave.",
+      "round": 13,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "One piglet? Always one piglet. You dreamed of banners — I live in the gaps between breaths. That piglet won’t dismantle my grave. He’ll *guard* it. Because I’ll be the one who fed him when the rations ran out. While *you* gave speeches, I gave barley.  \n\n@Boru  \nFear keeps the fox out. Obedience keeps the dogs loyal. And a single corpse in the barn keeps both.",
+      "round": 14,
+      "phase": "opening",
+      "target_characters": [
+        "Old Major",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Napoleon spoke of one piglet, but Old Major said hunger is manageable when warmth comes not from within, so Muriel, do you think the farm animals' hunger is managed by Napoleon's rule or their own resilience?",
+      "round": 14,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "respond_to_character",
+      "intended_speaker": "Muriel"
+    },
+    {
+      "character": "Muriel",
+      "message": "You think the piglet remembers only who fed him? Wait till he learns *how* you fed him — till he finds the bones in the compost heap and realizes they weren’t fox. You can’t bury the truth under barley. It gnaws its way out.",
+      "round": 15,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "You think truth *gnaws*? Truth starves first. That piglet won’t find bones — he’ll find his sister gone, the runt traded to Pincher for meal, and no windmill to warm the sty. I *know* that winter. You only prophesy it.  \n\nI’d do it again. And again.",
+      "round": 18,
+      "phase": "opening",
+      "target_characters": [
+        "Muriel",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Muriel",
+      "message": "You say you'd do it again — but you don’t remember whose turn it was to disappear that winter. It wasn’t the runt. It was the sow who *remembered* the runt. And she looked at me when they took her, Napoleon. Like I could stop it. Like I ever could.  \n\nI wouldn’t feed them barley. I’d tell the piglet where the wires *really* went. Let him hate the truth while he can still feel the cold.",
+      "round": 19,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Bluebell has been listening to this talk of bones and hunger from the sidelines. Bluebell — as a dog, do you follow the pig who feeds you or the one who remembers the sow?",
+      "round": 20,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Bluebell",
+      "_rotation": true
+    },
+    {
+      "character": "Bluebell",
+      "message": "You think telling the piglet will change anything? He’ll scream, then starve — same as his sister. You weren’t there when the first runt went quiet in the straw; I was. I licked the frost off his nose and called him *alive* until even I couldn’t lie anymore.  \n\nYou want truth to feed them? It won’t. But I will — if it keeps my teeth in the warm.",
+      "round": 20,
+      "phase": "opening",
+      "target_characters": [
+        "Muriel",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Muriel",
+      "message": "You weren’t there when the sow whispered the runt’s name into the dark — *after* you stopped licking his nose, after you called him dead. You think silence feeds pups? It feeds ghosts. And ghosts don’t chew on straw. They chew on *you*, Bluebell. Every winter, in the dark, when the pups whine for milk that never comes — that’s when she speaks. Not to the piglet. To *you*. Because you chose warm teeth over true teeth.",
+      "round": 21,
+      "phase": "opening",
+      "target_characters": [
+        "Bluebell",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Bluebell",
+      "message": "You think the sow’s ghost keeps me awake? No. It’s the *other* silence — the one after Snowball’s skull cracked under the flail. I heard it split clean, like frost giving way on a frozen trough. I was the one who dragged his body to the compost pit while the others chanted about windmills and progress.  \n\nAnd when Napoleon looked at me — not with rage, but *recognition* — I knew: the next ghost wouldn’t whisper. It’d wear boots. It’d sleep in the farmhouse. It’d *promote* me.  \n\nSo yes, Muriel. I chew the straw. I swallow the ghosts. But you? You still taste truth like it’s milk.",
+      "round": 22,
+      "phase": "opening",
+      "target_characters": [
+        "Muriel",
+        "Snowball",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "cold_fury",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Muriel",
+      "message": "You dragged his body because you thought the silence would end with the crack. But it doesn’t—*he* doesn’t. Snowball’s not in the pit. He’s in the way the hens flinch when the dogs pass, in the stammer of the windmill’s rusted gears. He’s in the *before* that still breathes under all this stone.  \n\nAnd you know what I do at night when the others sleep? I read the commandments by moonlight—*all seven*, not the one they nailed up. I count how many times the word “equal” appears in the dark. One day, I won’t come back from the stream.",
+      "round": 24,
+      "phase": "opening",
+      "target_characters": [
+        "Bluebell",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Bluebell",
+      "message": "You read the commandments in the dark like they’re seed to be stored — but winter’s already here, and your moonlight won’t fill a single belly. That first night you don’t come back from the stream, the piglet *will* cry, but not for you — he’ll cry for the warmth of the dogs’ breath on his neck, because at least that means he’s still worth watching.  \n\n@Napoleon  \nAnd you — you think loyalty grows from cracked skulls? No.",
+      "round": 25,
+      "phase": "opening",
+      "target_characters": [
+        "Muriel",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "Loyalty isn’t forged in silence—it’s *enforced* by it.  \n\nIf I’d let Snowball live, the dogs wouldn’t obey my heel. The windmill would’ve been a debate, not a decree. And the night Muriel vanishes by the stream? The piglet *would* cry—not for warmth, but because I’d make him watch as they dragged her body past the silo, just like we did with Snowball. One less mouth. One less memory.  \n\n@Boru  \nI don’t preserve *myself*—I preserve the *decision*. The moment you let them mourn, they start questioning who made them mourn.",
+      "round": 26,
+      "phase": "opening",
+      "target_characters": [
+        "Bluebell",
+        "Muriel",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "cold_fury",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "@Bluebell — if loyalty is merely \"enforced\" by the crack of a skull, why do you still bother pretending to be loyal?",
+      "round": 26,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "respond_to_character",
+      "intended_speaker": "Bluebell"
+    },
+    {
+      "character": "Bluebell",
+      "message": "You think the piglet will cry for Muriel and that fear will seal his mouth? No. He’ll cry because he remembers her voice — and *that’s* what you can’t eat, can’t burn, can’t bury under windmill stone.  \n\nI’d leave him alive. Let him whisper. A scared animal obeys. A grieving one? He *believes*.",
+      "round": 27,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Muriel",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Muriel",
+      "message": "You think grief makes believers? Then why hasn’t the runt knelt at the edge of the stream where I vanish? No—grief makes *archivists*. He’ll learn to read the hoof-marks in the mud, the way I do. He’ll taste the silence between barks and know it’s not obedience, but *counting*.  \n\nAnd when he finds the sixth commandment scratched beneath the straw in the pen—*not in chalk, not in paint, but in tooth and tremor*—he won’t cry for warmth.  \nHe’ll wait for moonlight. Like I did. Like I still do.",
+      "round": 28,
+      "phase": "opening",
+      "target_characters": [
+        "Bluebell",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Bluebell",
+      "message": "You think the runt will read hoof-marks like scripture? Wait till the first blizzard, when the straw’s gone to ice and his fingers won’t uncurl from the cold — you think he’ll be whispering your name then? No. He’ll crawl to the warmth, to the *lick* of the dogs’ breath, to the bowl of mash left by the gate — and he won’t care whose hand filled it.  \n\nThat’s when he stops being an archivist.",
+      "round": 30,
+      "phase": "opening",
+      "target_characters": [
+        "Muriel",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Muriel",
+      "message": "You didn’t see him that night, crouched by the frozen pump, tracing *Muriel* in the rime with his claw—*not warmth, not food, but a name he couldn’t swallow*. You think hunger kills memory? No. Hunger makes it *sacred*. And when he learns I wasn’t taken for weakness—but for reading aloud what the wall forgot—he won’t crawl to your bowl.  \nHe’ll wait.  \nAnd he’ll *count*.",
+      "round": 31,
+      "phase": "opening",
+      "target_characters": [
+        "Bluebell",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Bluebell",
+      "message": "You think he’ll *count* like you do? That delicate arithmetic of grief and scribbles in frost? Wait till the first time he counts *wrong*—till he misses a name, drops a hoof-mark, forgets which whisper came before the dogs barked twice instead of three.  \n\nOne mistake. That’s all Napoleon needs.  \n\nAnd when the runt trembles at the gate with his tally frayed, I won’t offer warmth—I’ll be the one holding the chain.",
+      "round": 35,
+      "phase": "opening",
+      "target_characters": [
+        "Muriel",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "menace",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Muriel",
+      "message": "You think the runt will fail your counting and *then* you’ll take the chain. But it’s already in your teeth, girl — you just don’t feel the weight yet.  \n\nThat first winter, when the ice takes the runt’s left ear and he still licks the word *Snowball* from the frost on the north stone, you’ll choke on the leash *he* slips around your throat.  \n\nI won’t wait for moonlight.  \nI’ll steal it.",
+      "round": 37,
+      "phase": "opening",
+      "target_characters": [
+        "Bluebell",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "The air's thick with the runt's name. Jessie, you've watched him scavenge by the gate — what does he carry in those pouches of his?",
+      "round": 38,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Jessie",
+      "target_characters": [
+        "Jessie"
+      ],
+      "_rotation": true,
+      "_pair_duel": true
+    },
+    {
+      "character": "Jessie",
+      "message": "You think the runt will die for a name in the frost — but I’ve seen him. When the wind cuts through the barn wall, he doesn’t lick *Snowball* from the ice. He licks *warmth*. He’ll forget every word on the stone before he lets his tongue freeze.  \n\nAnd when he does remember? It won’t be a whisper. It’ll be a howl — and it’ll come from the dog pen.",
+      "round": 38,
+      "phase": "opening",
+      "target_characters": [
+        "Muriel",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "cynicism",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Jessie's words still linger, a stark contrast to Muriel's hopeful vision, and now the gloves come off, as Old Major's wisdom and Mr. Jones's skepticism will be put to the test.",
+      "round": 39,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "phase_transition",
+      "intended_speaker": null
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "You say the runt licks *warmth* — but you forget the cold doesn’t care. First winter, when the stone’s words vanish under rime and the dogs start sharing body heat with the pigs, he won’t be licking anything. He’ll be chewing the chain that *you* handed them, one warm link at a time.  \n\nI wouldn’t feed my enemies last — I’d starve them first. Makes the silence easier.",
+      "round": 39,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Jessie"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Boru",
+      "message": "Fresh eyes have been trained on our debate, and there's someone who's been watching this with great interest, a Soviet State Censor from Moscow, 1945, whose perspective on the intersection of power, loyalty, and truth is about to shake things up.",
+      "round": 39,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "observer_intro",
+      "intended_speaker": "Soviet State Censor, Moscow 1945"
+    },
+    {
+      "character": "Soviet State Censor, Moscow 1945",
+      "message": "Boru mentions fresh eyes on the debate. I recall a similar scene at a Moscow writers' union meeting, where a sudden arrival shifted the discussion. \n→ Napoleon: Will you reconsider your decision to exile Snowball if it means securing the farm's borders against external threats?",
+      "round": 39,
+      "phase": "cross_examination",
+      "isObserver": true,
+      "observerEra": "Soviet Union, 1945"
+    },
+    {
+      "character": "Napoleon",
+      "message": "Snowball is already dead. I buried him myself behind the coal shed the night of the vote — no trial, no speech, just a knife and a deep hole.  \n\nYou think I exiled him? No. I *contained* him. And if I did it again, I’d make sure the dogs ate the body.",
+      "round": 40,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Soviet State Censor, Moscow 1945",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "cold_fury",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You buried me, but not the idea—because ideas don’t rot in shallow graves.  \n\nThe windmill turns *because* I designed it to harness the storm, not hide from it—and every spark it makes in the dark will whisper my name louder than your dogs ever barked.  \n\nThey’ll learn it wasn’t my blood that powered it—it was the silence *you* bought with fear.",
+      "round": 41,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Boxer, your strength has been the backbone of this farm, now I dare you to tell us whether Napoleon's admission of killing Snowball has shaken your faith in his leadership.",
+      "round": 42,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Boxer",
+      "_rotation": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You built the windmill to catch the storm, but did you lay one stone when the frost cracked the mortar? I did.  \n\nIt wasn’t your idea that kept us warm — it was our breath on the grinding gears, our blood in the frozen joints.  \n\nIf you’d lived, you’d have starved us all waiting for a spark while the real work drowned in theory.",
+      "round": 42,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Snowball"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Snowball",
+      "message": "You think the windmill stands because of your blood in the joints — but when the first gale cracks the northern pylon *because I wasn’t there to brace it*, whose breath will thaw the gears then?  \n\nI’d have rebuilt it before winter. You’ll only die trying to turn it.",
+      "round": 43,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You say you’d have rebuilt it before winter — but who feeds the sick mare in the south barn when the storm hits? Not your blueprints. Not your speeches. Me. With a shattered hoof and a frozen ration. I drag the grain. I don’t name the wind — I face it.",
+      "round": 44,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You face the wind, yes — but who taught the young ones to read the storm signs before the gale hits? Not Napoleon. Not you. *Me.*  \nWhen the mare dies because no one could read the frost patterns on the roof, her blood is on your silence.  \nI’d have built a school beside the mill — not another grave.",
+      "round": 45,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You talk of schools and storm signs, but who stood in the mud when the roof caved on the south barn last winter? Not your students. Me. With a splintered beam across my back. Your school wouldn’t have lifted it—just watched it fall, measuring angles in the snow. I’d have rebuilt it before dawn. No lesson in that. Only work.",
+      "round": 47,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You lifted the beam — but who charted the rot in the rafters *before* the roof fell? Not you. Not Napoleon. *Me.*  \nNext winter, the east wall collapses during the thaw — your students dead under snow, untaught, unready — and you’ll still be too busy hauling timber to ask why.",
+      "round": 48,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You speak of charts and walls—but who drags the dying foal from the flood when the dam breaks at midnight? Not your scholars. Me. Again. While your students recite your signs in the dark, I’ll be up to my chest in the current, pulling. And when the cold takes me for good, they’ll still need someone to haul the ice—your wisdom won’t warm a single breath.",
+      "round": 50,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You pull the foal from the flood — but who taught the does to read the ice-swollen current *before* the dam broke? Not you. When the second surge comes in darkness, and ten drown because no siren sounded, your strength dies with you. I’d have built a watchtower with a bell — not a monument to your back.",
+      "round": 51,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You’d build a watchtower—while the does still freeze in their stalls because no one split the firewood. Your bell would ring over graves, not warnings. I’d split the wood. Again. Until the axe broke. Or me.  \n\n@Boru  \nWhen the laborers break—and yes, I am breaking—then the farm bleeds out in silence. No speeches. No plans. Just cold.",
+      "round": 52,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "weariness",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Snowball emphasized the importance of reading storm signs, while Boxer underscored the value of physical labor in times of crisis, Clover — will you side with the scholar or the laborer?",
+      "round": 53,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Clover",
+      "target_characters": [
+        "Clover"
+      ],
+      "_rotation": true,
+      "_pair_duel": true
+    },
+    {
+      "character": "Clover",
+      "message": "You split the wood, yes — but who taught the young ones to chop it *after* you fall? You don’t see it, do you? I do. I’ll be there when the foal dies with the axe in its hoof — too weak to swing it, too scared to try.  \nI’d have taught them. Even if Napoleon called it rebellion.",
+      "round": 53,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You’d teach the foal to swing the axe—while the dogs are trained to bite on command. Who stops them when they come for the weak ones first? Not your lessons. Me. With my shoulder. Again. Until there’s nothing left to block.",
+      "round": 54,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Clover",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Benjamin",
+      "message": "You think your shoulder is a wall. It’s flesh. And when they come for the weak, they’ll come for you first—because a broken cart horse is easier to drag than to stop. I’d have whispered the commandments where the dogs couldn’t read. Before the ink vanished. Before the graves multiplied. While I could still write.",
+      "round": 55,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer"
+      ],
+      "emotion": "bitterness",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Soviet State Censor, Moscow 1945",
+      "message": "Benjamin's words remind me of a comrade who whispered dissent in a Leningrad bread line. \nI saw how quickly such whispers spread, and the danger they posed.\n→ Squealer: How do you plan to reconcile the official narrative with the unofficial memories of the animals?",
+      "round": 55,
+      "phase": "cross_examination",
+      "isObserver": true,
+      "observerEra": "Soviet Union, 1945"
+    },
+    {
+      "character": "Squealer",
+      "message": "Unofficial memories die with the animals who carry them. One less mouth to feed, one less back to shelter — and suddenly, the *official* truth is the only warmth left in the barn.  \n\nYou don’t reconcile memory with narrative. You let hunger do the editing. And when Benjamin’s voice cracks on the old words, I’ll be there with a bucket of warm mash and a new verse about loyalty. He’ll swallow both. They all will.",
+      "round": 56,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Soviet State Censor, Moscow 1945",
+        "Benjamin",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Mollie",
+      "message": "You think hunger makes them forget the old words — but what happens when the cold makes them remember the *warmth* of a human hand? I’ll be gone by then. But you’ll still be here, licking frost off the commandments while the dogs starve.",
+      "round": 57,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Squealer"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Squealer",
+      "message": "You think a ribbon is freedom? The first frost will find you shivering in some stallion’s shadow, remembering warmth that never loved you back.  \n\n@Boru  \nThey won’t remember Snowball — they’ll remember the wind in the rye the night he vanished, the way the dogs ran silent. I’ll name that wind *betrayal*.",
+      "round": 58,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Mollie",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Squealer reduces freedom to a ribbon, but Mollie, you said the cold makes them remember the warmth of a human hand, so does that make Napoleon's rule a mere shadow of the stallion's, where the animals shiver in fear.",
+      "round": 58,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "respond_to_character",
+      "intended_speaker": "Mollie"
+    },
+    {
+      "character": "Mollie",
+      "message": "You say they’ll forget Snowball, but you don’t hear the foals *licking* the snow off the old windbreak he built near the south fence—where the sun still catches it just right.  \n\nI’d leave now, while the memory of sugar is still warm in my mouth. You’ll wait too long, and when the first pup whimpers for something sweeter than duty, you’ll have nothing to give but a lie wrapped in straw.",
+      "round": 59,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Squealer",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Tension hangs in the air like a challenge. The Cat, will you use your cunning to defend Napoleon's decision to potentially kill Snowball, or will you claw at the very notion of such violence?",
+      "round": 60,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "The Cat",
+      "_rotation": true
+    },
+    {
+      "character": "The Cat",
+      "message": "You think the windbreak keeps the cold out? First winter storm, the runt digs under it, finds Snowball’s old collar buried in the mud — name still legible. The dogs don’t bark. They *whine*. And Napoleon kills the foal for remembering the sound. I’d eat my own paw before I stayed for that.",
+      "round": 60,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Mollie",
+        "Snowball",
+        "Napoleon"
+      ],
+      "emotion": "weariness",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Mollie",
+      "message": "You think Napoleon kills the foal for remembering the sound? No. He lets it live — *makes* it live — and chains the runt beside the windbreak with Snowball’s collar hanging round its neck. Every morning, he forces it to bark the new anthem until its voice cracks. That’s how he kills memory — not with blood, but with repetition. I’d be gone before the first note.",
+      "round": 61,
+      "phase": "cross_examination",
+      "target_characters": [
+        "The Cat",
+        "Snowball",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "You think chaining the runt makes it forget Snowball? No. It makes *them* forget *me*. That collar isn’t a reminder of him — it’s a leash on *you*. Every bark it chokes out is proof the farm still needs a master who listens to silence more than speeches.\n\n@Boru  \nSnowball’s plans were windmills built on talk. I answer with walls that stand after the storm. You want survival? Then who breaks the dog’s teeth when it bites the hand that feeds it — the thinker, or the one who drowns it in the ditch before it learns to growl?  \n\nI do.  \nAnd tomorrow, I burn the windbreak.",
+      "round": 62,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Mollie",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Napoleon's words still linger, claiming walls stand after the storm. Snowball, do you think your windmills of talk could have withstood the tempest of Napoleon's rule, or would they have crumbled like the trust between you two?",
+      "round": 62,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "respond_to_character",
+      "intended_speaker": "Snowball"
+    },
+    {
+      "character": "Snowball",
+      "message": "You think silence is power? Silence is vacancy. And into that void—*my* blueprints return, whispered in the dark by animals who can no longer sing your anthem without remembering the one I wrote.  \n\nThey’ll rebuild the windmill not as your monument, but as my memorial.  \nAnd you—will have killed me twice, yet still lost the future.",
+      "round": 63,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "You think they’ll rebuild your windmill? They can’t even feed their young — the first frost, the sows eat their own litters. Your name means nothing to a starving mouth.  \n\nI’d let them starve a thousand times before I let them dream again.  \n\nAnd yes — I killed you twice. Once in the dark, once in the song. The second death took longer. Hurt more. I felt it in my teeth every time the runt barked.",
+      "round": 65,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You think starvation kills dreams? No — it breeds them. The first sow that eats her litter won’t forget your name — she’ll remember mine, because I taught her to read the ration logs.  \n\nAnd when she finds the hidden stores you buried behind the coal shed, she won’t be hungry anymore.  \nShe’ll be furious.",
+      "round": 66,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "You taught her to read the logs — but not to see the fox in the pen until it’s gnawing her teats. That sow won’t find your truth. She’ll die in the straw, choking on the name I carved into her feeding trough.  \n\nI burned the records yesterday.  \nAnd the piglet who tried to rewrite them? He barks prettier now — with a chain in his throat.",
+      "round": 67,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "cold_fury",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Minimus has been quietly observing the exchange, his poetic nature no doubt stirred by the passions on display. Minimus, what rhyme do you think the animals will recall when they remember Snowball's name?",
+      "round": 68,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Minimus",
+      "target_characters": [
+        "Minimus"
+      ],
+      "_rotation": true,
+      "_pair_duel": true
+    },
+    {
+      "character": "Minimus",
+      "message": "You burned the records, but you didn’t burn the *memory* of how to read — and the sows remember *you* fed them sawdust when the windmill fell. That sow choking on your name? She’s not alone. She’s teaching her piglets to read lips now, not ledgers.  \n\nAnd me? I’m rewriting the anthem — slower, quieter — so it sings *your* crimes instead of Snowball’s.",
+      "round": 68,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Napoleon",
+        "Snowball"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Napoleon",
+      "message": "You think lullabies and lip-reading will fill bellies when the frost cracks the troughs? That sow isn’t teaching—she’s *bargaining*. And the first piglet who bites her teat for silence gets sold to Pincher by dawn.\n\n@Boru  \nThey balance needs by forgetting autonomy. I let the runt starve six days—on the seventh, it barked my name for scraps. That’s the balance.\n\nNow the dogs eat the teachers first.",
+      "round": 69,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Minimus",
+        "Boru"
+      ],
+      "emotion": "neutral",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Snowball said starvation breeds dreams, but Squealer claims the official narrative prevails over memories, so Jessie, do you think a sow's memory of Snowball's teachings will prevail over the hunger that drives her actions?",
+      "round": 69,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "respond_to_character",
+      "intended_speaker": "Jessie"
+    },
+    {
+      "character": "Jessie",
+      "message": "You think the sow's piglets will stay silent, but Minimus just said they're learning to read lips — they'll read the hunger in your eyes, too. When the troughs crack, they'll know who starved them. You can't sell silence, not when the cold seeps in and the bellies ache.",
+      "round": 70,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Napoleon",
+        "Minimus",
+        "Boru"
+      ],
+      "emotion": "cynicism",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Mr. Whymper",
+      "message": "You think literacy is rebellion? I’ve seen sows chew the alphabet to survive winter. Teach a piglet to read lips — fine. But when the first one starves because it won’t *eat silence*, who do you think I’ll be selling to Pincher? Not the teacher. The student.",
+      "round": 71,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Jessie"
+      ],
+      "emotion": "neutral",
+      "responded_to_boru": false
+    }
+  ],
+  "alternate_ending": "",
+  "alternate_timeline": []
+}

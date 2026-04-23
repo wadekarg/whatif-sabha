@@ -24,7 +24,7 @@ export interface ExportMeta {
 }
 
 interface ExportOptions {
-  graphElement?: HTMLElement | HTMLCanvasElement | null;
+  graphElement?: HTMLElement | HTMLCanvasElement | SVGSVGElement | null;
   turns: ExportTurn[];
   meta: ExportMeta;
   filename?: string;
@@ -310,7 +310,7 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
       } else {
         // DOM element — capture via html2canvas. Guard against zero-size
         // elements (SVG wrappers with no layout often return 0×0).
-        const el = opts.graphElement;
+        const el = opts.graphElement as Element as HTMLElement;
         const rect = el.getBoundingClientRect();
         if (rect.width < 10 || rect.height < 10) {
           console.warn(`graph element has no size (${rect.width}x${rect.height}) — skipping`);

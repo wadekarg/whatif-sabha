@@ -966,7 +966,7 @@ function DebateList({ debates, storyId, onDelete }: {
                 </div>
               </div>
             ) : (
-              <Link href={`/story/${storyId}/debate?replay=${d.id}`} className="block p-4">
+              <Link href={`/story/${storyId}/debate/${d.id}`} className="block p-4">
                 <div className="flex items-start gap-3">
                   <div className="text-[#c8b89a] text-sm font-mono mt-0.5 w-5 shrink-0">{String(i + 1).padStart(2, "0")}</div>
                   <div className="flex-1 min-w-0">
