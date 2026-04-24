@@ -30,7 +30,7 @@ I've always been curious about the books I read. Some endings I just couldn't le
 
 WhatIfSabha is a side project born from that wondering. You upload a story, type a "what if", and watch the characters themselves argue it out — hosted by **Boru the Elephant**, who plays moderator. You won't get canon. You'll get a conversation between AI versions of them, which is a different thing, and sometimes a more interesting one.
 
-**Why Animal Farm to try this first.** I'd read it more than a decade ago, and a few questions from it never stopped bothering me — what if Snowball had come back, what if Boxer had refused the van, what if the animals had just walked away the night they saw the pigs on two legs. They were *always* there, those questions, running in the back of my head while I did other things, and every time I'd build a different theory to answer them — one day I'd land on one perspective, a week later I'd be somewhere else entirely. I never settled. So Animal Farm was the obvious first thing to point this at, and it's been my test bench ever since — if the moderator, the characters, the ledger all work on this one, they'll probably work on whatever book you throw at it next.
+**Why I chose Animal Farm.** I'd read it more than a decade ago, and a few questions from it never stopped bothering me — what if Snowball had come back, what if Boxer had refused the van, what if the animals had just walked away the night they saw the pigs on two legs. They were *always* there, those questions, running in the back of my head while I did other things, and every time I'd build a different theory to answer them — one day I'd land on one perspective, a week later I'd be somewhere else entirely. I've had this conversation with friends many times — they'd state their points, make their own theories, all of it. But *I* never settled. I don't think I'll settle with this app either — but each run gives me a new angle, a new perspective, something I hadn't thought of. It just makes me think more. So Animal Farm was the obvious first thing to point this at, and it's been my test bench ever since — if the moderator, the characters, the ledger all work on this one, they'll probably work on whatever book you throw at it next.
 
 > 📝 This is a side project — I work on it whenever I get some free time. It's rough in places and that's fine.
 
@@ -87,7 +87,7 @@ Drop a PDF. The app pulls out the characters, writes a short dossier for each, a
 
 ### 🏠 The story page — cast + timeline
 
-The cast is clickable, and a short generated timeline of the original story gives the starting reality.
+The cast is clickable, and a short generated timeline of the original story gives the starting reality. You can also see detailed fair witness analysis on each character through internet and wiki research.
 
 <p>
   <img src="docs/screenshots/story-page-main.png" width="49%" alt="Story page — cast" />
@@ -156,7 +156,7 @@ After the debate closes, the world persists. Any character will answer you from 
 ### 🐳 Option A — Docker (easiest, ~3 minutes)
 
 ```bash
-git clone https://github.com/wadekarg/What-If-Sabha.git whatif-sabha
+git clone https://github.com/wadekarg/whatif-sabha.git whatif-sabha
 cd whatif-sabha
 cp backend/.env.example backend/.env
 
@@ -299,7 +299,7 @@ Everything lives in `backend/.env` (see `backend/.env.example`). You only need *
 - ⚛️ **Frontend** — Next.js 16, TypeScript, Tailwind 4, D3 / force-graph
 - 💾 **State** — SQLite (debates, turns, characters) + ChromaDB (per-character RAG over story text). Optional Graphiti + Kuzu for persistent character "soul memory".
 - 🤖 **LLMs** — a provider router across **Gemini · Cerebras · NVIDIA NIM · Groq**, with role-based routing (character / judge / narrator / analysis) and automatic failover on rate-limit. Anthropic/OpenAI work as optional paid fallbacks.
-- 🖼️ **Character portraits** — generated via [Pollinations](https://pollinations.ai) during upload. Free, no API key.
+- 🖼️ **Character portraits** — generated via [Pollinations](https://pollinations.ai) during upload. Free, no API key. Generation is best-effort — a few portraits may not come through on any given upload; those characters fall back to an initials avatar.
 
 **Subprojects:**
 
@@ -433,7 +433,7 @@ If you try it with a book you love and something surprising happens, I'd genuine
 ### 🌟 If you've read this far — thanks. Try it with a book you can't let go of.
 
 [![See the demo](https://img.shields.io/badge/🎬_See_the_demo-what--if--sabha.pages.dev-4CAF50?style=for-the-badge)](https://what-if-sabha.pages.dev)
-[![GitHub](https://img.shields.io/badge/⭐_Star_on-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/wadekarg/What-If-Sabha)
+[![GitHub](https://img.shields.io/badge/⭐_Star_on-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/wadekarg/whatif-sabha)
 
 **MIT License** — see [LICENSE](LICENSE). Copyright (c) 2026 Gajanan Wadekar.
 
