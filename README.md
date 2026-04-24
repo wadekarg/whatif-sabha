@@ -12,7 +12,7 @@
 [![Status](https://img.shields.io/badge/status-side--project-D98B4E?style=flat-square)]()
 [![One Free Key](https://img.shields.io/badge/runs_on-ONE_free_API_key-4CAF50?style=flat-square&logo=sparkles)](#-api-keys--you-only-need-one)
 
-### 🔗 [**Try the live demo →**](https://what-if-sabha.pages.dev)
+### 🔗 [**See the demo →**](https://what-if-sabha.pages.dev)
 
 </div>
 
@@ -26,9 +26,11 @@
 
 ## 💭 Where it came from
 
-I've always been curious about the books I read. Some endings I just couldn't let go of — I'd keep rewriting them in my head on the bus, or before falling asleep, wondering what the characters would actually say if they got one more round on the stage.
+I've always been curious about the books I read. Some endings I just couldn't let go of — I'd keep rewriting them in my head while I was working, while I was at the gym, while I was doing dishes — and then at night they wouldn't let me sleep. Characters I'd known for years would show up in my head still going at each other, wondering out loud what they would have said if they'd got one more round on the stage.
 
 WhatIfSabha is a side project born from that wondering. You upload a story, type a "what if", and watch the characters themselves argue it out — hosted by **Boru the Elephant**, who plays moderator. You won't get canon. You'll get a conversation between AI versions of them, which is a different thing, and sometimes a more interesting one.
+
+**Why Animal Farm to try this first.** I'd read it more than a decade ago, and a few questions from it never stopped bothering me — what if Snowball had come back, what if Boxer had refused the van, what if the animals had just walked away the night they saw the pigs on two legs. They were *always* there, those questions, running in the back of my head while I did other things, and every time I'd build a different theory to answer them — one day I'd land on one perspective, a week later I'd be somewhere else entirely. I never settled. So Animal Farm was the obvious first thing to point this at, and it's been my test bench ever since — if the moderator, the characters, the ledger all work on this one, they'll probably work on whatever book you throw at it next.
 
 > 📝 This is a side project — I work on it whenever I get some free time. It's rough in places and that's fine.
 
@@ -61,7 +63,7 @@ While this streams, a live **interaction graph** shows who's talking to whom, a 
 
 ## 🎬 See it in action
 
-> ### 🔗 **Live replay:** **[https://what-if-sabha.pages.dev](https://what-if-sabha.pages.dev)**
+> ### 🔗 **See the demo:** **[https://what-if-sabha.pages.dev](https://what-if-sabha.pages.dev)**
 >
 > Bundled demo: *Animal Farm* with the divergence **"What if Boxer killed those dogs when they were trying to chase Snowball away?"** — 44 turns, 17 characters, full graph + ledger + Boru's notes timeline + closing + summary.
 
@@ -430,7 +432,7 @@ If you try it with a book you love and something surprising happens, I'd genuine
 
 ### 🌟 If you've read this far — thanks. Try it with a book you can't let go of.
 
-[![Live demo](https://img.shields.io/badge/🎬_Live_demo-what--if--sabha.pages.dev-4CAF50?style=for-the-badge)](https://what-if-sabha.pages.dev)
+[![See the demo](https://img.shields.io/badge/🎬_See_the_demo-what--if--sabha.pages.dev-4CAF50?style=for-the-badge)](https://what-if-sabha.pages.dev)
 [![GitHub](https://img.shields.io/badge/⭐_Star_on-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/wadekarg/What-If-Sabha)
 
 **MIT License** — see [LICENSE](LICENSE). Copyright (c) 2026 Gajanan Wadekar.
