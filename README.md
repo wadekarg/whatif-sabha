@@ -1,8 +1,9 @@
 <div align="center">
 
-<img src="docs/logo.svg" width="120" alt="WhatIfSabha logo" />
-
-# WhatIfSabha
+<h1>
+  <img src="docs/logo.svg" width="72" align="center" alt="" />
+  &nbsp;WhatIfSabha
+</h1>
 
 ### *Upload a book. Change one thing. Watch the characters argue about it.*
 
