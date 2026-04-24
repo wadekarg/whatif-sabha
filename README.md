@@ -20,7 +20,7 @@
 
 ## 🧭 Jump to
 
-&nbsp;&nbsp;[💭 Where it came from](#-where-it-came-from) &nbsp;·&nbsp; [📖 What it does](#-what-it-does) &nbsp;·&nbsp; [📸 Guided tour](#-a-guided-tour) &nbsp;·&nbsp; [⚡ Quick start](#-quick-start) &nbsp;·&nbsp; [🔑 API keys](#-api-keys--you-only-need-one) &nbsp;·&nbsp; [🎭 How the debate works](#-how-the-debate-works) &nbsp;·&nbsp; [🛠 Config](#%EF%B8%8F-config-reference) &nbsp;·&nbsp; [🧪 Tests](#-running-tests) &nbsp;·&nbsp; [🆘 Troubleshooting](#-troubleshooting)
+&nbsp;&nbsp;[💭 Where it came from](#-where-it-came-from) &nbsp;·&nbsp; [📖 What it does](#-what-it-does) &nbsp;·&nbsp; [📸 Guided tour](#-a-guided-tour) &nbsp;·&nbsp; [⚡ Quick start](#-quick-start) &nbsp;·&nbsp; [🔑 API keys](#-api-keys--you-only-need-one) &nbsp;·&nbsp; [🎭 How the debate works](#-how-the-debate-works) &nbsp;·&nbsp; [🔊 Voice](#-voice--every-character-has-one) &nbsp;·&nbsp; [🛠 Config](#%EF%B8%8F-config-reference) &nbsp;·&nbsp; [🧪 Tests](#-running-tests) &nbsp;·&nbsp; [🆘 Troubleshooting](#-troubleshooting)
 
 ---
 
@@ -245,6 +245,28 @@ This whole layer is covered by tests in `backend/tests/` (~86 tests across sever
 
 ---
 
+## 🔊 Voice — every character has one
+
+Each character speaks in their own voice as the debate streams. Audio is generated on the fly by **[Edge TTS](https://github.com/rany2/edge-tts)** — Microsoft's neural voice pool exposed through a free, keyless API — and played turn-by-turn in the browser. No API key, no per-turn paid provider.
+
+**Voices aren't random.** During upload, each character is scored against a library of ~130 trait keywords across three dimensions:
+
+- 🔥 **Energy** — how fast the character speaks. Paranoid · young · impulsive push it up; stoic · weary · grieving pull it down.
+- 👑 **Authority** — how deep the pitch sits. Commanding · sage · ruthless push deeper; innocent · cowardly · timid pull higher.
+- 📢 **Presence** — how loud and projected. Theatrical · defiant · aggressive fill the room; melancholy · broken · aloof fade back.
+
+The scorer reads every personality field the app has on a character — description, role, phase traits, motivations, fears, fair-witness consensus, narrative bias — then picks a base voice from a gendered pool of **16 Edge TTS voices** and tunes rate / pitch / volume accordingly. Boru is fixed — warm, authoritative, a little slow. Napoleon comes out deep and loud; Boxer steady and workmanlike; Mollie fluttery and quick.
+
+**Voices shift with emotion.** On top of the baseline, each turn is classified (anger, grief, pride, guilt, defiance, betrayal, contempt, cold fury, hope, weariness…) and the speaker's rate / pitch / volume are modulated for that turn. Same character, same voice, but an angry Napoleon is faster and louder than a scheming Napoleon — and a grieving Clover slows right down.
+
+**In the UI:** every transcript line has a ▶ button and the debate page auto-plays by default. Toggle **🔊 Auto-Play On / 🔇 Auto-Play Off** from the header. Boru reads the closing summary via its own audio button on the summary card. Audio is cached per turn on the backend, so replaying a finished debate is instant.
+
+**Pronunciation patches.** A few words that Edge TTS mishandles get phonetic swaps for TTS audio only — e.g. `sabha` → `sabhaa` to get the long Sanskrit vowel right. The on-screen transcript is never changed.
+
+> Relevant code: [`backend/app/core/tts.py`](backend/app/core/tts.py) (profile scoring, emotion modifiers, generation), [`backend/app/api/routes/debate.py`](backend/app/api/routes/debate.py) (`/debates/{id}/tts`, `/debates/{id}/voices`, `/debates/{id}/tts/summary`), and the auto-play queue in [`frontend/app/story/[id]/debate/page.tsx`](frontend/app/story/[id]/debate/page.tsx).
+
+---
+
 ## 🎨 Content + export features
 
 Once the debate ends, a few things happen:
@@ -300,6 +322,7 @@ Everything lives in `backend/.env` (see `backend/.env.example`). You only need *
 - 💾 **State** — SQLite (debates, turns, characters) + ChromaDB (per-character RAG over story text). Optional Graphiti + Kuzu for persistent character "soul memory".
 - 🤖 **LLMs** — a provider router across **Gemini · Cerebras · NVIDIA NIM · Groq**, with role-based routing (character / judge / narrator / analysis) and automatic failover on rate-limit. Anthropic/OpenAI work as optional paid fallbacks.
 - 🖼️ **Character portraits** — generated via [Pollinations](https://pollinations.ai) during upload. Free, no API key. Generation is best-effort — a few portraits may not come through on any given upload; those characters fall back to an initials avatar.
+- 🔊 **Voice** — free, keyless TTS via Microsoft Edge (`edge-tts`). 16-voice pool, personality-driven base assignment across energy/authority/presence dimensions, emotion-driven per-turn modulation, audio cached to disk per turn.
 
 **Subprojects:**
 
