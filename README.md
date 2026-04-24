@@ -61,7 +61,9 @@ While this streams, a live **interaction graph** shows who's talking to whom, a 
 
 A sample finished debate is hosted as a static replay site — you can scroll through the whole thing without running anything locally.
 
-> 🔗 **Live replay:** *(coming soon — hosted on Cloudflare Pages via the `replay/` subproject)*
+> 🔗 **Live replay:** **https://what-if-sabha.pages.dev**
+>
+> The demo is *Animal Farm* with the divergence **"What if Napoleon had killed Snowball instead of letting him go?"** — 78 turns, 19 characters, full graph + ledger + Boru's closing.
 >
 > 📄 **Sample export PDF:** *(coming soon — see `docs/samples/`)*
 

@@ -292,6 +292,9 @@ class ArgumentLedger:
         self.disputes: list[dict] = []  # {id, claim_a: {character, claim}, claim_b: {character, claim}, status, turns_unresolved}
         self.character_positions: dict[str, str] = {}  # character → current position summary
         self.progress_summary: str = ""
+        # Full chronological history of Boru's notes — one entry per meaningful
+        # update_ledger call. Exact-duplicate consecutive notes are skipped.
+        self.progress_history: list[dict] = []  # [{round, phase, note}]
         self._next_dispute_id: int = 1
         self.repetition_log: dict[str, list[str]] = {n: [] for n in character_names}  # character → list of claim hashes
         self._next_q_id = 1
@@ -563,6 +566,7 @@ async def update_ledger(
     transcript: list[dict],
     observer_names: list[str] = None,
     round_number: int = 0,   # used by pair-cooldown for retired disputes
+    phase: str = "",         # tagged on progress_history entries
 ) -> dict:
     """
     After a character speaks, use LLM to update the argument ledger.
@@ -723,7 +727,18 @@ Be concise. Return ONLY valid JSON."""
         ledger.character_positions[speaker] = result["position_update"]
 
     if result.get("progress_note"):
-        ledger.progress_summary = result["progress_note"]
+        note = str(result["progress_note"]).strip()
+        if note:
+            ledger.progress_summary = note
+            # Append to progress_history unless it's an exact duplicate of the
+            # most recent entry — keeps the timeline clean without being lossy.
+            last = ledger.progress_history[-1] if ledger.progress_history else None
+            if not last or last.get("note") != note:
+                ledger.progress_history.append({
+                    "round": round_number,
+                    "phase": phase,
+                    "note": note,
+                })
 
     # Process detected disputes/contradictions
     disputant_names = set(ledger.character_names)

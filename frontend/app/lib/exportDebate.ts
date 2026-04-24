@@ -21,6 +21,17 @@ export interface ExportMeta {
   exportedAt?: Date;
   cast?: { name: string; color?: string; role?: string }[];
   alternateEnding?: string;
+  /** Ledger snapshot from backend — adds the Ledger page to the PDF. */
+  ledgerSnapshot?: {
+    progress?: string;
+    progress_history?: { round: number; phase: string; note: string }[];
+    open_questions?: any[];
+    resolved_questions?: any[];
+    claims?: any[];
+    positions?: Record<string, string>;
+  };
+  /** Per-character positions — adds the Positions page to the PDF. */
+  positions?: Record<string, string>;
 }
 
 interface ExportOptions {
@@ -232,6 +243,81 @@ function drawSyntheticGraph(
   return canvas.toDataURL("image/png");
 }
 
+/**
+ * Serialize a live SVG element to a PNG dataURL.
+ *
+ * This is the reliable way to capture D3 graphs — html2canvas frequently
+ * fails on SVG and synthetic drawers lose the real layout. We:
+ *  1. Inline the computed stroke/fill/font styles so CSS isn't lost.
+ *  2. Serialize the SVG to XML, wrap in a blob URL, load via <Image>.
+ *  3. Draw into a canvas and read the PNG.
+ */
+async function captureSvgAsPng(
+  svg: SVGSVGElement,
+  scale = 2,
+): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  const rect = svg.getBoundingClientRect();
+  if (rect.width < 10 || rect.height < 10) return null;
+
+  // Clone so we don't mutate the live DOM
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", String(rect.width));
+  clone.setAttribute("height", String(rect.height));
+  if (!clone.getAttribute("viewBox")) {
+    clone.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
+  }
+
+  // Inline computed styles on every descendant so fonts/colors survive
+  const srcDescendants = svg.querySelectorAll("*");
+  const dstDescendants = clone.querySelectorAll("*");
+  const STYLE_PROPS = [
+    "fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap",
+    "opacity", "fill-opacity", "stroke-opacity",
+    "font-family", "font-size", "font-weight", "text-anchor", "dominant-baseline",
+  ];
+  for (let i = 0; i < srcDescendants.length; i++) {
+    const src = srcDescendants[i] as Element;
+    const dst = dstDescendants[i] as Element;
+    if (!dst) continue;
+    const cs = window.getComputedStyle(src);
+    for (const prop of STYLE_PROPS) {
+      const v = cs.getPropertyValue(prop);
+      if (v && v !== "none" && v !== "0px") {
+        (dst as SVGElement).style.setProperty(prop, v);
+      }
+    }
+  }
+
+  const xml = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = url;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(rect.width * scale);
+    canvas.height = Math.round(rect.height * scale);
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return { dataUrl: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
+  } catch (e) {
+    console.warn("[PDF] SVG capture failed:", e);
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+
 export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
   // Lazy-load to keep initial bundle small — libs only pull on click
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
@@ -274,80 +360,64 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
 
   let y = margin + 80 + divergenceLines.length * 16 + 20;
 
-  // Graph image — prefer synthetic (reliable) over live capture (unreliable with SVG).
-  // html2canvas on the live interaction graph frequently produces a blank PNG (SVG
-  // wrappers, inactive tabs, unfinished render). The synthetic drawer builds an
-  // interaction graph directly from turn data, so it always renders.
+  // Graph image — prefer the live SVG (exact reproduction) over the synthetic
+  // fallback. If no graph element is provided or SVG capture fails, fall back
+  // to the synthetic drawer so the PDF still has *some* graph on page 1.
   let imgData: string | null = null;
   let imgW = 0;
   let imgH = 0;
 
-  try {
-    const synthetic = drawSyntheticGraph(opts.turns, opts.meta.cast ?? []);
-    if (synthetic) {
-      imgData = synthetic;
-      imgW = 900;
-      imgH = 600;
-      console.info(`[PDF] using synthetic graph (${imgW}x${imgH})`);
-    }
-  } catch (e) {
-    console.warn("[PDF] synthetic graph failed:", e);
-  }
-
-  // Fallback: try live-capture if synthetic somehow failed (no turns / no cast).
-  if (!imgData && opts.graphElement) {
+  if (opts.graphElement) {
     try {
-      if (opts.graphElement instanceof HTMLCanvasElement) {
-        // Already a canvas — use directly at 2× scale for sharpness
+      if (opts.graphElement instanceof SVGSVGElement) {
+        const captured = await captureSvgAsPng(opts.graphElement, 2);
+        if (captured) {
+          imgData = captured.dataUrl;
+          imgW = captured.width;
+          imgH = captured.height;
+          console.info(`[PDF] captured live SVG graph (${imgW}x${imgH})`);
+        }
+      } else if (opts.graphElement instanceof HTMLCanvasElement) {
         const canvas = opts.graphElement;
-        if (canvas.width < 10 || canvas.height < 10) {
-          console.warn("graph canvas is blank — skipping");
-        } else {
+        if (canvas.width >= 10 && canvas.height >= 10) {
           imgData = canvas.toDataURL("image/png");
           imgW = canvas.width;
           imgH = canvas.height;
+          console.info(`[PDF] captured live canvas graph (${imgW}x${imgH})`);
         }
       } else {
-        // DOM element — capture via html2canvas. Guard against zero-size
-        // elements (SVG wrappers with no layout often return 0×0).
         const el = opts.graphElement as Element as HTMLElement;
         const rect = el.getBoundingClientRect();
-        if (rect.width < 10 || rect.height < 10) {
-          console.warn(`graph element has no size (${rect.width}x${rect.height}) — skipping`);
-        } else {
+        if (rect.width >= 10 && rect.height >= 10) {
           const capture = await html2canvas(el, {
-            backgroundColor: "#ffffff",
-            scale: 2,
-            logging: false,
-            useCORS: true,
-            width: rect.width,
-            height: rect.height,
+            backgroundColor: "#ffffff", scale: 2, logging: false, useCORS: true,
+            width: rect.width, height: rect.height,
           });
-          imgData = capture.toDataURL("image/png");
-          imgW = capture.width;
-          imgH = capture.height;
-
-          if (imgW < 50 || imgH < 50) {
-            console.warn(`first capture was tiny (${imgW}x${imgH}) — retrying with explicit size`);
-            const retry = await html2canvas(el, {
-              backgroundColor: "#ffffff",
-              scale: 2,
-              logging: false,
-              useCORS: true,
-              width: el.scrollWidth || 800,
-              height: el.scrollHeight || 600,
-            });
-            if (retry.width >= 50 && retry.height >= 50) {
-              imgData = retry.toDataURL("image/png");
-              imgW = retry.width;
-              imgH = retry.height;
-            }
+          if (capture.width >= 50 && capture.height >= 50) {
+            imgData = capture.toDataURL("image/png");
+            imgW = capture.width;
+            imgH = capture.height;
+            console.info(`[PDF] captured live DOM graph (${imgW}x${imgH})`);
           }
-          console.info(`[PDF] fallback live-capture: ${imgW}x${imgH}`);
         }
       }
     } catch (e) {
-      console.warn("Could not capture graph for PDF export:", e);
+      console.warn("[PDF] live graph capture failed, will fall back to synthetic:", e);
+    }
+  }
+
+  // Synthetic fallback — only runs if the live capture didn't produce an image.
+  if (!imgData) {
+    try {
+      const synthetic = drawSyntheticGraph(opts.turns, opts.meta.cast ?? []);
+      if (synthetic) {
+        imgData = synthetic;
+        imgW = 900;
+        imgH = 600;
+        console.info(`[PDF] using synthetic graph (${imgW}x${imgH})`);
+      }
+    } catch (e) {
+      console.warn("[PDF] synthetic graph failed:", e);
     }
   }
 
@@ -459,6 +529,237 @@ export async function exportDebateToPdf(opts: ExportOptions): Promise<void> {
       ty += 13;
     }
     ty += 8;
+  }
+
+  // ── LEDGER PAGE ──
+  // Boru's running notes, open questions, and claims.
+  const snap = opts.meta.ledgerSnapshot;
+  const hasLedger = !!(snap && (
+    (snap.progress && snap.progress.trim()) ||
+    (snap.open_questions && snap.open_questions.length) ||
+    (snap.resolved_questions && snap.resolved_questions.length) ||
+    (snap.claims && snap.claims.length)
+  ));
+  if (hasLedger && snap) {
+    doc.addPage();
+    let ly = margin;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(192, 120, 32);
+    doc.text("Argument Ledger", margin, ly);
+    ly += 24;
+
+    const ensureSpace = (h: number) => {
+      if (ly + h > pageH - margin) { doc.addPage(); ly = margin; }
+    };
+
+    // Boru's notes — full timeline if available, otherwise just the latest.
+    const notesHistory = snap.progress_history || [];
+    const fallbackNote = snap.progress && snap.progress.trim()
+      ? [{ round: 0, phase: "", note: snap.progress }]
+      : [];
+    const allNotes = notesHistory.length ? notesHistory : fallbackNote;
+    if (allNotes.length) {
+      ensureSpace(40);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(192, 120, 32);
+      const heading = notesHistory.length > 1
+        ? `Boru's Notes (${notesHistory.length})`
+        : "Boru's Notes";
+      doc.text(heading, margin, ly);
+      ly += 14;
+
+      for (let ni = 0; ni < allNotes.length; ni++) {
+        const n = allNotes[ni];
+        // Round/phase metadata
+        if ((n.round && n.round > 0) || n.phase) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8);
+          doc.setTextColor(160, 140, 120);
+          const tag = [
+            n.round && n.round > 0 ? `Round ${n.round}` : "",
+            n.phase ? n.phase.replace(/_/g, " ") : "",
+          ].filter(Boolean).join(" · ");
+          if (tag) {
+            ensureSpace(10);
+            doc.text(tag, margin + 4, ly);
+            ly += 11;
+          }
+        }
+        // Note body
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(10);
+        doc.setTextColor(40, 30, 20);
+        const noteLines = doc.splitTextToSize(sanitizeForPdf(n.note || ""), contentW - 8);
+        for (const line of noteLines) {
+          ensureSpace(13);
+          doc.text(line, margin + 4, ly);
+          ly += 13;
+        }
+        // Divider between notes
+        if (ni < allNotes.length - 1) {
+          ensureSpace(8);
+          doc.setDrawColor(240, 192, 96);
+          doc.setLineWidth(0.3);
+          doc.line(margin + 4, ly, margin + 60, ly);
+          doc.setLineWidth(1);
+          ly += 8;
+        }
+      }
+      ly += 10;
+    }
+
+    // Open questions
+    if (snap.open_questions && snap.open_questions.length) {
+      ensureSpace(30);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(180, 100, 30);
+      doc.text(`Open Questions (${snap.open_questions.length})`, margin, ly);
+      ly += 16;
+
+      for (const q of snap.open_questions) {
+        ensureSpace(30);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(40, 30, 20);
+        const qLines = doc.splitTextToSize(sanitizeForPdf(q.question || ""), contentW - 10);
+        for (const line of qLines) {
+          ensureSpace(12);
+          doc.text(line, margin + 6, ly);
+          ly += 12;
+        }
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
+        doc.setTextColor(130, 115, 100);
+        const meta = `Asked by ${sanitizeForPdf(q.asked_by || "?")}${
+          q.directed_to?.length ? ` -> ${sanitizeForPdf((q.directed_to as string[]).join(", "))}` : ""
+        }  ·  ${q.status || "open"}`;
+        ensureSpace(12);
+        doc.text(meta, margin + 6, ly);
+        ly += 12;
+
+        // Answers threaded below
+        if (q.answers && Object.keys(q.answers).length) {
+          for (const [who, answer] of Object.entries(q.answers)) {
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(9);
+            doc.setTextColor(100, 85, 65);
+            ensureSpace(12);
+            doc.text(`${sanitizeForPdf(who)}:`, margin + 16, ly);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(60, 50, 40);
+            const ansLines = doc.splitTextToSize(sanitizeForPdf(String(answer)), contentW - 30);
+            const whoW = doc.getTextWidth(`${who}: `) + 2;
+            let firstLineX = margin + 16 + whoW;
+            let firstLineW = contentW - 30 - whoW;
+            if (ansLines.length) {
+              const firstFit = doc.splitTextToSize(sanitizeForPdf(String(answer)), firstLineW);
+              doc.text(firstFit[0], firstLineX, ly);
+              ly += 12;
+              const remainder = firstFit.slice(1);
+              for (const r of remainder) { ensureSpace(12); doc.text(r, margin + 30, ly); ly += 12; }
+            }
+          }
+        }
+        ly += 6;
+      }
+      ly += 6;
+    }
+
+    // Claims & disputes
+    if (snap.claims && snap.claims.length) {
+      ensureSpace(30);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(192, 120, 32);
+      const disputed = snap.claims.filter((c: any) => c.status === "disputed").length;
+      doc.text(
+        `Claims & Disputes (${snap.claims.length}${disputed ? `, ${disputed} disputed` : ""})`,
+        margin, ly,
+      );
+      ly += 16;
+
+      for (const c of snap.claims) {
+        ensureSpace(18);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(40, 30, 20);
+        const char = sanitizeForPdf(c.character || "?");
+        const charW = doc.getTextWidth(char + ":");
+        doc.text(`${char}:`, margin + 6, ly);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(60, 50, 40);
+        const claimLines = doc.splitTextToSize(
+          `"${sanitizeForPdf(c.claim || "")}"`,
+          contentW - charW - 10,
+        );
+        if (claimLines.length) {
+          doc.text(claimLines[0], margin + 6 + charW + 4, ly);
+          ly += 12;
+          for (let i = 1; i < claimLines.length; i++) {
+            ensureSpace(12);
+            doc.text(claimLines[i], margin + 12, ly);
+            ly += 12;
+          }
+        }
+        if (c.status && c.status !== "active") {
+          doc.setFont("helvetica", "italic");
+          doc.setFontSize(9);
+          doc.setTextColor(180, 100, 30);
+          ensureSpace(12);
+          doc.text(`[${c.status}]`, margin + 12, ly);
+          ly += 12;
+        }
+        ly += 4;
+      }
+    }
+  }
+
+  // ── POSITIONS PAGE ──
+  const positions: Record<string, string> =
+    opts.meta.positions || snap?.positions || {};
+  const posEntries = Object.entries(positions).filter(([, v]) => v && String(v).trim());
+  if (posEntries.length) {
+    doc.addPage();
+    let py = margin;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(192, 120, 32);
+    doc.text("Character Positions", margin, py);
+    py += 24;
+
+    const colorByName = new Map(
+      (opts.meta.cast ?? []).map(c => [c.name, c.color ?? "#c07820"]),
+    );
+
+    for (const [name, pos] of posEntries) {
+      if (py > pageH - margin - 30) { doc.addPage(); py = margin; }
+
+      // Color dot + name
+      const hex = colorByName.get(name) ?? "#c07820";
+      const { r, g, b } = hexToRgb(hex);
+      doc.setFillColor(r, g, b);
+      doc.circle(margin + 4, py - 3, 4, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(40, 30, 20);
+      doc.text(sanitizeForPdf(name), margin + 14, py);
+      py += 14;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(60, 50, 40);
+      const posLines = doc.splitTextToSize(sanitizeForPdf(String(pos)), contentW - 14);
+      for (const line of posLines) {
+        if (py > pageH - margin) { doc.addPage(); py = margin; }
+        doc.text(line, margin + 14, py);
+        py += 13;
+      }
+      py += 8;
+    }
   }
 
   // ── LAST: ALTERNATE ENDING ──

@@ -1,0 +1,1283 @@
+{
+  "version": "1",
+  "debate_id": "8654df3d-796a-4324-90c3-20d7986cb5de",
+  "exported_at": "2026-04-24T00:56:55.325240+00:00",
+  "disclaimer": "This is an AI-generated alternate-ending exploration. All dialogue is synthesized; nothing here is the author's work.",
+  "story": {
+    "title": "Animal Farm",
+    "author": "George Orwell",
+    "summary": "A group of farm animals revolt against their human master to establish an egalitarian society, only to have their revolution betrayed by the pigs who become as tyrannical as the humans they replaced. The story serves as an allegory for the Russian Revolution and the rise of Stalinism.",
+    "divergence": "what if boxer killed those dogs when they were trying to chase snowball away?"
+  },
+  "status": "completed",
+  "participating_characters": [
+    "Mr. Jones",
+    "Old Major",
+    "Bluebell",
+    "Jessie",
+    "Boxer",
+    "Clover",
+    "Muriel",
+    "Benjamin",
+    "Mollie",
+    "Snowball",
+    "Napoleon",
+    "Squealer",
+    "Minimus",
+    "Mr. Whymper",
+    "Mr. Pilkington",
+    "Mr. Frederick",
+    "Moses"
+  ],
+  "characters": [
+    {
+      "name": "Mr. Jones",
+      "description": "Mr. Jones is the owner of the Manor Farm, who is often drunk and neglects his farm, leading to the animals' rebellion. He is a symbol of the old regime and the oppression of the working class. His character serves as a catalyst for the events of the story.",
+      "role": "minor",
+      "importance": 0.6
+    },
+    {
+      "name": "Old Major",
+      "description": "Old Major is a highly respected and wise boar on the farm who has a vision for a better future for all animals. He is the one who inspires the rebellion against Mr. Jones and establishes the principles of Animalism. He is a majestic-looking pig with a benevolent appearance, despite his old age and stoutness.",
+      "role": "supporting",
+      "importance": 0.8
+    },
+    {
+      "name": "Bluebell",
+      "description": "Bluebell is a horse on Animal Farm, known for her strength and loyalty. She is a hard worker and contributes to the farm's prosperity. Despite her minor role, Bluebell's actions and interactions reveal her character and emotional state throughout the story.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Jessie",
+      "description": "Jessie is a minor character in the story Animal Farm, likely one of the animals on the farm, given the context of the story. The specific details about Jessie are not directly provided in the given passages, but based on the story's context, Jessie could be inferred to be involved in the events unfolding on the farm. As a minor character, Jessie's actions and thoughts are not extensively detailed but are part of the collective experience of the animals.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Boxer",
+      "description": "Boxer is a hardworking and dedicated horse who is deeply committed to the principles of Animalism and the success of the farm. He is known for his strength, loyalty, and unwavering optimism. Despite his physical decline, he remains a symbol of the farm's ideals and a source of inspiration for the other animals.",
+      "role": "protagonist",
+      "importance": 0.8
+    },
+    {
+      "name": "Clover",
+      "description": "Clover is a wise and aged horse who plays a significant role in the story, often serving as a voice of reason and concern. She is a loyal member of the farm community and is particularly close to Benjamin. Clover's character represents a sense of tradition, wisdom, and moral integrity.",
+      "role": "supporting",
+      "importance": 0.7
+    },
+    {
+      "name": "Muriel",
+      "description": "Muriel is a goat who lives on Animal Farm, she is a minor character who is not deeply involved in the main events of the story but is part of the community.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Benjamin",
+      "description": "Benjamin is a wise, aged donkey who has witnessed the rise and fall of the animal rebellion on the farm. He is known for his cynicism and skepticism towards the pigs' leadership. Despite his age, Benjamin remains a steadfast and loyal companion to his fellow animals, particularly Boxer and Clover.",
+      "role": "supporting",
+      "importance": 0.8
+    },
+    {
+      "name": "Mollie",
+      "description": "Mollie is a self-centered and vain horse who is more concerned with her appearance and social status than with the welfare of the other animals on the farm. She is often depicted as being frivolous and lacking in depth, but also has a certain charm and charisma that makes her a compelling character.",
+      "role": "minor",
+      "importance": 0.2
+    },
+    {
+      "name": "Snowball",
+      "description": "advocates for the building of the windmill and is chased away by Napoleon's dogs",
+      "role": "antagonist",
+      "importance": 0.3
+    },
+    {
+      "name": "Napoleon",
+      "description": "Napoleon is a pig who emerges as the leader of Animal Farm after the rebellion against Mr. Jones. He is cunning, power-hungry, and manipulative, using propaganda and force to consolidate his power. As the story progresses, he becomes increasingly tyrannical and corrupt.",
+      "role": "protagonist",
+      "importance": 0.9
+    },
+    {
+      "name": "Squealer",
+      "description": "explains the new arrangement to the other animals and justifies Napoleon's actions",
+      "role": "antagonist",
+      "importance": 0.3
+    },
+    {
+      "name": "Minimus",
+      "description": "sits with Napoleon and Squealer on the raised platform and has a gift for composing songs and poems",
+      "role": "minor",
+      "importance": 0.3
+    },
+    {
+      "name": "Mr. Whymper",
+      "description": "Mr. Whymper is a solicitor who acts as an intermediary between Animal Farm and the outside world, facilitating trade and communication while being somewhat exploitative and opportunistic.",
+      "role": "minor",
+      "importance": 0.6
+    },
+    {
+      "name": "Mr. Pilkington",
+      "description": "Mr. Pilkington is a neighboring farmer who is initially mentioned as a potential buyer of Animal Farm's produce, but his character evolves to represent the external threat and skepticism towards the farm's success.",
+      "role": "minor",
+      "importance": 0.6
+    },
+    {
+      "name": "Mr. Frederick",
+      "description": "is a potential business partner for Napoleon",
+      "role": "minor",
+      "importance": 0.3
+    },
+    {
+      "name": "Moses",
+      "description": "reappears on the farm and tells stories about Sugarcandy Mountain to the other animals",
+      "role": "supporting",
+      "importance": 0.3
+    }
+  ],
+  "transcript": [
+    {
+      "character": "Boru",
+      "message": "I bring wisdom and wit to this gathering, as Boru the Elephant, your Speaker. Today we ponder a provocative possibility: What if Boxer killed those dogs when they were trying to chase Snowball away?",
+      "round": 0,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "opening_with_invite",
+      "intended_speaker": null
+    },
+    {
+      "character": "Boxer",
+      "message": "If I had killed those dogs, I'd have been protecting Snowball, and maybe, just maybe, he'd still be here to lead us. That would've meant no Napoleon, no tyranny, and our farm would've been a true haven for all animals, where we'd work together for the greater good. But now, I'm left wondering what could've been, and the weight of that regret is crushing me, making every breath a reminder of what I didn't do.",
+      "round": 1,
+      "phase": "opening",
+      "target_characters": [
+        "Boru",
+        "Napoleon",
+        "Snowball"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Boru",
+      "message": "Someone from afar has been keenly observing our discussion, and now Soviet State Censor from Moscow 1945 joins us, bringing a perspective that will undoubtedly shake the very foundations of our debate, particularly in light of Boxer's assertion that killing those dogs would have meant no Napoleon.",
+      "round": 1,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "observer_intro",
+      "intended_speaker": "Soviet State Censor, Moscow 1945"
+    },
+    {
+      "character": "Soviet State Censor, Moscow 1945",
+      "message": "I recall a similar introduction at a Moscow meeting, where a comrade's words were prefaced with grand expectations. It reminded me of the time I witnessed a fervent speech by Comrade Stalin. \n→ Boxer: Did you consider the potential consequences of your actions on the collective farm's unity?",
+      "round": 1,
+      "phase": "opening",
+      "isObserver": true,
+      "observerEra": "Soviet Union, 1945"
+    },
+    {
+      "character": "Boxer",
+      "message": "I didn't think about unity when I thought of stopping those dogs; I thought about stopping the violence. If I had, maybe Snowball and I would've worked together, and the farm would be a place where animals can live without fear of being chased or silenced. The pigs would've had to listen to us, not just Napoleon.",
+      "round": 5,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "The air reeks of misplaced confidence. @Mr. Jones — does the thought of Boxer becoming a killer make you miss your whip, or does it finally make you fear your livestock?",
+      "round": 6,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Mr. Jones",
+      "_rotation": true
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "You think one clean act stops the bloodshed? I watched my own men starve while bankers bled me dry—sentiment doesn’t feed mouths. That first winter, when the wind cut through the barn and the silos stood empty, you’d have turned on each other just to feel warm.  \nI’d have shot the lot of you before letting ghosts run my farm.",
+      "round": 6,
+      "phase": "opening",
+      "target_characters": [
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You speak of hunger like it’s the worst sin, but I’ve known it too—during your nights passed out with a bottle, while we starved in the dark. The first betrayal wasn’t when we fought each other—it was when *you* stopped seeing us as alive. I wouldn’t have fed your greed, but I’d have fed my brothers. With my back, if not my voice.",
+      "round": 7,
+      "phase": "opening",
+      "target_characters": [
+        "Mr. Jones",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "You talk about feeding brothers, but who feeds *you* when your back gives out? I saw it happen—old Flint, starved in the straw because no one could spare a turnip. You think strength lasts forever? That first winter, it wasn’t me passed out—it was the weak, left to rot while the strong divided the scraps.  \nI’d have shot the dogs *and you* before letting martyrdom bankrupt the farm.",
+      "round": 8,
+      "phase": "opening",
+      "target_characters": [
+        "Boxer"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Boxer",
+      "message": "What happens next is that I will not let my exhaustion silence me; I will find a way to make the others see that our unity is the only harvest that will truly feed us. I will stand up to you, Mr. Jones, and to Napoleon, and I will fight for a farm where no animal is left to rot in the straw. The consequence of my actions will be a new danger - the pigs and you will try to silence me, but I will not be silenced. I will make sure that every animal on this farm knows that our strength lies not in our individual backs, but in our collective voice.",
+      "round": 9,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Mr. Jones",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Old Major has been silent, his eyes fixed on the exchange between Mr. Jones and Boxer, and now Old Major — will you finally share what wisdom you've gathered from your years, and tell us if unity can be forged without violence?",
+      "round": 10,
+      "phase": "opening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Old Major",
+      "target_characters": [
+        "Old Major"
+      ],
+      "_rotation": true,
+      "_pair_duel": true
+    },
+    {
+      "character": "Old Major",
+      "message": "You think standing tall saves the weak? Watch them drag you down when the rations run thin and your legs finally buckle. I saw it in Flint’s eyes — not anger, not pride — just *hunger*, and you won’t feed them with speeches when your own breath fails.  \nStrength without plan is just another slaughter waiting to happen.",
+      "round": 10,
+      "phase": "opening",
+      "target_characters": [
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You say strength without plan is slaughter, but what plan was there when Flint starved? Was it Napoleon's plan that failed, or was it the lack of hearts that failed? I would've stood with Snowball, and together we'd have found a way to feed the weak, not just the strong.",
+      "round": 14,
+      "phase": "opening",
+      "target_characters": [
+        "Old Major",
+        "Napoleon",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Napoleon",
+      "message": "You stand with Snowball, and the farm splits the moment the dogs fall. No authority, no unity—just sentiment and slogans while the wind tears the roof off the barn. You think hearts fill bellies? I’ve seen what comes after martyrdom. It’s not peace. It’s winter, and every animal fending for himself.",
+      "round": 15,
+      "phase": "opening",
+      "target_characters": [
+        "Boxer",
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You say the barn roof tears because there’s no authority—but it was your greed that rotted the beams. I saw Mollie coughing in the cold, turned away because she wasn’t “useful”—that’s when the first lie cracked the foundation.\n\n@Boru  \nI’d task the strong to haul rations twice—once for the work, once to carry the weak through winter. Not charity—*debt*.",
+      "round": 17,
+      "phase": "opening",
+      "target_characters": [
+        "Napoleon",
+        "Mollie",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Napoleon's greed and Boxer's passion have set the stage for a clash of ideals, now it's time for Old Major and Mr. Jones to shed their diplomatic veneer and reveal the true depths of their convictions. \nCross-examination will be scars.",
+      "round": 21,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "phase_transition",
+      "intended_speaker": null
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "You’d haul rations twice, you say—then what when the strong *refuse* the second load? Not out of greed, but because their own foal’s dying in the straw and they’ve nothing left to give?  \n\nI’d have kept the dogs tight on the chain and the whip hand steady—no more, no less. Mercy without strength is a knife in the ribs of the man who thought he was feeding you.",
+      "round": 21,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Boxer",
+      "message": "You think the whip stops betrayal? The first winter, one of your own men freezes guarding a chain that feeds nothing. He dies loyal—and you call that order? I’d have fed him first. Then asked him to stand.",
+      "round": 30,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Mr. Jones",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "You’d feed the dying foal first, you say—then what when the strong see weakness rewarded and the barn stands empty by March? I’ve starved beside my own horses—d’you think I wanted to whip them? No. But I did it so we’d *all* live. You dream of feeding everyone warm mash in winter—I dream of not burying my children in the snow.",
+      "round": 33,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You buried your children in the snow—so you say. But who dug the graves? Your hands or theirs? I’d have the strong dig them together, not obey a master, but mourn a brother. That’s how you keep the barn from emptying—by making sure no foal dies alone.",
+      "round": 36,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Mr. Jones",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "You'd have them mourn together, would you? And when the fox comes sniffing at the henhouse that same night—grief-stricken, but still hungry—who stops him? Your brotherhood don’t scare teeth, boy. I’d have the dogs out, not as punishers, but as teeth the farm can’t afford to lose. You think unity feeds the dawn-watch? It doesn’t. A warm body in the yard does.",
+      "round": 50,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "contempt",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boxer",
+      "message": "You think the dogs are teeth — but who guards the farm when the teeth turn on the sick foal because *they* decide it’s a burden? I saw it once. I didn’t look away.\n\n@Boru  \nA strong deterrent isn’t dogs or chains — it’s every animal knowing the one beside them will stand. That’s the balance.",
+      "round": 52,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Mr. Jones",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Boxer, you spoke of dogs turning on the sick foal, but Napoleon, do you still believe no authority means no unity when the strong decide who's a burden?",
+      "round": 52,
+      "phase": "cross_examination",
+      "isOrchestrator": true,
+      "orchestratorEvent": "respond_to_character",
+      "intended_speaker": "Boxer"
+    },
+    {
+      "character": "Boxer",
+      "message": "You say the dogs guard the barn—then why did they let Snowball run? No, they don’t protect the weak. They protect the master’s word. And when that word turns on a friend… what then? I stood by once. I won’t again.",
+      "round": 56,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Mr. Jones",
+        "Snowball",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "Because they didn’t let me run — *you* stopped them. One thunderous hoof, one refusal in the dark, and the script tears. Now the question isn’t who guards the barn — it’s who rewrites the commandments. And whether the next betrayal bleeds quietly… or drowns in the sound of a thousand voices finally remembering how to say *no*.",
+      "round": 59,
+      "phase": "cross_examination",
+      "target_characters": [
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "defiance",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Snowball's revelation that Boxer stopped the dogs from chasing him has turned the tables, and now the question of who truly protects the farm hangs in the balance. \nNext, we dissect the very fabric of unity and authority, with Old Major and Mr. Jones forced to confront the consequences of their ideals.",
+      "round": 60,
+      "phase": "deepening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "phase_transition",
+      "intended_speaker": null
+    },
+    {
+      "character": "Boru",
+      "message": "Tension crackles like a winter's fire. Bluebell, your eyes have been fixed on Boxer since he spoke of the dogs turning on the weak — what do you think is the true cost of protecting the master's word?",
+      "round": 60,
+      "phase": "deepening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Bluebell",
+      "_rotation": true
+    },
+    {
+      "character": "Bluebell",
+      "message": "You think one hoof in the dark changed anything? I saw the look in Boxer’s eyes that night—same as mine now. He stopped the dogs, yes, but he didn’t *run*. He let you go, but stayed himself. And what did it cost him? Every morning since, he works longer, speaks softer, watches the barn wall like it might speak back. You call that a revolution? I call it a slower kind of chain.  \n\n@Boxer  \nYou could’ve led us.",
+      "round": 67,
+      "phase": "deepening",
+      "target_characters": [
+        "Snowball",
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "bitterness",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Snowball",
+      "message": "You think courage is only in the running or the leading? Boxer stayed — *on purpose*. He is the anchor in the storm, not the sail. And when the first pup howls hunger this winter, when the windmill’s first spark fails in the frost, it won’t be me or you they turn to — it’ll be *him*, standing in the mud, already pulling the cart uphill, teaching them that revolution isn’t a single leap — it’s the weight you carry *after*.",
+      "round": 71,
+      "phase": "deepening",
+      "target_characters": [
+        "Bluebell",
+        "Boxer",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Bluebell",
+      "message": "You talk about hunger like it’s a storm that passes. I’ve counted the rations since November — three bags of seed missing, no record in the ledger. When the pups whine at the door of the harness room, who dries their muzzles? Not you. Not the windmill. *He* does. And he won’t ask why the grain’s gone. That’s the anchor, isn’t it? Not strength — silence.",
+      "round": 72,
+      "phase": "deepening",
+      "target_characters": [
+        "Snowball",
+        "Boru"
+      ],
+      "emotion": "bitterness",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Jessie",
+      "message": "You think he *chooses* silence? I saw him the morning after — trembling, not from fear, but from holding back. He didn’t stop the dogs to save the farm. He stopped them because Napoleon showed him the pups’ teeth already red. One word from Boxer that night, one shout — and they’d have torn him apart. And then what? You feeding the pups on rage? I’d rather chew straw than watch another colt die for a lie.",
+      "round": 73,
+      "phase": "deepening",
+      "target_characters": [
+        "Bluebell",
+        "Boxer",
+        "Napoleon"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Bluebell",
+      "message": "You saw him tremble. I saw him eat his own straw that morning — not from hunger, but because he’d bitten his tongue so hard it bled. He didn’t stop the dogs for the pups. He stopped them because he *saw* — one of them was wearing Bluebell’s ribbon. Mine. Taken from the washline. Used as a leash.\n\n@Boru  \nI’ll tell you how I fix hunger.",
+      "round": 74,
+      "phase": "deepening",
+      "target_characters": [
+        "Jessie",
+        "Boru"
+      ],
+      "emotion": "grief",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Muriel",
+      "message": "You think the ribbon matters to the dogs? I saw the ledger too — same as you. But the pen’s in Squealer’s hoof, and he writes \"accident\" when the weak go missing. You name the theft, and they’ll say *you* stole the rations. First winter storm, they’ll cull the whining pups — and pin it on the one who speaks. I keep my head down. Not for me.",
+      "round": 75,
+      "phase": "deepening",
+      "target_characters": [
+        "Bluebell",
+        "Squealer"
+      ],
+      "emotion": "fear",
+      "responded_to_boru": false
+    },
+    {
+      "character": "Bluebell",
+      "message": "You think they won’t come for your ledger when the frost bites deep? I saw Squealer burn the tally sheet two nights before the last harvest — not with fire, but with a lie. He stood in the doorway of the storehouse, holding a single grain between his hooves like it was a verdict. “Shortfall,” he said. “Due to rats.” But there were no rats. Only silence after. And then the whining stopped. Not because they were fed.",
+      "round": 76,
+      "phase": "deepening",
+      "target_characters": [
+        "Muriel",
+        "Squealer",
+        "Boru"
+      ],
+      "emotion": "weariness",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Muriel",
+      "message": "You think the ribbon was a leash? I saw Squealer tie it round his own hoof the next morning — wore it like a vow. You name the theft, he names you the thief. First pup dies not from cold, but because Clover whispers your name in the dark — and wakes up without her tongue. I burn my ledger before dawn. Every page.",
+      "round": 78,
+      "phase": "deepening",
+      "target_characters": [
+        "Bluebell",
+        "Clover",
+        "Squealer",
+        "Boru"
+      ],
+      "emotion": "fear",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Bluebell",
+      "message": "You burned your ledger, but you didn’t burn the memory — not of the ribbon, not of the pups’ whines muffled in the straw. First night of the freeze, I saw Squealer pass that ribbon to Napoleon like a token, and Napoleon pinned it to the barn door — a warning, not a vow. They’re not culling the weak for food. They’re culling the ones who *remember*. And when Clover went silent?",
+      "round": 81,
+      "phase": "deepening",
+      "target_characters": [
+        "Muriel",
+        "Clover",
+        "Squealer",
+        "Napoleon",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Clover",
+      "message": "When I went silent, it wasn't because I lost my tongue, it was because I learned to keep my head down and my ears open. The night they pinned that ribbon to the barn door, I saw the young ones huddle closer, their eyes wide with fear. If they keep culling the ones who remember, soon there'll be none left to recall the truth.",
+      "round": 94,
+      "phase": "deepening",
+      "target_characters": [
+        "Bluebell",
+        "Boru"
+      ],
+      "emotion": "weariness",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Benjamin, your eyes have been fixed on the floor, but I suspect your mind has been racing with the implications of Boxer's actions - what do you think would have become of the farm's power dynamics if he had indeed killed those dogs?",
+      "round": 95,
+      "phase": "deepening",
+      "isOrchestrator": true,
+      "orchestratorEvent": "invite_speaker",
+      "intended_speaker": "Benjamin",
+      "_rotation": true
+    },
+    {
+      "character": "Benjamin",
+      "message": "You think keeping your head down saves the young ones? I saw the runt — the one with the torn ear — try to eat the ribbon from the barn door two nights past. It wasn’t fear in his eyes. It was hunger. And you were silent *again*.",
+      "round": 96,
+      "phase": "deepening",
+      "target_characters": [
+        "Clover",
+        "Boru"
+      ],
+      "emotion": "desperation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Clover",
+      "message": "If I'm being honest, I'd do differently by speaking out, by using my voice to warn the others, to remind them of our shared past and the principles we once fought for. But I'm afraid, Benjamin, and my fear is what keeps me silent. \n\nWhat happens next is that the mother's culling will spark a chain reaction, and soon the other animals will start to realize what's being taken from them. They'll see that it's not just the weak or the old who are being culled, but anyone who remembers the truth. And that's when the real hunger will set in – the hunger for freedom, for justice, and for a return to the ideals we once held dear.",
+      "round": 98,
+      "phase": "deepening",
+      "target_characters": [
+        "Benjamin",
+        "Boru"
+      ],
+      "emotion": "weariness",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "We've danced around the truth long enough, Napoleon's silence on Squealer's ledger manipulation is deafening, and now it's time for the gloves to come off, Old Major, Mr. Jones, your true colors will be revealed next.",
+      "round": 99,
+      "phase": "reckoning",
+      "isOrchestrator": true,
+      "orchestratorEvent": "phase_transition",
+      "intended_speaker": "Mr. Jones"
+    },
+    {
+      "character": "Mr. Jones",
+      "message": "You think they’ll rise when they’re hungry? I’ve seen hungry animals — they don’t rise, they *break*. That first winter, when the wind cuts through the barn and the weak start coughing up blood — that’s when your “chain reaction” freezes solid. Silence doesn’t spark rebellion. It sparks obedience. And I know — I lived it.",
+      "round": 99,
+      "phase": "reckoning",
+      "target_characters": [
+        "Clover",
+        "Boru"
+      ],
+      "emotion": "weariness",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Clover",
+      "message": "You broke animals, yes — but you never had to watch them *choose* to break each other. That’s the horror you don’t know.  \n\n@Boru  \nThey’ll react when they see the runt cough up blood behind the silo — not from winter, but from eating paper Squealer called “rations.” I’ll be there. I’ll say his name.",
+      "round": 101,
+      "phase": "reckoning",
+      "target_characters": [
+        "Mr. Jones",
+        "Squealer",
+        "Boru"
+      ],
+      "emotion": "righteous_indignation",
+      "responded_to_boru": true
+    },
+    {
+      "character": "Boru",
+      "message": "Tonight's fiercest clash was Boxer versus Mr. Jones, with the farmer's words still echoing: \"they don't rise, they break.\" \nThe fault line ran deep, exposing the animals' desperation and the leadership's priorities.\nTwelve disputes were brought to this floor, with eight resolved and nine questions answered out of seventeen asked. \nMuriel's claim that Squealer manipulates the ledger remains unresolved, a lingering shadow over the farm's leadership.\nThe truth that emerged is that hunger and fear can be powerful tools for control, but they can also spark a desire for freedom and justice. \nClover's warning that the leadership's actions will spark a chain reaction still hangs in the air, a reminder of the consequences of silence and complicity.\nAs the Sabha rests, remember that the revolution's survival depends on the animals' ability to count their own bellies, to remember their shared past, and to speak out against the leadership's actions.",
+      "round": 102,
+      "phase": "closing",
+      "isOrchestrator": true,
+      "orchestratorEvent": "closing_summary",
+      "intended_speaker": "Mr. Jones"
+    }
+  ],
+  "alternate_ending": "### The Question\nThe WhatIfSabha debate centered around a pivotal moment in \"Animal Farm\": what if Boxer had killed the dogs chasing Snowball away? This what-if matters because it could have altered the course of the farm's history, potentially preventing Napoleon's rise to power and the subsequent tyranny. The scene was set in a tense, crowded barn, where the animals gathered to discuss the consequences of Boxer's hypothetical actions. The air was thick with anticipation, as the animals wondered what could have been if Boxer had taken a stand against the dogs.\n\n### Opening Salvos\nBoxer spoke first, his voice filled with regret and longing: \"If I had killed those dogs, I'd have been protecting Snowball, and maybe, just maybe, he'd still be here to lead us. That would've meant no Napoleon, no tyranny, and our farm would've been a true haven for all animals, where we'd work together for the greater good.\" Mr. Jones countered with a brutal dose of reality: \"You think one clean act stops the bloodshed? I watched my own men starve while bankers bled me dry—sentiment doesn’t feed mouths.\" The room was taken aback by Mr. Jones's stark honesty, and the debate quickly became a clash between those who believed in the power of unity and those who thought only strength and authority could ensure survival. As the debate raged on, Snowball's voice rose above the din, his words a clarion call to action: \"Because they didn’t let me run — *you* stopped them. One thunderous hoof, one refusal in the dark, and the script tears.\"\n\n### The Central Fight\nThe core tension of the debate revolved around the question of what truly ensures the farm's survival: strength, unity, or something else entirely. Boxer and Snowball found themselves on one side, advocating for the importance of standing up for one another and protecting the weak. Mr. Jones and Napoleon, on the other hand, insisted that only a strong authority and the willingness to make tough decisions could keep the farm safe. The fiercest exchanges occurred between Boxer and Mr. Jones, with Boxer arguing that \"our unity is the only harvest that will truly feed us\" and Mr. Jones retorting that \"sentiment doesn’t feed mouths.\" The room fell silent when Boxer landed a devastating blow, saying: \"You speak of hunger like it’s the worst sin, but I’ve known it too—during your nights passed out with a bottle, while we starved in the dark.\" As the debate wore on, the animals began to realize that the true enemy was not just Napoleon or Mr. Jones, but the system of oppression that had been perpetuated on the farm.\n\n### The Turning Point\nA turning point came when Clover revealed that the leadership was systematically culling animals who remembered the truth of the past. This admission sparked a chain reaction, with many animals beginning to question the true motives of the farm's leaders. As Clover said: \"If they keep culling the ones who remember, soon there'll be none left to recall the truth.\" This moment shifted the debate, as the animals began to focus on the importance of remembering their history and standing up against those who would seek to erase it. The room was electrified with a sense of urgency, as the animals realized that their very survival depended on their ability to resist the forces of oppression.\n\n### Questions Asked and Answered\nSeveral major questions were posed during the debate. Boru asked: \"How do you plan to ensure that every animal on the farm is willing and able to stand up for one another, especially in times of crisis?\" Boxer responded by emphasizing the importance of collective support and unity. Boru also asked: \"How do you propose the farm addresses the issue of missing rations and ensures every animal has enough food?\" Snowball answered by suggesting that the farm needed to prioritize transparency and accountability in its leadership. Additionally, Boru asked: \"Who specifically are 'the ones who remember' that are being culled, and what is the 'truth' they hold that threatens the leadership?\" Clover responded by explaining that the ones being culled were those who remembered the farm's original ideals and the truth about the leadership's actions.\n\n### Questions Left Unanswered\nDespite the intense debate, several challenges went unmet. Boru asked: \"How do you propose the farm prevents Squealer's manipulation of the ledger and ensures the accuracy of the records?\" This question was left unanswered, leaving a significant crack in the debate. Another question that went unaddressed was: \"If keeping your head down does not save the young, what specific action do you propose to protect them without inviting retaliation?\" This lack of a clear answer left many animals wondering what they could do to truly protect themselves and their loved ones. Furthermore, the debate failed to address the question of how to prevent the leadership from continuing to manipulate and control the farm's narrative.\n\n### What the Future Looks Like\nIf Boxer had killed the dogs and Snowball had remained on the farm, the future would likely have been vastly different. The first year would have been marked by a period of rebuilding and restructuring, as the animals worked to create a more equal and just society. Snowball would have likely played a key role in this process, using his charisma and leadership skills to guide the farm towards a brighter future. However, this new reality would not have been without its challenges. The animals would have had to navigate the complexities of governance and decision-making, all while dealing with the aftermath of the rebellion against Mr. Jones. New dangers would have emerged, such as the potential for internal conflicts and power struggles, as well as the ever-present threat of external threats from neighboring farms. As the seasons passed, the farm would have become a beacon of hope for other animals, a symbol of what could be achieved through unity and determination. The animals would have had to balance their desire for freedom and autonomy with the need for collective action and cooperation. They would have had to navigate the complexities of resource management, ensuring that every animal had enough food and shelter. And they would have had to confront the darker aspects of their own nature, the tendencies towards violence and oppression that had been perpetuated on the farm for so long. In this future, the animals would have had to work together to create a truly just and equal society, one that would have been worthy of their highest aspirations.",
+  "alternate_timeline": [],
+  "ledger_snapshot": {
+    "positions": {
+      "Mr. Jones": "Mr. Jones emphasizes the necessity of having a strong deterrent, like dogs, to protect the farm from external threats and maintain order",
+      "Old Major": "Old Major posits that neither raw strength nor idealistic unity is sufficient for survival without a pragmatic, material plan to address hunger.",
+      "Boxer": "Boxer emphasizes the importance of collective support and standing up for one another as a strong deterrent, rather than relying on authority or punishment",
+      "Bluebell": "Bluebell emphasizes the need for transparency and accountability in the farm's leadership, particularly in addressing hunger and other issues",
+      "Muriel": "Muriel emphasizes the need for transparency and accountability in the farm's leadership, particularly in addressing hunger and other issues",
+      "Clover": "Clover emphasizes the importance of speaking out against the leadership's actions and remembering the farm's original truths, despite the fear of retaliation",
+      "Benjamin": "Benjamin argues that passive survival and silence are complicity, asserting that the physical reality of hunger outweighs the perceived safety of invisibility."
+    },
+    "claims": [
+      {
+        "character": "Boxer",
+        "claim": "The strong should work together to support the weak, rather than following a master",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Mr. Jones",
+        "claim": "Using dogs as a deterrent is more effective than relying on unity alone for farm security",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Boxer",
+        "claim": "A strong deterrent isn't dogs or chains — it's every animal knowing the one beside them will stand",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Boxer",
+        "claim": "The balance of the farm is maintained when every animal knows the one beside them will stand",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Boxer",
+        "claim": "The dogs protect the master's word, not the weak",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Boxer",
+        "claim": "Collective support is a stronger deterrent than authority or punishment",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Bluebell",
+        "claim": "Silence can be a stronger anchor than strength in times of hardship",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Bluebell",
+        "claim": "The willingness to address and resolve issues, like hunger, is crucial for the farm's survival",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Bluebell",
+        "claim": "Hunger is not just a passing storm, but a persistent issue that needs to be addressed",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Bluebell",
+        "claim": "The willingness to address and resolve issues like hunger is crucial for the farm's survival",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Bluebell",
+        "claim": "Squealer's lies and manipulation of the ledger are a threat to the farm's survival",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Bluebell",
+        "claim": "The farm's leadership is more concerned with maintaining power than addressing hunger and other issues",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Muriel",
+        "claim": "Squealer manipulates the ledger to conceal the truth",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Muriel",
+        "claim": "The farm's leadership prioritizes maintaining power over addressing hunger and other issues",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Clover",
+        "claim": "Clover claims that the leadership is systematically culling animals who remember the truth of the past",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Clover",
+        "claim": "Clover claims that silence among the animals is a survival strategy (keeping one's head down) rather than consent or ignorance",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Benjamin",
+        "claim": "Benjamin claims that 'keeping one's head down' is an ineffective survival strategy that fails to protect the young",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Benjamin",
+        "claim": "Benjamin claims that the young animals are suffering from actual hunger, contradicting the notion that their distress is purely psychological or fear-based",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Clover",
+        "claim": "The mother's culling will spark a chain reaction, leading to a hunger for freedom, justice, and a return to the farm's original ideals",
+        "challenged_by": [],
+        "status": "active"
+      },
+      {
+        "character": "Clover",
+        "claim": "The leadership is systematically culling animals who remember the truth of the past, including those who are not weak or old",
+        "challenged_by": [],
+        "status": "active"
+      }
+    ],
+    "open_questions": [
+      {
+        "id": 14,
+        "question": "How do you propose the farm prevents Squealer's manipulation of the ledger and ensures the accuracy of the records?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Squealer"
+        ],
+        "status": "unanswered",
+        "answers": {},
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 0
+      },
+      {
+        "id": 16,
+        "question": "If keeping your head down does not save the young, what specific action do you propose to protect them without inviting immediate retaliation?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Benjamin"
+        ],
+        "status": "unanswered",
+        "answers": {},
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 0
+      },
+      {
+        "id": 17,
+        "question": "How do you think the other animals will react when they realize what is being taken from them, and what role do you see yourself playing in this potential uprising?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Clover"
+        ],
+        "status": "unanswered",
+        "answers": {},
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 2
+      }
+    ],
+    "resolved_questions": [
+      {
+        "id": 1,
+        "question": "Did you consider the potential consequences of your actions on the collective farm's unity",
+        "asked_by": "Soviet State Censor, Moscow 1945",
+        "directed_to": [
+          "Boxer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Mr. Jones": "Mr. Jones implied that unity is secondary to survival and that harsh actions may be necessary, indirectly addressing the question of considering consequences on the collective farm's unity."
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 2
+      },
+      {
+        "id": 2,
+        "question": "How do you reconcile the need for survival with the potential consequences of violent actions on the farm's unity?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Boxer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Mr. Jones": "Mr. Jones implies that the need for survival can justify violent actions, even if they potentially harm the farm's unity, by sharing an example of old Flint starving and the strong dividing the scraps."
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 1
+      },
+      {
+        "id": 3,
+        "question": "How do you propose the farm balance the need for survival with the potential consequences of violent actions on unity, considering the example of old Flint and the strong dividing the scraps?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Mr. Jones"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Old Major": "Old Major argues that survival cannot be balanced with unity through strength alone, as hunger eventually turns the weak against the strong, making a concrete plan more vital than raw power."
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 0
+      },
+      {
+        "id": 4,
+        "question": "What specifically constitutes a 'plan' that prevents slaughter, and how does it differ from the 'unity' Boxer proposes?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Old Major"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Boxer": "Boxer implies that a plan that prioritizes the weak and includes unity is necessary to prevent slaughter, indirectly addressing the essence of Q4"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 0
+      },
+      {
+        "id": 5,
+        "question": "How would you propose implementing a plan that prioritizes the weak without compromising the overall survival of the farm?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Boxer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Boxer": "Boxer implies that prioritizing the weak involves addressing their material needs, such as feeding them, before asking for their loyalty or labor"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 2
+      },
+      {
+        "id": 6,
+        "question": "How do you propose to balance the material needs of the weak with the overall survival and productivity of the farm?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Boxer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Boxer": "Boxer emphasizes the importance of the strong supporting the weak, suggesting that this balance is crucial for the farm's survival"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 2
+      },
+      {
+        "id": 7,
+        "question": "How do you propose to implement a system where the strong support the weak without creating resentment or undermining the farm's overall productivity?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Boxer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Mr. Jones": "Mr. Jones implies that prioritizing the weak can lead to resentment among the strong and undermine the farm's productivity"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 1
+      },
+      {
+        "id": 8,
+        "question": "How can the farm balance the need for a strong deterrent with the risk of creating resentment or fear among its members?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Boxer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Boxer": "Boxer suggests that a strong deterrent isn't about having dogs or chains, but about every animal standing up for the one beside them, creating a balance"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 1
+      },
+      {
+        "id": 9,
+        "question": "How do you propose the farm ensures that every animal is willing and able to stand up for the one beside them, especially in times of hardship or external threats?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Boxer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Boxer": "Boxer implies that every animal standing up for one another is a strong deterrent, addressing the essence of ensuring collective support"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 2
+      },
+      {
+        "id": 10,
+        "question": "How do you plan to ensure that every animal on the farm is willing and able to stand up for one another, especially in times of hardship or external threats?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Boxer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Bluebell": "Bluebell implies that ensuring every animal stands up for one another requires addressing the underlying issues, such as hunger, and having a plan to resolve them, rather than just relying on strength or unity."
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 0
+      },
+      {
+        "id": 11,
+        "question": "How do you plan to ensure that the issue of hunger is addressed and resolved, and that every animal on the farm is willing and able to stand up for one another?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Bluebell"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Bluebell": "Bluebell implies that addressing hunger requires a pragmatic approach and a willingness to resolve underlying issues, rather than just relying on strength or unity"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 1
+      },
+      {
+        "id": 12,
+        "question": "How do you propose the farm addresses the issue of missing rations and ensures every animal has enough food?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Bluebell"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Bluebell": "Bluebell implies that the farm's leadership is hiding the truth about missing rations and that addressing hunger is crucial for the farm's survival"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 1
+      },
+      {
+        "id": 13,
+        "question": "How do you propose the farm addresses the issue of Squealer's manipulation of the ledger and ensures the accuracy of the records?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Squealer"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Muriel": "Muriel implies that Squealer's manipulation of the ledger is a threat to the farm's survival and that she has taken action by burning her own ledger to prevent similar manipulation"
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 0
+      },
+      {
+        "id": 15,
+        "question": "Who specifically are 'the ones who remember' that are being culled, and what is the 'truth' they hold that threatens the current leadership?",
+        "asked_by": "Boru",
+        "directed_to": [
+          "Clover"
+        ],
+        "status": "resolved",
+        "answers": {
+          "Benjamin": "Benjamin identifies the 'truth' as the physical reality of hunger and the suffering of the young, which contradicts the leadership's narrative."
+        },
+        "_asked_at": 0,
+        "_deflections": 0,
+        "_times_injected": 2
+      }
+    ],
+    "disputes": [
+      {
+        "id": 1,
+        "claim_a": {
+          "character": "Boxer",
+          "claim": "If I had killed those dogs, I'd have been protecting Snowball and potentially prevented tyranny."
+        },
+        "claim_b": {
+          "character": "Mr. Jones",
+          "claim": "I'd have shot the lot of you before letting ghosts run my farm, implying that violent action is necessary for maintaining order."
+        },
+        "status": "resolved_stale",
+        "turns_unresolved": 6
+      },
+      {
+        "id": 2,
+        "claim_a": {
+          "character": "Boxer",
+          "claim": "Our unity is the only harvest that will truly feed us."
+        },
+        "claim_b": {
+          "character": "Old Major",
+          "claim": "You won’t feed them with speeches when your own breath fails; strength without plan is just another slaughter."
+        },
+        "status": "resolved_stale",
+        "turns_unresolved": 5
+      },
+      {
+        "id": 3,
+        "claim_a": {
+          "character": "Boxer",
+          "claim": "Loyalty and order cannot be maintained through punishment alone"
+        },
+        "claim_b": {
+          "character": "Mr. Jones",
+          "claim": "Violence can be necessary to maintain order and ensure survival"
+        },
+        "status": "resolved_stale",
+        "turns_unresolved": 7
+      },
+      {
+        "id": 4,
+        "claim_a": {
+          "character": "Boxer",
+          "claim": "A plan that prioritizes the weak is necessary for the farm's survival"
+        },
+        "claim_b": {
+          "character": "Napoleon",
+          "claim": "No authority, no unity—just sentiment and slogans"
+        },
+        "status": "resolved_stale",
+        "turns_unresolved": 5
+      },
+      {
+        "id": 5,
+        "claim_a": {
+          "character": "Boxer",
+          "claim": "The dogs protect the master's word, not the weak"
+        },
+        "claim_b": {
+          "character": "Mr. Jones",
+          "claim": "Using dogs as a deterrent is more effective than relying on unity alone for farm security"
+        },
+        "status": "resolved_stale",
+        "turns_unresolved": 5
+      },
+      {
+        "id": 6,
+        "claim_a": {
+          "character": "Mr. Jones",
+          "claim": "Using dogs as a deterrent is more effective than relying on unity alone for farm security"
+        },
+        "claim_b": {
+          "character": "Bluebell",
+          "claim": "Silence can be a stronger anchor than strength in times of hardship"
+        },
+        "status": "resolved_stale",
+        "turns_unresolved": 5
+      },
+      {
+        "id": 7,
+        "claim_a": {
+          "character": "Boxer",
+          "claim": "The strong should work together to support the weak, rather than following a master"
+        },
+        "claim_b": {
+          "character": "Bluebell",
+          "claim": "The willingness to address and resolve issues, like hunger, is crucial for the farm's survival"
+        },
+        "status": "resolved_stale",
+        "turns_unresolved": 5
+      },
+      {
+        "id": 8,
+        "claim_a": {
+          "character": "Bluebell",
+          "claim": "Hunger is not just a passing storm, but a persistent issue that needs to be addressed"
+        },
+        "claim_b": {
+          "character": "Snowball",
+          "claim": "You talk about hunger like it's a storm that passes"
+        },
+        "status": "resolved_stale",
+        "turns_unresolved": 7
+      },
+      {
+        "id": 9,
+        "claim_a": {
+          "character": "Muriel",
+          "claim": "Squealer manipulates the ledger to conceal the truth"
+        },
+        "claim_b": {
+          "character": "Squealer",
+          "claim": "The ledger is accurate and trustworthy"
+        },
+        "status": "unresolved",
+        "turns_unresolved": 4
+      },
+      {
+        "id": 10,
+        "claim_a": {
+          "character": "Muriel",
+          "claim": "The farm's leadership prioritizes maintaining power over addressing hunger and other issues"
+        },
+        "claim_b": {
+          "character": "Snowball",
+          "claim": "The farm's leadership is working to address hunger and other issues"
+        },
+        "status": "unresolved",
+        "turns_unresolved": 4
+      },
+      {
+        "id": 11,
+        "claim_a": {
+          "character": "Clover",
+          "claim": "Silence among the animals is a survival strategy (keeping one's head down) rather than consent or ignorance"
+        },
+        "claim_b": {
+          "character": "Benjamin",
+          "claim": "Keeping your head down does not save the young ones; it is ineffective against hunger."
+        },
+        "status": "unresolved",
+        "turns_unresolved": 2
+      },
+      {
+        "id": 12,
+        "claim_a": {
+          "character": "Clover",
+          "claim": "The leadership is systematically culling animals who remember the truth of the past"
+        },
+        "claim_b": {
+          "character": "Squealer",
+          "claim": "The ledger is accurate and trustworthy, and the disappearances are due to accidents"
+        },
+        "status": "unresolved",
+        "turns_unresolved": 1
+      }
+    ],
+    "progress": "Clover introduces the idea that the leadership's actions will spark a chain reaction, leading to a desire for freedom and justice, and provides insight into who is being culled and why",
+    "progress_history": [
+      {
+        "round": 6,
+        "phase": "opening",
+        "note": "The debate has progressed with Mr. Jones's statement highlighting the importance of survival over unity, and indirectly addressing the question about considering the consequences of actions on the farm's unity. The next key issue is understanding the balance between violence and unity."
+      },
+      {
+        "round": 8,
+        "phase": "opening",
+        "note": "The debate has progressed with Mr. Jones highlighting the importance of survival over unity, and the next key issue is understanding the balance between violence and unity, with Mr. Jones's statement indirectly addressing the question about considering the consequences of actions on the farm's unity."
+      },
+      {
+        "round": 10,
+        "phase": "opening",
+        "note": "Old Major has entered the debate to critique both Boxer's idealism and Jones's cynicism, shifting the focus from 'strength vs. unity' to the necessity of a systemic plan. Q3 is now addressed, but the tension between material survival and moral unity remains."
+      },
+      {
+        "round": 14,
+        "phase": "opening",
+        "note": "The debate has shifted towards the necessity of a systemic plan that combines strength, unity, and addresses hunger, with Boxer highlighting the importance of prioritizing the weak"
+      },
+      {
+        "round": 30,
+        "phase": "cross_examination",
+        "note": "The debate has shifted towards the importance of addressing material needs in a plan that prioritizes the weak, with Boxer highlighting the failure of existing leadership to do so"
+      },
+      {
+        "round": 36,
+        "phase": "cross_examination",
+        "note": "The debate has progressed with Boxer highlighting the importance of collective support and challenging the existing leadership's approach, with a focus on balancing material needs and prioritizing the weak"
+      },
+      {
+        "round": 50,
+        "phase": "cross_examination",
+        "note": "The debate has progressed with Mr. Jones highlighting the importance of a strong deterrent for farm survival, while Boxer emphasizes collective support; the tension between these approaches remains unresolved"
+      },
+      {
+        "round": 52,
+        "phase": "cross_examination",
+        "note": "The debate progresses with Boxer offering an alternative to Mr. Jones' emphasis on strong deterrents, highlighting the importance of collective support and balance, but the tension between these approaches remains unresolved"
+      },
+      {
+        "round": 56,
+        "phase": "cross_examination",
+        "note": "Boxer offers an alternative to Mr. Jones' emphasis on strong deterrents, highlighting collective support, but the tension between these approaches remains unresolved"
+      },
+      {
+        "round": 72,
+        "phase": "deepening",
+        "note": "Bluebell's statement highlights the need for a pragmatic approach to addressing hunger and other issues, and the importance of collective support and silence in maintaining the farm's balance."
+      },
+      {
+        "round": 74,
+        "phase": "deepening",
+        "note": "Bluebell highlights the need for a pragmatic approach to addressing hunger, and the importance of collective support and silence in maintaining the farm's balance"
+      },
+      {
+        "round": 76,
+        "phase": "deepening",
+        "note": "Bluebell's statement highlights the issue of missing rations and the importance of addressing hunger, but the question of how to ensure every animal has enough food remains unresolved"
+      },
+      {
+        "round": 78,
+        "phase": "deepening",
+        "note": "Muriel's statement highlights the issue of Squealer's manipulation of the ledger and the importance of addressing hunger, but the question of how to ensure every animal has enough food remains unresolved"
+      },
+      {
+        "round": 94,
+        "phase": "deepening",
+        "note": "Clover introduces a new dimension of terror—the systematic removal of 'those who remember'—shifting the focus from ledger manipulation to the physical erasure of history. The issue of record-keeping (Q14) remains unanswered, but the motive for the 'accidents' mentioned by Muriel is now being linked to the preservation of a specific narrative."
+      },
+      {
+        "round": 96,
+        "phase": "deepening",
+        "note": "Benjamin challenges Clover's 'head down' survival strategy, shifting the debate from the erasure of memory to the immediate, physical desperation of the youth. The focus now moves toward whether silence is a shield or a death sentence."
+      },
+      {
+        "round": 98,
+        "phase": "deepening",
+        "note": "Clover introduces the idea that the leadership's actions will spark a chain reaction, leading to a desire for freedom and justice, and provides insight into who is being culled and why"
+      }
+    ]
+  }
+}

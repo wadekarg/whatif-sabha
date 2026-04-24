@@ -397,7 +397,8 @@ export default function DebatePage() {
   const [ledgerState, setLedgerState] = useState<{
     open_questions: any[]; resolved_questions: any[]; claims: any[];
     positions: Record<string, string>; progress: string; phase: string;
-  }>({ open_questions: [], resolved_questions: [], claims: [], positions: {}, progress: "", phase: "" });
+    progress_history: { round: number; phase: string; note: string }[];
+  }>({ open_questions: [], resolved_questions: [], claims: [], positions: {}, progress: "", phase: "", progress_history: [] });
   const [graphHover, setGraphHover] = useState<{ x: number; y: number; source: string; target: string; count: number; questions: number; snippet: string } | null>(null);
   const transcriptRef = useRef<DebateEntry[]>([]);
   const streamingSummaryRef = useRef("");
@@ -1115,6 +1116,7 @@ export default function DebatePage() {
           positions: ev.positions || {},
           progress: ev.progress || "",
           phase: ev.phase || "",
+          progress_history: ev.progress_history || [],
         });
       } else if (ev.type === "reactions") {
         // Emotional reactions from other characters
@@ -2577,17 +2579,13 @@ export default function DebatePage() {
             {/* Argument Ledger — collapsible sections */}
             <div className="overflow-y-auto p-3 space-y-2" style={{ position:"absolute", inset:0, opacity: rightTab==="ledger" ? 1 : 0, pointerEvents: rightTab==="ledger" ? "auto" : "none", transition:"opacity 0.15s" }}>
 
-              {/* Boru's Progress Notes */}
-              {ledgerState.progress && (
-                <div className="bg-[#fef9f0] border border-[#f0c060]/30 rounded-xl px-3 py-2.5">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-sm">🐘</span>
-                    <span className="text-[10px] text-[#c07820] uppercase tracking-widest font-semibold">Boru&apos;s Notes</span>
-                    {ledgerState.phase && <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-[#c07820]/10 text-[#c07820] font-medium">{ledgerState.phase.replace(/_/g, " ")}</span>}
-                  </div>
-                  <p className="text-xs text-[#3d2f20] leading-relaxed">{ledgerState.progress}</p>
-                </div>
-              )}
+              {/* Boru's Notes — timeline of every progress note taken during the debate */}
+              <BoruNotesTimeline
+                history={ledgerState.progress_history}
+                latest={ledgerState.progress}
+                phase={ledgerState.phase}
+              />
+
 
               {/* Open Questions — with answers threaded below */}
               <LedgerSection
@@ -3089,6 +3087,59 @@ export default function DebatePage() {
 }
 
 // Collapsible section for the Ledger panel
+function BoruNotesTimeline({ history, latest, phase }: {
+  history: { round: number; phase: string; note: string }[];
+  latest?: string;
+  phase?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  // Always show the most recent entry. The older ones collapse behind "show all".
+  // Fall back to `latest` if history is empty (e.g. snapshot from older debates).
+  const entries = history && history.length
+    ? history
+    : (latest ? [{ round: 0, phase: phase || "", note: latest }] : []);
+  if (entries.length === 0) return null;
+  const reversed = [...entries].reverse(); // newest first
+  const visible = expanded ? reversed : reversed.slice(0, 1);
+  return (
+    <div className="bg-[#fef9f0] border border-[#f0c060]/30 rounded-xl px-3 py-2.5">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="text-sm">🐘</span>
+        <span className="text-[10px] text-[#c07820] uppercase tracking-widest font-semibold">
+          Boru&apos;s Notes
+        </span>
+        {phase && (
+          <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-[#c07820]/10 text-[#c07820] font-medium">
+            {phase.replace(/_/g, " ")}
+          </span>
+        )}
+      </div>
+      <div className="space-y-2">
+        {visible.map((e, i) => (
+          <div key={`${e.round}-${i}`} className={i === 0 ? "" : "pt-2 border-t border-[#f0c060]/20"}>
+            {(e.round > 0 || e.phase) && (
+              <div className="flex items-center gap-1.5 text-[9px] text-[#a09282] mb-0.5">
+                {e.round > 0 && <span>Round {e.round}</span>}
+                {e.phase && e.round > 0 && <span>·</span>}
+                {e.phase && <span className="italic">{e.phase.replace(/_/g, " ")}</span>}
+              </div>
+            )}
+            <p className="text-xs text-[#3d2f20] leading-relaxed">{e.note}</p>
+          </div>
+        ))}
+      </div>
+      {reversed.length > 1 && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="mt-2 text-[10px] text-[#c07820] hover:text-[#a06010] font-medium transition-colors"
+        >
+          {expanded ? "Show latest only" : `Show all ${reversed.length} notes`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function LedgerSection({ title, count, badge, defaultOpen, empty, children }: {
   title: string; count: number; badge?: React.ReactNode; defaultOpen: boolean;
   empty: string; children: React.ReactNode;

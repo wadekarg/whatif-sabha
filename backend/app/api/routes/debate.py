@@ -510,6 +510,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
     alternate_ending = ""
     alternate_timeline = []
     alternate_world_state = {}
+    debate_summary = ""
 
     # ── Initialize the Sutradhar (orchestrator) ──
     ledger = ArgumentLedger(debate.divergence_description, char_names)
@@ -680,12 +681,15 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 )
                 if not stop_summary:
                     stop_summary = "The Sabha is concluded. What was said here will not be forgotten."
-                yield sse("orchestrator", {"message": stop_summary, "phase": "closing", "event": "user_stop", "target": "all", "intended_speaker": intended})
+                # Append FIRST, then yield — if the client disconnects during
+                # the yield (user_stop often coincides with tab close) we still
+                # want the closing in the persisted transcript.
                 transcript.append({
                     "character": "Boru", "message": stop_summary, "round": round_number,
                     "phase": "closing", "isOrchestrator": True, "orchestratorEvent": "closing_summary",
                     "intended_speaker": intended,
                 })
+                yield sse("orchestrator", {"message": stop_summary, "phase": "closing", "event": "user_stop", "target": "all", "intended_speaker": intended})
                 # HARD STOP: this IS the closing summary for the user_stop path.
                 # Prevent the post-loop closing_summary block from firing a second
                 # Boru closing, and prevent any further chat-channel events below.
@@ -1493,6 +1497,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     update_ledger(
                         ledger, next_speaker_name, full_response, transcript,
                         observer_names=obs_names, round_number=round_number,
+                        phase=current_phase,
                     )
                 )
                 pending_ledger_tasks.append(_ledger_task)
@@ -1683,6 +1688,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     "claims": ledger.claims[-12:],
                     "positions": ledger.character_positions,
                     "progress": ledger.progress_summary,
+                    "progress_history": ledger.progress_history,
                     "phase": current_phase,
                 })
 
@@ -1947,7 +1953,10 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                 context=verdict,
             )
             if closing_msg:
-                yield sse("orchestrator", {"message": closing_msg, "phase": "closing", "event": "closing_summary", "target": "all", "intended_speaker": intended})
+                # Append to transcript FIRST, then yield. If we yielded first and
+                # the client disconnected mid-yield (tab closed, reload, network),
+                # GeneratorExit would fire before the append and the closing would
+                # never reach the finally-block DB save.
                 transcript.append({
                     "character": "Boru",
                     "message": closing_msg,
@@ -1957,6 +1966,7 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
                     "orchestratorEvent": "closing_summary",
                     "intended_speaker": intended,
                 })
+                yield sse("orchestrator", {"message": closing_msg, "phase": "closing", "event": "closing_summary", "target": "all", "intended_speaker": intended})
             # HARD STOP: once closing_summary has been emitted, no further chat
             # events (character / observer / orchestrator) may be yielded or
             # appended to the transcript. Narrator summary streaming below
@@ -2009,39 +2019,55 @@ async def _run_debate_stream(debate_id: str, debate: Debate, story: Story):
         ))
 
     finally:
-        # Final flush — any in-flight ledger updates must complete before we
-        # snapshot the ledger into the DB, otherwise the saved state can lag
-        # behind the transcript by one or two turns.
-        await _flush_pending_ledger()
-        # Await any remaining background tasks before final persist
-        tasks = _bg_tasks.pop(debate_id, [])
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        _audience_queues.pop(debate_id, None)
-        _stop_signals.pop(debate_id, None)
+        # The final cleanup + persist runs inside asyncio.shield so it survives
+        # stream cancellation (client disconnect mid-flight). Without shield,
+        # the awaits here are interrupted by CancelledError and the closing
+        # Boru turn, ledger snapshot, and status never reach the DB — leaving
+        # the row stuck at status="running" with empty ledger_snapshot.
+        async def _persist_final_state():
+            try:
+                await _flush_pending_ledger()
+            except Exception as e:
+                logger.warning(f"Ledger flush failed during cleanup: {e}")
+            tasks = _bg_tasks.pop(debate_id, [])
+            if tasks:
+                try:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                except Exception as e:
+                    logger.warning(f"Background task gather failed: {e}")
+            _audience_queues.pop(debate_id, None)
+            _stop_signals.pop(debate_id, None)
 
-        # Always persist final state — even if client disconnects mid-stream
-        async with session_maker() as db:
-            db_debate = (await db.execute(
-                select(Debate).where(Debate.id == debate_id)
-            )).scalar_one()
-            db_debate.alternate_ending = debate_summary or alternate_ending or db_debate.alternate_ending
-            db_debate.alternate_timeline = alternate_timeline or db_debate.alternate_timeline
-            if alternate_world_state:
-                db_debate.alternate_world_state = alternate_world_state
-            # Save ledger snapshot for replay
-            db_debate.ledger_snapshot = {
-                "positions": ledger.character_positions,
-                "claims": ledger.claims[-20:],
-                "open_questions": ledger.open_questions,
-                "resolved_questions": ledger.resolved_questions,
-                "disputes": ledger.disputes,
-                "progress": ledger.progress_summary or "",
-            }
-            db_debate.status = "completed" if alternate_ending else "interrupted"
-            db_debate.round_count = round_number
-            db_debate.transcript = transcript  # save final transcript too
-            await db.commit()
+            try:
+                async with session_maker() as db:
+                    db_debate = (await db.execute(
+                        select(Debate).where(Debate.id == debate_id)
+                    )).scalar_one()
+                    db_debate.alternate_ending = debate_summary or alternate_ending or db_debate.alternate_ending
+                    db_debate.alternate_timeline = alternate_timeline or db_debate.alternate_timeline
+                    if alternate_world_state:
+                        db_debate.alternate_world_state = alternate_world_state
+                    db_debate.ledger_snapshot = {
+                        "positions": ledger.character_positions,
+                        "claims": ledger.claims[-20:],
+                        "open_questions": ledger.open_questions,
+                        "resolved_questions": ledger.resolved_questions,
+                        "disputes": ledger.disputes,
+                        "progress": ledger.progress_summary or "",
+                        "progress_history": ledger.progress_history or [],
+                    }
+                    db_debate.status = "completed" if alternate_ending or debate_summary else "interrupted"
+                    db_debate.round_count = round_number
+                    db_debate.transcript = transcript
+                    await db.commit()
+                    logger.info(f"Final persist complete for debate {debate_id} — status={db_debate.status}, turns={len(transcript)}, positions={len(ledger.character_positions)}")
+            except Exception as e:
+                logger.error(f"Final debate persist failed for {debate_id}: {e}", exc_info=True)
+
+        try:
+            await asyncio.shield(_persist_final_state())
+        except asyncio.CancelledError:
+            logger.info(f"Stream cancelled for {debate_id}; final persist continuing under shield")
 
 
 class OracleRequest(BaseModel):
@@ -2385,6 +2411,7 @@ class _LedgerView:
         self.resolved_questions = s.get("resolved_questions") or []
         self.disputes = s.get("disputes") or []
         self.progress_summary = s.get("progress") or ""
+        self.progress_history = s.get("progress_history") or []
         self.divergence = divergence
         self.character_names = list(character_names or [])
 

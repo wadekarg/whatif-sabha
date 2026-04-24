@@ -64,6 +64,50 @@ function classifySpeechAct(message: string, targetCharacters: string[]): SpeechA
   return "response";
 }
 
+function BoruNotesTimeline({ history, latest, phase }: {
+  history: { round: number; phase: string; note: string }[];
+  latest?: string;
+  phase?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const entries = history && history.length
+    ? history
+    : (latest ? [{ round: 0, phase: phase || "", note: latest }] : []);
+  if (entries.length === 0) return null;
+  const reversed = [...entries].reverse();
+  const visible = expanded ? reversed : reversed.slice(0, 1);
+  return (
+    <div className="bg-[#fef9f0] border border-[#f0c060]/30 rounded-xl px-3 py-2.5">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="text-sm">🐘</span>
+        <span className="text-[10px] text-[#c07820] uppercase tracking-widest font-semibold">Boru&apos;s Notes</span>
+      </div>
+      <div className="space-y-2">
+        {visible.map((e, i) => (
+          <div key={`${e.round}-${i}`} className={i === 0 ? "" : "pt-2 border-t border-[#f0c060]/20"}>
+            {(e.round > 0 || e.phase) && (
+              <div className="flex items-center gap-1.5 text-[9px] text-[#a09282] mb-0.5">
+                {e.round > 0 && <span>Round {e.round}</span>}
+                {e.phase && e.round > 0 && <span>·</span>}
+                {e.phase && <span className="italic">{e.phase.replace(/_/g, " ")}</span>}
+              </div>
+            )}
+            <p className="text-xs text-[#3d2f20] leading-relaxed">{e.note}</p>
+          </div>
+        ))}
+      </div>
+      {reversed.length > 1 && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="mt-2 text-[10px] text-[#c07820] hover:text-[#a06010] font-medium transition-colors"
+        >
+          {expanded ? "Show latest only" : `Show all ${reversed.length} notes`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function LedgerSection({ title, count, badge, defaultOpen, empty, children }: {
   title: string; count: number; badge?: React.ReactNode; defaultOpen: boolean;
   empty: string; children: React.ReactNode;
@@ -819,6 +863,10 @@ export default function DebateViewPage() {
 
   const handleExport = async () => {
     try {
+      // Graph must be on screen to capture — flip to the graph tab if the
+      // user was on ledger/positions. Wait a tick so D3 paints before export.
+      if (activeTab !== "graph") setActiveTab("graph");
+      await new Promise(r => setTimeout(r, 200));
       await exportDebateToPdf({
         graphElement: graphSvgRef.current,
         turns: transcript as any,
@@ -832,6 +880,8 @@ export default function DebateViewPage() {
             color: CHAR_COLORS[i % CHAR_COLORS.length]?.hex,
           })),
           alternateEnding: debate.alternate_ending || undefined,
+          ledgerSnapshot: debate.ledger_snapshot || undefined,
+          positions: debate.ledger_snapshot?.positions || undefined,
         },
       });
     } catch (e) {
@@ -842,12 +892,12 @@ export default function DebateViewPage() {
 
   return (
     <main className="relative flex flex-col bg-[#f7f3ed] overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
-      {/* Sub-header */}
-      <div className="sticky top-14 z-40 border-b border-[#e8e0d5] bg-white/95 backdrop-blur-sm shrink-0">
-        <div className="px-6 py-2.5 flex items-center justify-between gap-4">
+      {/* Sub-header — flush with NavBar (same cream bg), renders as one block */}
+      <div className="border-b border-[#e8e0d5] bg-[#f7f3ed]/95 backdrop-blur-sm shrink-0">
+        <div className="px-6 py-1.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Link href={`/story/${id}`} className="text-[#a09282] hover:text-[#1c1410] text-xs transition-colors shrink-0">← Back</Link>
-            <span className="text-[#c8b89a]">·</span>
+            <span className="text-[10px] uppercase tracking-widest text-[#c07820] font-semibold shrink-0">What if</span>
             <p className="text-[#6b5c4e] text-xs truncate italic">"{debate.divergence_description}"</p>
           </div>
           {/* Character avatar strip */}
@@ -857,7 +907,7 @@ export default function DebateViewPage() {
                 const col = CHAR_COLORS[i % CHAR_COLORS.length].hex;
                 return (
                   <div key={name} title={name}
-                    className="-ml-1 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-white font-bold text-xs"
+                    className="-ml-1 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white font-bold text-[10px]"
                     style={{ backgroundColor: col, zIndex: chars.length - i }}>
                     {initials(name)}
                   </div>
@@ -877,7 +927,7 @@ export default function DebateViewPage() {
             <span className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
               debate.status === "completed"
                 ? "border-emerald-200 text-emerald-700 bg-emerald-50"
-                : "border-[#e8e0d5] text-[#a09282] bg-[#f7f3ed]"
+                : "border-[#e8e0d5] text-[#a09282] bg-white/60"
             }`}>
               {debate.status === "completed" ? "✓ completed" : debate.status}
             </span>
@@ -1242,10 +1292,11 @@ export default function DebateViewPage() {
               {(() => {
                 const snap = debate?.ledger_snapshot || {};
                 const progress: string = snap.progress || "";
+                const progressHistory: { round: number; phase: string; note: string }[] = snap.progress_history || [];
                 const openQs: any[] = snap.open_questions || [];
                 const resolvedQs: any[] = snap.resolved_questions || [];
                 const claims: any[] = snap.claims || [];
-                const hasAnything = progress || openQs.length || resolvedQs.length || claims.length;
+                const hasAnything = progress || progressHistory.length || openQs.length || resolvedQs.length || claims.length;
                 if (!hasAnything) {
                   return (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -1256,15 +1307,8 @@ export default function DebateViewPage() {
                 }
                 return (
                   <>
-                    {progress && (
-                      <div className="bg-[#fef9f0] border border-[#f0c060]/30 rounded-xl px-3 py-2.5">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-sm">🐘</span>
-                          <span className="text-[10px] text-[#c07820] uppercase tracking-widest font-semibold">Boru&apos;s Notes</span>
-                        </div>
-                        <p className="text-xs text-[#3d2f20] leading-relaxed">{progress}</p>
-                      </div>
-                    )}
+                    <BoruNotesTimeline history={progressHistory} latest={progress} />
+
 
                     <LedgerSection
                       title="Open Questions"
