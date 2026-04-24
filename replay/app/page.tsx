@@ -142,7 +142,10 @@ export default function DebateViewPage() {
   const [showOracle, setShowOracle] = useState(false);
   const [oracleCharacter, setOracleCharacter] = useState("");
   const [oracleInput, setOracleInput] = useState("");
-  const [oracleHistory, setOracleHistory] = useState<{role:string;content:string;character?:string}[]>([]);
+  // Per-character oracle history — keyed by character name. Switching between
+  // characters preserves each conversation for the session instead of wiping.
+  const [oracleHistories, setOracleHistories] = useState<Record<string, {role:string;content:string;character?:string}[]>>({});
+  const oracleHistory = oracleHistories[oracleCharacter] || [];
   const [oracleStreaming, setOracleStreaming] = useState("");
   const [oracleLoading, setOracleLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"graph"|"ledger"|"positions">("graph");
@@ -728,19 +731,23 @@ export default function DebateViewPage() {
   const sendOracleQuestion = async () => {
     const q = oracleInput.trim();
     if (!q || !oracleCharacter) return;
+    const targetChar = oracleCharacter;
     setOracleInput("");
-    setOracleHistory(prev => [
+    setOracleHistories(prev => ({
       ...prev,
-      { role: "user", content: q, character: oracleCharacter },
-      {
-        role: "assistant",
-        content:
-          "The Oracle needs the live backend. Clone the repo at " +
-          REPO_URL +
-          " to walk this world with your own API keys.",
-        character: oracleCharacter,
-      },
-    ]);
+      [targetChar]: [
+        ...(prev[targetChar] || []),
+        { role: "user", content: q, character: targetChar },
+        {
+          role: "assistant",
+          content:
+            "The Oracle needs the live backend. Clone the repo at " +
+            REPO_URL +
+            " to walk this world with your own API keys.",
+          character: targetChar,
+        },
+      ],
+    }));
   };
 
   if (loading) return (
@@ -1455,7 +1462,7 @@ export default function DebateViewPage() {
                       const active = oracleCharacter === name && showOracle;
                       return (
                         <button key={name}
-                          onClick={() => { setOracleCharacter(name); setShowOracle(true); setOracleHistory([]); }}
+                          onClick={() => { setOracleCharacter(name); setShowOracle(true); /* no wipe — per-character history persists for the session */ }}
                           className="px-4 py-2 rounded-full text-sm font-medium transition-all border"
                           style={active ? { background: ccol, color: "#fff", borderColor: ccol } : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)", borderColor: "rgba(255,255,255,0.1)" }}>
                           {name}

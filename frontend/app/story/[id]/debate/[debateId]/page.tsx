@@ -144,10 +144,13 @@ export default function DebateViewPage() {
   const [showOracle, setShowOracle] = useState(false);
   const [oracleCharacter, setOracleCharacter] = useState("");
   const [oracleInput, setOracleInput] = useState("");
-  const [oracleHistory, setOracleHistory] = useState<{role:string;content:string;character?:string}[]>([]);
+  // Per-character oracle history — switching between characters preserves
+  // each conversation for the session instead of wiping.
+  const [oracleHistories, setOracleHistories] = useState<Record<string, {role:string;content:string;character?:string}[]>>({});
+  const oracleHistory = oracleHistories[oracleCharacter] || [];
   const [oracleStreaming, setOracleStreaming] = useState("");
   const [oracleLoading, setOracleLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"graph"|"ledger"|"positions">("graph");
+  const [activeTab, setActiveTab] = useState<"graph"|"ledger"|"positions"|"oracle">("graph");
   const [graphLegendCollapsed, setGraphLegendCollapsed] = useState(true);
   const [showStats, setShowStats] = useState(false);
   const [graphHover, setGraphHover] = useState<{ x: number; y: number; source: string; target: string; count: number; questions: number; snippet: string } | null>(null);
@@ -801,15 +804,21 @@ export default function DebateViewPage() {
   const sendOracleQuestion = async () => {
     const q = oracleInput.trim();
     if (!q || oracleLoading || !oracleCharacter) return;
+    // Lock target at send time — if user switches mid-stream the reply still
+    // lands in the original character's history, not the new one.
+    const targetChar = oracleCharacter;
+    const appendTo = (msg: {role:string;content:string;character?:string}) =>
+      setOracleHistories(prev => ({ ...prev, [targetChar]: [...(prev[targetChar] || []), msg] }));
+    const priorHistory = oracleHistories[targetChar] || [];
     setOracleInput("");
-    setOracleHistory(prev => [...prev, { role: "user", content: q }]);
+    appendTo({ role: "user", content: q });
     setOracleLoading(true);
     setOracleStreaming("");
     try {
       const res = await fetch(`${API}/debates/${debateId}/oracle/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ character_name: oracleCharacter, question: q, history: oracleHistory }),
+        body: JSON.stringify({ character_name: targetChar, question: q, history: priorHistory }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       if (!res.body) throw new Error("no body");
@@ -828,7 +837,7 @@ export default function DebateViewPage() {
             if (ev.type === "token") { full += ev.text; setOracleStreaming(full); }
             if (ev.type === "error") { full = ev.message || "The oracle could not reach this character."; }
             if (ev.type === "done") {
-              setOracleHistory(prev => [...prev, { role: "assistant", content: full || "…", character: oracleCharacter }]);
+              appendTo({ role: "assistant", content: full || "…", character: targetChar });
               setOracleStreaming("");
               gotDone = true;
             }
@@ -836,11 +845,11 @@ export default function DebateViewPage() {
         }
       }
       if (!gotDone) {
-        setOracleHistory(prev => [...prev, { role: "assistant", content: full || "The oracle could not reach this character.", character: oracleCharacter }]);
+        appendTo({ role: "assistant", content: full || "The oracle could not reach this character.", character: targetChar });
         setOracleStreaming("");
       }
     } catch {
-      setOracleHistory(prev => [...prev, { role: "assistant", content: "The oracle could not reach this character.", character: oracleCharacter }]);
+      appendTo({ role: "assistant", content: "The oracle could not reach this character.", character: targetChar });
       setOracleStreaming("");
     } finally {
       setOracleLoading(false);
@@ -1090,7 +1099,7 @@ export default function DebateViewPage() {
                   onClick={() => setShowConclusion(true)}
                   className="w-full py-4 rounded-2xl bg-[#1c1410] text-white font-semibold text-sm hover:bg-[#2d1f14] transition-colors flex items-center justify-center gap-2"
                 >
-                  <span className="text-[#f0c060]">✦</span> Read the Alternate Ending
+                  <span className="text-[#f0c060]">✦</span> Read the Debate Summary
                 </button>
                 <button
                   onClick={regenerateSummary}
@@ -1235,12 +1244,12 @@ export default function DebateViewPage() {
 
           {/* Tab bar */}
           <div className="shrink-0 flex border-b border-[#e8e0d5] bg-[#f0ece5]">
-            {(["graph", "ledger", "positions"] as const).map(tab => (
+            {(["graph", "ledger", "positions", "oracle"] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
                   activeTab === tab ? "text-[#3d2f20] border-[#c07820]" : "text-[#a09282] border-transparent hover:text-[#6b5c4e]"
                 }`}>
-                {tab === "graph" ? "⬡ Graph" : tab === "ledger" ? "📋 Ledger" : "🎭 Positions"}
+                {tab === "graph" ? "⬡ Graph" : tab === "ledger" ? "📋 Ledger" : tab === "positions" ? "🎭 Positions" : "🔮 Oracle"}
               </button>
             ))}
           </div>
@@ -1437,6 +1446,92 @@ export default function DebateViewPage() {
                 });
               })()}
             </div>
+
+            {/* Oracle — talk to any character from the alternate world.
+                Per-character history persists across switches for the session. */}
+            <div className="flex flex-col" style={{ position:"absolute", inset:0, opacity: activeTab==="oracle" ? 1 : 0, pointerEvents: activeTab==="oracle" ? "auto" : "none", transition:"opacity 0.15s" }}>
+              {/* Character picker */}
+              <div className="shrink-0 px-4 py-3 border-b border-[#e8e0d5] bg-[#faf7f2]">
+                <div className="text-[10px] uppercase tracking-widest text-[#a09282] font-semibold mb-2">Talk to</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {chars.length === 0 && (
+                    <span className="text-xs text-[#a09282] italic">No characters recorded for this debate.</span>
+                  )}
+                  {chars.map((name: string, ci: number) => {
+                    const ccol = CHAR_COLORS[ci % CHAR_COLORS.length].hex;
+                    const active = oracleCharacter === name;
+                    return (
+                      <button key={name}
+                        onClick={() => { setOracleCharacter(name); setShowOracle(true); }}
+                        className="px-3 py-1.5 rounded-full text-xs font-medium transition-all border"
+                        style={active
+                          ? { background: ccol, color: "#fff", borderColor: ccol }
+                          : { background: "white", color: "#6b5c4e", borderColor: "#e8e0d5" }}>
+                        {name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Chat area */}
+              {!oracleCharacter ? (
+                <div className="flex-1 flex items-center justify-center px-6 text-center">
+                  <p className="text-sm text-[#a09282]">Pick a character above to begin.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0 bg-[#faf7f2]">
+                    {oracleHistory.length === 0 && (
+                      <p className="text-xs text-[#a09282] italic text-center pt-6">
+                        Ask {oracleCharacter} anything about their alternate world…
+                      </p>
+                    )}
+                    {oracleHistory.map((msg, i) => {
+                      const colIdx = chars.indexOf(oracleCharacter);
+                      const col = CHAR_COLORS[colIdx % CHAR_COLORS.length].hex;
+                      return (
+                        <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
+                          {msg.role === "assistant" && (
+                            <div className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
+                              style={{ background: col + "30", color: col }}>{oracleCharacter[0]}</div>
+                          )}
+                          <div className={`rounded-xl px-3 py-2 text-xs max-w-[85%] leading-relaxed ${
+                            msg.role === "user" ? "text-white" : "bg-white text-[#1c1410] border border-[#e8e0d5]"
+                          }`} style={msg.role === "user" ? { background: col } : {}}>
+                            {msg.content}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {oracleStreaming && (
+                      <div className="flex gap-2">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
+                          style={{ background: (CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length].hex) + "30", color: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length].hex }}>
+                          {oracleCharacter[0]}
+                        </div>
+                        <div className="rounded-xl px-3 py-2 text-xs bg-white border border-[#e8e0d5] leading-relaxed">
+                          {oracleStreaming}<span className="animate-pulse">▌</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="shrink-0 px-4 py-3 border-t border-[#e8e0d5] bg-white flex gap-2">
+                    <input
+                      value={oracleInput}
+                      onChange={e => setOracleInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendOracleQuestion(); } }}
+                      placeholder={`Ask ${oracleCharacter}…`}
+                      className="flex-1 text-xs px-3 py-2 rounded-lg border border-[#e8e0d5] focus:outline-none focus:border-[#c8b89a]"
+                    />
+                    <button onClick={sendOracleQuestion} disabled={oracleLoading || !oracleInput.trim()}
+                      className="px-3 py-2 text-xs font-semibold rounded-lg text-white disabled:opacity-40"
+                      style={{ background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length].hex }}>
+                      {oracleLoading ? "…" : "Ask"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Voice share */}
@@ -1489,7 +1584,7 @@ export default function DebateViewPage() {
                 <button
                   onClick={handleExport}
                   className="text-xs text-white/70 hover:text-white border border-[#f0c060]/40 hover:border-[#f0c060]/70 px-3 py-1.5 rounded-lg transition-colors print:hidden"
-                  aria-label="Export debate and alternate ending as PDF"
+                  aria-label="Export debate and summary as PDF"
                 >
                   📥 Export PDF
                 </button>
@@ -1502,7 +1597,7 @@ export default function DebateViewPage() {
             <div className="relative flex flex-col items-center justify-center text-center px-8 py-28 overflow-hidden" style={{ minHeight: "55vh" }}>
               <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(192,120,32,0.14) 0%, transparent 70%)" }} />
               <div className="relative z-10 space-y-7 max-w-3xl">
-                <div className="text-[#f0c060]/50 text-xs uppercase tracking-[0.45em] font-semibold">Alternate History</div>
+                <div className="text-[#f0c060]/50 text-xs uppercase tracking-[0.45em] font-semibold">Debate Summary</div>
                 <h1 className="text-4xl sm:text-5xl font-bold leading-tight" style={{ color: "#f5f0e8" }}>
                   {debate.divergence_description}
                 </h1>
@@ -1569,16 +1664,18 @@ export default function DebateViewPage() {
               </div>
             )}
 
-            {/* THE ALTERNATE ENDING */}
+            {/* THE DEBATE SUMMARY — two-column layout, Oracle on the LEFT (50%) */}
             <div style={{ background: "#fefcf8" }} className="py-24">
-              <div className="max-w-[660px] mx-auto px-8">
+              <div className="max-w-[1400px] mx-auto px-8 grid grid-cols-1 lg:grid-cols-2 gap-10">
+                {/* RIGHT column: Summary prose */}
+                <div className="order-2">
                 <div className="text-center mb-14">
                   <div className="flex items-center justify-center gap-5 mb-8">
                     <div className="flex-1 h-px bg-[#e8e0d5]" />
                     <span className="text-[#c07820] text-xl">✦</span>
                     <div className="flex-1 h-px bg-[#e8e0d5]" />
                   </div>
-                  <div className="text-xs uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Alternate Ending</div>
+                  <div className="text-xs uppercase tracking-[0.4em] text-[#a09282] font-semibold">The Debate Summary</div>
                 </div>
                 <div className="text-[#2d1f14] leading-[2.15] text-[18px]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
                   <ReactMarkdown
@@ -1599,68 +1696,100 @@ export default function DebateViewPage() {
                   <div className="text-[#c07820] text-lg tracking-[0.5em]">✦ ✦ ✦</div>
                   <p className="text-xs text-[#a09282] mt-3">Shaped by {chars.join(", ")} · {turns.length} exchanges</p>
                 </div>
-              </div>
-            </div>
+                </div>
+                {/* /LEFT */}
 
-            {/* ORACLE MODE */}
-            {debate.alternate_world_state && (
-              <div data-print-hide="true" style={{ background: "#0d0b08" }} className="py-24 px-8">
-                <div className="max-w-2xl mx-auto space-y-8">
-                  <div className="text-center space-y-3">
-                    <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center text-[#f0c060] text-xl border border-[#f0c060]/25" style={{ background: "rgba(240,192,96,0.08)" }}>◉</div>
-                    <div className="text-xs uppercase tracking-[0.35em] text-white/35 font-semibold">Oracle Mode</div>
-                    <p className="text-white/50 text-sm max-w-sm mx-auto leading-relaxed">Enter the alternate world. Ask any character a question — they answer from inside this reality.</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {chars.map((name: string, ci: number) => {
-                      const ccol = CHAR_COLORS[ci % CHAR_COLORS.length].hex;
-                      const active = oracleCharacter === name && showOracle;
-                      return (
-                        <button key={name}
-                          onClick={() => { setOracleCharacter(name); setShowOracle(true); setOracleHistory([]); }}
-                          className="px-4 py-2 rounded-full text-sm font-medium transition-all border"
-                          style={active ? { background: ccol, color: "#fff", borderColor: ccol } : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)", borderColor: "rgba(255,255,255,0.1)" }}>
-                          {name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {showOracle && oracleCharacter && (
-                    <div className="rounded-2xl overflow-hidden border border-white/10" style={{ background: "rgba(255,255,255,0.04)" }}>
-                      <div className="px-5 py-3 border-b border-white/8 flex items-center gap-2.5">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex }} />
-                        <span className="text-sm font-semibold text-white">{oracleCharacter}</span>
-                        <span className="text-xs text-white/30 italic">· speaking from the alternate world</span>
+                {/* LEFT column: Oracle — sticky, roomy chat area */}
+                <aside data-print-hide="true" className="order-1">
+                  <div className="sticky top-20 rounded-2xl overflow-hidden border border-[#e8e0d5] shadow-sm bg-white flex flex-col" style={{ maxHeight: "calc(100vh - 120px)" }}>
+                    <div className="px-6 py-5 border-b border-[#e8e0d5] bg-[#faf7f2] shrink-0">
+                      <div className="flex items-center gap-2.5 mb-1.5">
+                        <span className="w-8 h-8 rounded-full flex items-center justify-center text-[#c07820] border border-[#f0c060]/40 text-lg" style={{ background: "rgba(240,192,96,0.12)" }}>◉</span>
+                        <span className="text-sm uppercase tracking-[0.25em] text-[#c07820] font-semibold">Oracle</span>
                       </div>
-                      <div className="px-5 py-4 space-y-4 max-h-96 overflow-y-auto">
-                        {oracleHistory.length === 0 && <p className="text-sm text-white/25 italic text-center py-6">Ask {oracleCharacter} anything about their world…</p>}
-                        {oracleHistory.map((msg, i) => (
-                          <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}>
-                            {msg.role === "assistant" && (
-                              <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border border-white/20" style={{ background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex + "30", color: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex }}>{oracleCharacter[0]}</div>
-                            )}
-                            <div className={`rounded-xl px-4 py-2.5 text-sm max-w-[85%] leading-relaxed ${msg.role === "user" ? "rounded-br-sm font-medium" : "border border-white/10 rounded-bl-sm"}`}
-                              style={msg.role === "user" ? { background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex, color: "#fff" } : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)" }}>
-                              {msg.content}
-                            </div>
-                          </div>
-                        ))}
-                        {oracleStreaming && (
-                          <div className="flex gap-3">
-                            <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border border-white/20" style={{ background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex + "30", color: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex }}>{oracleCharacter[0]}</div>
-                            <div className="rounded-xl rounded-bl-sm px-4 py-2.5 text-sm border border-white/10 leading-relaxed" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)" }}>{oracleStreaming}<span className="animate-pulse">▌</span></div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="px-5 py-3 border-t border-white/8 flex gap-2">
-                        <input value={oracleInput} onChange={e => setOracleInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendOracleQuestion()} placeholder={`Ask ${oracleCharacter}…`} className="flex-1 text-sm px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-white/20 placeholder:text-white/20" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.8)" }} />
-                        <button onClick={sendOracleQuestion} disabled={oracleLoading || !oracleInput.trim()} className="px-4 py-2 text-sm font-semibold rounded-lg transition-colors disabled:opacity-30" style={{ background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length]?.hex, color: "#fff" }}>{oracleLoading ? "…" : "Ask"}</button>
+                      <p className="text-sm text-[#6b5c4e] leading-relaxed">Enter the alternate world. Ask any character from inside this reality — they answer in character.</p>
+                    </div>
+                    <div className="px-6 py-4 border-b border-[#e8e0d5] shrink-0">
+                      <div className="text-[11px] uppercase tracking-widest text-[#a09282] font-semibold mb-2.5">Talk to</div>
+                      <div className="flex flex-wrap gap-2">
+                        {chars.map((name: string, ci: number) => {
+                          const ccol = CHAR_COLORS[ci % CHAR_COLORS.length].hex;
+                          const active = oracleCharacter === name;
+                          return (
+                            <button key={name}
+                              onClick={() => { setOracleCharacter(name); setShowOracle(true); }}
+                              className="px-3 py-1.5 rounded-full text-sm font-medium transition-all border"
+                              style={active
+                                ? { background: ccol, color: "#fff", borderColor: ccol }
+                                : { background: "white", color: "#6b5c4e", borderColor: "#e8e0d5" }}>
+                              {name}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
-                  )}
-                </div>
+                    {!oracleCharacter ? (
+                      <div className="flex-1 flex items-center justify-center px-6 py-16 bg-[#faf7f2]">
+                        <p className="text-sm text-[#a09282] italic">Pick a character to begin.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4 bg-[#faf7f2] min-h-[360px]">
+                          {oracleHistory.length === 0 && (
+                            <p className="text-sm text-[#a09282] italic text-center py-6">
+                              Ask {oracleCharacter} anything about their alternate world…
+                            </p>
+                          )}
+                          {oracleHistory.map((msg, i) => {
+                            const colIdx = chars.indexOf(oracleCharacter);
+                            const col = CHAR_COLORS[colIdx % CHAR_COLORS.length].hex;
+                            return (
+                              <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : ""}`}>
+                                {msg.role === "assistant" && (
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+                                    style={{ background: col + "30", color: col }}>{oracleCharacter[0]}</div>
+                                )}
+                                <div className={`rounded-2xl px-4 py-2.5 text-sm max-w-[85%] leading-relaxed ${
+                                  msg.role === "user" ? "text-white rounded-br-sm" : "bg-white text-[#1c1410] border border-[#e8e0d5] rounded-bl-sm"
+                                }`} style={msg.role === "user" ? { background: col } : {}}>
+                                  {msg.content}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {oracleStreaming && (
+                            <div className="flex gap-2.5">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+                                style={{ background: (CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length].hex) + "30", color: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length].hex }}>
+                                {oracleCharacter[0]}
+                              </div>
+                              <div className="rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm bg-white border border-[#e8e0d5] leading-relaxed">
+                                {oracleStreaming}<span className="animate-pulse">▌</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-5 py-4 border-t border-[#e8e0d5] flex gap-2 bg-white shrink-0">
+                          <input
+                            value={oracleInput}
+                            onChange={e => setOracleInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendOracleQuestion(); } }}
+                            placeholder={`Ask ${oracleCharacter}…`}
+                            className="flex-1 text-sm px-4 py-2.5 rounded-lg border border-[#e8e0d5] focus:outline-none focus:border-[#c8b89a]"
+                          />
+                          <button onClick={sendOracleQuestion} disabled={oracleLoading || !oracleInput.trim()}
+                            className="px-5 py-2.5 text-sm font-semibold rounded-lg text-white disabled:opacity-40"
+                            style={{ background: CHAR_COLORS[chars.indexOf(oracleCharacter) % CHAR_COLORS.length].hex }}>
+                            {oracleLoading ? "…" : "Ask"}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </aside>
+                {/* /LEFT */}
               </div>
-            )}
+            </div>
 
             {/* Footer */}
             <div data-print-hide="true" className="border-t border-white/8 py-14 text-center" style={{ background: "#0d0b08" }}>

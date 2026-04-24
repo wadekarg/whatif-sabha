@@ -92,7 +92,10 @@ export default function DebatePage() {
   const [storyCharInput, setStoryCharInput] = useState("");
   const storyCharEndRef = useRef<HTMLDivElement>(null);
   const [oracleInput, setOracleInput] = useState("");
-  const [oracleHistory, setOracleHistory] = useState<{role:string;content:string;character?:string}[]>([]);
+  // Per-character oracle history — keyed by character name. Switching between
+  // characters preserves each conversation for the session instead of wiping.
+  const [oracleHistories, setOracleHistories] = useState<Record<string, {role:string;content:string;character?:string}[]>>({});
+  const oracleHistory = oracleHistories[oracleCharacter] || [];
   const [oracleStreaming, setOracleStreaming] = useState("");
   const [oracleLoading, setOracleLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "starting" | "running" | "done">("idle");
@@ -1250,15 +1253,21 @@ export default function DebatePage() {
   const sendOracleQuestion = async () => {
     const q = oracleInput.trim();
     if (!q || oracleLoading || !debateId || !oracleCharacter) return;
+    // Lock the target character at send time — if the user switches mid-stream,
+    // the streamed reply still lands in the original character's history.
+    const targetChar = oracleCharacter;
+    const appendTo = (msg: {role:string;content:string;character?:string}) =>
+      setOracleHistories(prev => ({ ...prev, [targetChar]: [...(prev[targetChar] || []), msg] }));
+    const priorHistory = oracleHistories[targetChar] || [];
     setOracleInput("");
-    setOracleHistory(prev => [...prev, { role: "user", content: q }]);
+    appendTo({ role: "user", content: q });
     setOracleLoading(true);
     setOracleStreaming("");
     try {
       const res = await fetch(`${API}/debates/${debateId}/oracle/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ character_name: oracleCharacter, question: q, history: oracleHistory }),
+        body: JSON.stringify({ character_name: targetChar, question: q, history: priorHistory }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       if (!res.body) throw new Error("no body");
@@ -1277,7 +1286,7 @@ export default function DebatePage() {
             if (ev.type === "token") { full += ev.text; setOracleStreaming(full); }
             if (ev.type === "error") { full = ev.message || "The oracle could not reach this character right now."; }
             if (ev.type === "done") {
-              setOracleHistory(prev => [...prev, { role: "assistant", content: full || "…", character: oracleCharacter }]);
+              appendTo({ role: "assistant", content: full || "…", character: targetChar });
               setOracleStreaming("");
               gotDone = true;
             }
@@ -1286,11 +1295,11 @@ export default function DebatePage() {
       }
       // Stream closed without a done event (network cut / server error)
       if (!gotDone) {
-        setOracleHistory(prev => [...prev, { role: "assistant", content: full || "The oracle could not reach this character right now.", character: oracleCharacter }]);
+        appendTo({ role: "assistant", content: full || "The oracle could not reach this character right now.", character: targetChar });
         setOracleStreaming("");
       }
     } catch {
-      setOracleHistory(prev => [...prev, { role: "assistant", content: "The oracle could not reach this character right now.", character: oracleCharacter }]);
+      appendTo({ role: "assistant", content: "The oracle could not reach this character right now.", character: targetChar });
       setOracleStreaming("");
     } finally {
       setOracleLoading(false);
@@ -2932,7 +2941,9 @@ export default function DebatePage() {
                     <button key={name}
                       onClick={() => {
                         setOracleCharacter(name);
-                        if (conclusionTab === "oracle") { setOracleHistory([]); setShowOracle(true); }
+                        // Do NOT wipe oracleHistory — per-character history
+                        // persists across switches for the session.
+                        if (conclusionTab === "oracle") { setShowOracle(true); }
                         else { setStoryCharMsgs([]); }
                       }}
                       className="px-3 py-1.5 rounded-full text-sm font-medium transition-all border"

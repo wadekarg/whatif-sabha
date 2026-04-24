@@ -1,11 +1,26 @@
+<div align="center">
+
 # 🌟 WhatIfSabha
 
-![Python](https://img.shields.io/badge/python-3.10+-4B8BBE?style=flat-square&logo=python&logoColor=white)
-![Next.js](https://img.shields.io/badge/next.js-16-1f1f1f?style=flat-square&logo=next.js&logoColor=white)
-![TypeScript](https://img.shields.io/badge/typescript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)
-![FastAPI](https://img.shields.io/badge/fastapi-0.115-2A8F7A?style=flat-square&logo=fastapi&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-6B8E4E?style=flat-square)
-![Status](https://img.shields.io/badge/status-side--project-D98B4E?style=flat-square)
+### *Upload a book. Change one thing. Watch the characters argue about it.*
+
+[![Python](https://img.shields.io/badge/python-3.10+-4B8BBE?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Next.js](https://img.shields.io/badge/next.js-16-1f1f1f?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![FastAPI](https://img.shields.io/badge/fastapi-0.115-2A8F7A?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/license-MIT-6B8E4E?style=flat-square)](LICENSE)
+[![Status](https://img.shields.io/badge/status-side--project-D98B4E?style=flat-square)]()
+[![One Free Key](https://img.shields.io/badge/runs_on-ONE_free_API_key-4CAF50?style=flat-square&logo=sparkles)](#-api-keys--you-only-need-one)
+
+### 🔗 [**Try the live demo →**](https://what-if-sabha.pages.dev)
+
+</div>
+
+---
+
+## 🧭 Jump to
+
+&nbsp;&nbsp;[💭 Where it came from](#-where-it-came-from) &nbsp;·&nbsp; [📖 What it does](#-what-it-does) &nbsp;·&nbsp; [📸 Guided tour](#-a-guided-tour) &nbsp;·&nbsp; [⚡ Quick start](#-quick-start) &nbsp;·&nbsp; [🔑 API keys](#-api-keys--you-only-need-one) &nbsp;·&nbsp; [🎭 How the debate works](#-how-the-debate-works) &nbsp;·&nbsp; [🛠 Config](#%EF%B8%8F-config-reference) &nbsp;·&nbsp; [🧪 Tests](#-running-tests) &nbsp;·&nbsp; [🆘 Troubleshooting](#-troubleshooting)
 
 ---
 
@@ -21,84 +36,156 @@ WhatIfSabha is a side project born from that wondering. You upload a story, type
 
 ## 📖 What it does
 
-Upload a PDF. The app pulls out the characters, gives each of them a little brain and some context from the book, generates a portrait for each (via [Pollinations](https://pollinations.ai)), and then hands the floor to Boru. You give Boru a divergence point — the "what if" — and the debate begins.
+Upload a PDF. The app pulls out the characters, gives each of them a little brain and some context from the book, generates a portrait for each (via [Pollinations](https://pollinations.ai)), and then hands the floor to **Boru** — the elephant moderator. You give Boru a divergence point — the "what if" — and the debate begins.
 
-Boru runs the room: calls on people, forces confrontations between contradictions, drags silent characters in, closes the session when things have been said. A narrator at the end writes an alternate ending based on everything that was argued.
+Boru runs the room: calls on people, forces confrontations between contradictions, drags silent characters in, closes the session when things have been said. A narrator writes a summary at the end based on everything that was argued.
 
-The whole thing streams live over SSE, so you watch it unfold turn by turn rather than waiting for a block of text at the end.
+The whole thing streams live over **SSE**, so you watch it unfold turn by turn rather than waiting for a block of text at the end.
 
 A quick taste — *Animal Farm*, with the divergence **"What if Snowball returned?"**
 
 ```
-Boru: "Snowball walks back into the farm. Napoleon — your move. Speak."
-
+Boru:     "Snowball walks back into the farm. Napoleon — your move. Speak."
 Napoleon: "Traitor. He sold us to Jones once, he'll sell us again..."
-
-Boru: "Clover, you were there both nights. Which nose was in the feed-bin?"
-
-Clover: "Napoleon's. I did not say so at the time because..."
-
-Boru: "Snowball, answer the charge. Did you signal the humans?"
-
+Boru:     "Clover, you were there both nights. Which nose was in the feed-bin?"
+Clover:   "Napoleon's. I did not say so at the time because..."
+Boru:     "Snowball, answer the charge. Did you signal the humans?"
 Snowball: "I signalled nothing. And Napoleon knows it..."
 ```
 
 While this streams, a live **interaction graph** shows who's talking to whom, a quiet **argument ledger** tracks every open question, and before Boru closes the session, he runs a **resolution round** that forces answers to the biggest unanswered things.
 
----
-
-## 📸 A glimpse
-
-> 🖼️ *Screenshots go here. Replace with your own after running a debate.*
-> - `docs/screenshots/upload.png` — character cast after PDF analysis
-> - `docs/screenshots/debate.png` — live streaming debate
-> - `docs/screenshots/graph.png` — interaction graph
-> - `docs/screenshots/export.png` — PDF export first page
+> **After the debate:** the world persists. You can walk up to any character and ask them questions — **Oracle mode** — and they answer from inside the alternate reality the debate shaped.
 
 ---
 
 ## 🎬 See it in action
 
-A sample finished debate is hosted as a static replay site — you can scroll through the whole thing without running anything locally.
+> ### 🔗 **Live replay:** **[https://what-if-sabha.pages.dev](https://what-if-sabha.pages.dev)**
+>
+> Bundled demo: *Animal Farm* with the divergence **"What if Boxer killed those dogs when they were trying to chase Snowball away?"** — 44 turns, 17 characters, full graph + ledger + Boru's notes timeline + closing + summary.
 
-> 🔗 **Live replay:** **https://what-if-sabha.pages.dev**
->
-> The demo is *Animal Farm* with the divergence **"What if Napoleon had killed Snowball instead of letting him go?"** — 78 turns, 19 characters, full graph + ledger + Boru's closing.
->
-> 📄 **Sample export PDF:** *(coming soon — see `docs/samples/`)*
+---
+
+## 📸 A guided tour
+
+### The landing
+
+<p align="center">
+  <img src="docs/screenshots/homepage.png" width="820" alt="WhatIfSabha home page" />
+</p>
+
+### 📥 Upload a book → auto-extracted cast
+
+Drop a PDF. The app pulls out the characters, writes a short dossier for each, and generates a portrait per character (via Pollinations).
+
+<p align="center">
+  <img src="docs/screenshots/pdf-upload-analysis.png" width="820" alt="PDF upload and cast analysis" />
+</p>
+
+### 🏠 The story page — cast + timeline
+
+The cast is clickable, and a short generated timeline of the original story gives the starting reality.
+
+<p>
+  <img src="docs/screenshots/story-page-main.png" width="49%" alt="Story page — cast" />
+  <img src="docs/screenshots/story-timeline.png" width="49%" alt="Story timeline" />
+</p>
+
+### 🐘 Ask Boru about the story (pre-debate)
+
+Before picking a what-if, you can chat with the orchestrator about the book — he'll reason across the whole cast and remember the conversation.
+
+<p>
+  <img src="docs/screenshots/story-chat-1.png" width="32%" alt="Chat with Boru — turn 1" />
+  <img src="docs/screenshots/story-chat-2.png" width="32%" alt="Chat with Boru — turn 2" />
+  <img src="docs/screenshots/story-chat-3.png" width="32%" alt="Chat with Boru — turn 3" />
+</p>
+
+### 🎭 Talk to the characters themselves (pre-debate)
+
+Each character is queryable individually, grounded only in what *that* character would know.
+
+<p>
+  <img src="docs/screenshots/predebate-napoleon.png" width="49%" alt="Talk to Napoleon" />
+  <img src="docs/screenshots/predebate-boxer.png" width="49%" alt="Talk to Boxer" />
+</p>
+
+<details>
+<summary>More pre-debate chats — Benjamin, Jessie</summary>
+<p>
+  <img src="docs/screenshots/predebate-benjamin.png" width="49%" alt="Talk to Benjamin" />
+  <img src="docs/screenshots/predebate-jessie.png" width="49%" alt="Talk to Jessie" />
+</p>
+</details>
+
+### ⚡ The live debate
+
+Boru hosts. Characters argue. Ledger fills in real time. Graph updates per turn.
+
+<p align="center">
+  <img src="docs/screenshots/during-debate.png" width="820" alt="Live streaming debate" />
+</p>
+
+### 🌐 Interaction graph
+
+Force-directed. Arrows styled by speech act (response vs question). Drag any node to pin it. Click a node to spotlight its outgoing arrows.
+
+<p align="center">
+  <img src="docs/screenshots/graph.png" width="820" alt="Interaction graph" />
+</p>
+
+### 🔮 Oracle — talk to characters in the alternate world
+
+After the debate closes, the world persists. Any character will answer you from *inside* the reality the debate shaped. Per-character history is kept for the session — switch between characters and come back without losing context.
+
+<p>
+  <img src="docs/screenshots/oracle-snowball.png" width="32%" alt="Oracle — Snowball" />
+  <img src="docs/screenshots/oracle-boxer.png" width="32%" alt="Oracle — Boxer" />
+  <img src="docs/screenshots/oracle-benjamin.png" width="32%" alt="Oracle — Benjamin" />
+</p>
 
 ---
 
 ## ⚡ Quick start
 
-**Prerequisites:** Python 3.10+, Node 20+, and at least one LLM API key (free tiers work — Google Gemini, Cerebras, NVIDIA NIM, or Groq).
+> 🎯 **You need:** Python 3.10+ · Node 20+ · **one free API key** (under 5 minutes — see the [API keys section](#-api-keys--you-only-need-one))
 
-### 🐳 With Docker (simplest)
+### 🐳 Option A — Docker (easiest, ~3 minutes)
 
 ```bash
 git clone https://github.com/wadekarg/What-If-Sabha.git whatif-sabha
 cd whatif-sabha
 cp backend/.env.example backend/.env
-# edit backend/.env — paste at least one API key
+
+# Edit backend/.env and paste any ONE of the API keys (free tiers work).
+# Grab a free key at: https://aistudio.google.com/apikey  (fastest path)
+
 docker compose up
 ```
 
-Open <http://localhost:3000>.
+**Then open** 👉 **[http://localhost:3000](http://localhost:3000)**
 
-### 🛠 Local (no Docker)
+That's it. Upload a PDF, type a what-if, watch it debate.
 
-Backend:
+---
+
+### 🛠 Option B — Local (no Docker)
+
+You'll run two terminals — one for the backend, one for the frontend.
+
+**Terminal 1 — Backend:**
 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate       # on Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env   # then paste a key
+cp .env.example .env            # paste ONE API key into .env
 uvicorn app.main:app --port 8001 --reload
 ```
 
-Frontend (new terminal):
+**Terminal 2 — Frontend:**
 
 ```bash
 cd frontend
@@ -106,7 +193,34 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. The gear icon in the nav lets you paste/override the API key from the UI without touching `.env`.
+**Then open** 👉 **[http://localhost:3000](http://localhost:3000)**
+
+> 💡 **Hot tip:** If you don't want to touch `.env`, just start both servers and click the **⚙️ gear icon** in the top-right of the UI — you can paste API keys there and they'll push to the backend automatically.
+
+---
+
+## 🔑 API keys — you only need ONE
+
+<div align="center">
+
+### ✨ **The whole app runs on any single API key** ✨
+
+</div>
+
+Supported providers: **Gemini · Cerebras · Groq · NVIDIA NIM · Anthropic · OpenAI**. All of the first four have usable free tiers.
+
+Drop *any one* of these into `backend/.env` and the app works end-to-end:
+
+```bash
+GEMINI_API_KEY=...
+CEREBRAS_API_KEY=...
+GROQ_API_KEY=...
+NVIDIA_API_KEY=...
+ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...
+```
+
+Add **more than one** and the router splits roles by provider (Gemini for analysis, Cerebras for character turns, Groq for judge/narrator, etc.) and auto-fails over on rate-limit. With a single key the same key just does every role — slower on long debates but fully functional.
 
 ---
 
@@ -120,7 +234,8 @@ Boru is the interesting part. He's not just picking the next speaker by score �
 - 🌀 **Silent rotation** — if the cast is going quiet (40%+ haven't spoken, or three-plus have never spoken), Boru actively pulls silent characters in. The pull gets stronger the longer someone stays frozen out.
 - 🔀 **Pair-duel breaker** — after five exchanges dominated by the same two voices, a third voice is forced in to break the ping-pong.
 - 🪜 **Phase progression** — `opening → cross_examination → deepening → reckoning → closing`, driven by the ledger's state rather than raw round count.
-- 🎯 **Resolution round** — before the closing, Boru forces answers to the top still-open questions. Configurable count, tracked via `resolution_rounds_used`.
+- 🎯 **Resolution round** — before the closing, Boru forces answers to the top still-open questions.
+- 👻 **Ghost-speak for dead characters** — if your divergence says "kill Napoleon", Napoleon can still appear in the debate but speaks from the grave (past/conditional tense, foretells what the living will do) instead of giving active orders.
 - 🔇 **Anti-repetition** — Boru's last few openers are injected into his own prompt as a "don't start with these" list. Dispute subjects get diversified.
 - 🛑 **Hard stop after closing** — once the closing is delivered, no late stage directions slip through.
 
@@ -132,11 +247,47 @@ This whole layer is covered by tests in `backend/tests/` (~86 tests across sever
 
 Once the debate ends, a few things happen:
 
-- 📝 **Alternate-ending narrator** — synthesizes a prose ending using the full ledger, not just the transcript tail.
-- 🔮 **Oracle Q&A** — after the debate closes, you can keep asking any character from the alternate timeline questions; they answer in-character, grounded in what was argued.
-- 🌐 **Live interaction graph** — force-directed, updating per turn. Arrows styled by speech act (question vs. response vs. statement), thanks to a small classifier that labels each turn.
-- 📄 **PDF export** — `frontend/app/lib/exportDebate.ts` builds a bound PDF with title page, cast strip, a synthetic graph, full transcript, and the alternate ending. (jsPDF + html2canvas.) Good for sharing a single debate without needing a server.
-- 🌍 **Static replay site** — `replay/` is a Next.js static export. Run `replay/scripts/export_debate.py --latest` to pull a finished debate from SQLite into a JSON bundle, then `npm run build` in `replay/` gives you `replay/out/` — drop-in deploy to Cloudflare Pages (`wrangler.toml` already there). See [`replay/README.md`](replay/README.md).
+- 📝 **Summary narrator** — synthesizes a prose summary using the full ledger, not just the transcript tail.
+- 🔮 **Oracle Q&A** — keep asking any character from the alternate timeline questions; they answer in-character, grounded in what was argued. Per-character history persists for the session.
+- 🌐 **Live interaction graph** — force-directed, updating per turn. Arrows styled by speech act (question vs response vs statement).
+- 📋 **Boru's notes timeline** — his progress notes from every round, kept as a history you can scroll through.
+- 📄 **PDF export** — builds a bound PDF with: title page, the real D3 graph (not a synthetic stand-in), cast strip, full transcript, ledger page with notes + open questions + claims, positions page, and the summary.
+- 🌍 **Static replay site** — the `replay/` subproject is a Next.js static export. Deploy to Cloudflare Pages for a zero-backend shareable replay.
+
+---
+
+## 🛠️ Config reference
+
+Everything lives in `backend/.env` (see `backend/.env.example`). You only need **one** of the API keys; multiple enables failover.
+
+### 🔑 API keys
+
+| Variable | Purpose |
+|---|---|
+| `GEMINI_API_KEY` | 🌟 Google Gemini — good all-rounder, best free tier |
+| `CEREBRAS_API_KEY` | 🧠 Cerebras — ultra-fast character turns |
+| `GROQ_API_KEY` | 🚀 Groq — fast judge/narrator |
+| `NVIDIA_API_KEY` | 🎯 NVIDIA NIM — broad model selection |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | 💳 Optional paid fallbacks |
+
+### ⚙️ App settings (all optional — defaults work)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_URL` | `sqlite+aiosqlite:///./whatif_sabha.db` | Persistence |
+| `UPLOAD_DIR` | `./uploads` | PDFs + generated portraits |
+| `MAX_UPLOAD_SIZE_MB` | `50` | Upload cap |
+| `ALLOWED_ORIGINS` | `localhost:3000, localhost:3001` | CORS |
+| `ANALYSIS_MODEL` / `CHARACTER_AGENT_MODEL` / `JUDGE_MODEL` / `NARRATOR_MODEL` | *(set in .env.example)* | Per-role model IDs |
+| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | — | Enables Graphiti character memory |
+| `ENABLE_LIGHTRAG` | off | Narrative causal graph at upload (~60s) |
+| `REDIS_URL` | — | Optional caching layer |
+
+### Frontend
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8001` | Backend URL |
 
 ---
 
@@ -150,10 +301,12 @@ Once the debate ends, a few things happen:
 
 **Subprojects:**
 
-- `backend/` — FastAPI app, debate engine, agents, routes, persistence
-- `frontend/` — Next.js app: upload, story pages, live debate, graph, PDF export
-- `replay/` — separate Next.js static export for hosted replays
-- `demo/` — standalone HTML demo page
+| Folder | What it is |
+|---|---|
+| `backend/` | FastAPI app, debate engine, agents, routes, persistence |
+| `frontend/` | Next.js app — upload, story pages, live debate, graph, PDF export |
+| `replay/` | Separate Next.js static export for hosted replays (Cloudflare Pages) |
+| `demo/` | Standalone HTML demo page |
 
 ---
 
@@ -164,7 +317,7 @@ cd backend
 source venv/bin/activate
 pytest tests/ -v
 
-# replay-site tests
+# Replay-site tests
 cd ../replay && npm test
 ../backend/venv/bin/pytest scripts/test_export_debate.py
 ```
@@ -173,44 +326,73 @@ The backend suite covers the moderator/picker logic — re-entry triggers, dispu
 
 ---
 
-## 🛠️ Config reference
-
-Everything lives in `backend/.env` (see `backend/.env.example`). You only need **one** of the API keys; multiple enables failover.
-
-| Variable | Purpose |
-|---|---|
-| `GEMINI_API_KEY` | Google Gemini — good for analysis / extraction |
-| `CEREBRAS_API_KEY` | Cerebras — ultra-fast character turns |
-| `NVIDIA_API_KEY` | NVIDIA NIM — broad free-tier model selection |
-| `GROQ_API_KEY` | Groq — fast judge/narrator |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Optional paid fallbacks |
-| `DATABASE_URL` | Default `sqlite+aiosqlite:///./whatif_sabha.db` |
-| `UPLOAD_DIR` | Where PDFs + portraits are stored. Default `./uploads` |
-| `MAX_UPLOAD_SIZE_MB` | Default 50 |
-| `ALLOWED_ORIGINS` | CORS list, comma-separated |
-| `ANALYSIS_MODEL` / `CHARACTER_AGENT_MODEL` / `JUDGE_MODEL` / `NARRATOR_MODEL` | Per-role model IDs. Sane defaults in `.env.example` |
-| `NVIDIA_JUDGE_MODEL` / `NVIDIA_NARRATOR_MODEL` | NVIDIA-provider overrides |
-| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | Optional — enables Graphiti-backed character memory |
-| `ENABLE_LIGHTRAG` | Optional — builds a narrative causal graph at upload (~60s) |
-| `REDIS_URL` | Optional caching layer |
-
-**Frontend:**
-
-| Variable | Purpose |
-|---|---|
-| `NEXT_PUBLIC_API_URL` | Backend URL. Default `http://localhost:8001` |
-
----
-
 ## 📥 What I've tested it on
 
 | Story | Cast | Example divergences |
 |---|---|---|
-| *Animal Farm* | Napoleon, Snowball, Boxer, Squealer, Clover, Benjamin, Mr. Jones | *"What if Snowball returned?"* · *"What if the pigs stayed honest?"* |
-| *Hamlet* | Hamlet, Claudius, Gertrude, Ophelia, Horatio | *"What if Hamlet acted on the ghost immediately?"* |
-| Any PDF you upload | Auto-extracted | You write the divergence. |
+| 🐷 *Animal Farm* | Napoleon, Snowball, Boxer, Squealer, Clover, Benjamin, Mr. Jones | *"What if Snowball returned?"* · *"What if the pigs stayed honest?"* |
+| 🗡 *Hamlet* | Hamlet, Claudius, Gertrude, Ophelia, Horatio | *"What if Hamlet acted on the ghost immediately?"* |
+| 📚 **Any PDF** | Auto-extracted | You write the divergence. |
 
 The multi-pass character extractor handles longer PDFs by chunking, so you can try your own books — just be mindful of the copyright note below.
+
+---
+
+## 🆘 Troubleshooting
+
+<details>
+<summary><b>The debate seems stuck or isn't streaming</b></summary>
+
+1. Check that the **backend is running** on `localhost:8001`. Open [http://localhost:8001/health](http://localhost:8001/health) — you should see `{"status":"ok"}`.
+2. Check the **browser console** for SSE/EventSource errors — usually a CORS or network issue.
+3. If you're on a corporate/VPN network, SSE connections can hang. Try a different network.
+</details>
+
+<details>
+<summary><b>"Rate limit" errors mid-debate</b></summary>
+
+- You're hitting the free-tier minute cap of your provider. Two options:
+  - Add a second API key from another provider to `.env` — the router will auto-failover.
+  - Wait a minute and retry the debate.
+</details>
+
+<details>
+<summary><b>The character cast extraction is missing someone</b></summary>
+
+- The analyzer uses a multi-pass chunking strategy. Very long books with many minor characters can drop the long tail.
+- You can also edit `backend/whatif_sabha.db` directly or re-upload a smaller PDF covering a specific section.
+</details>
+
+<details>
+<summary><b>PDF export looks blank or ugly</b></summary>
+
+- The exporter captures the live SVG graph — make sure the Graph tab is visible when you click Export.
+- If you see "html2canvas failed" in the console, it's likely a CORS issue with a portrait image URL.
+</details>
+
+<details>
+<summary><b>Reset everything</b></summary>
+
+```bash
+cd backend
+rm whatif_sabha.db
+rm -rf chroma_db uploads
+```
+
+Nukes the database, the per-character embeddings, and any uploaded PDFs. Start fresh.
+</details>
+
+<details>
+<summary><b>Frontend dev server is unresponsive / hung</b></summary>
+
+Turbopack sometimes gets into a bad state. Fix:
+
+```bash
+cd frontend
+rm -rf .next
+npm run dev
+```
+</details>
 
 ---
 
@@ -218,18 +400,17 @@ The multi-pass character extractor handles longer PDFs by chunking, so you can t
 
 Keeping this honest — it's a side project, not a product.
 
-- **Narrator prose quality is uneven.** The alternate-ending narrator sometimes produces analytical summary instead of scene-writing. Prompt rewrite is in progress.
 - **Not every story has been tested end-to-end.** Tuning has focused on short works like *Animal Farm* and *Hamlet*. Longer books may surface rough edges in extraction or pacing.
 - **No authentication.** Single-user prototype — don't put it on the public internet as-is.
-- **SQLite + ChromaDB on disk.** No multi-tenancy. Resetting state means clearing `backend/whatif_sabha.db`, `backend/chroma_db/`, and `backend/uploads/`.
-- **AI-synthetic default fixtures.** The packaged test assets are AI-generated stand-ins, not scans of copyrighted editions. Bring your own PDFs for real runs.
-- **Rate limits on free tiers.** Depending on which provider you're using, a long debate can bump into per-minute limits. The router falls back to other configured providers automatically, but if only one key is set you may see slowdowns.
+- **SQLite + ChromaDB on disk.** No multi-tenancy. Resetting means clearing `backend/whatif_sabha.db`, `backend/chroma_db/`, and `backend/uploads/`.
+- **AI-synthetic default fixtures.** Bring your own PDFs for real runs.
+- **Rate limits on free tiers.** Depending on which provider you're using, a long debate can bump into per-minute limits. The router falls back to other configured providers automatically, but with only one key configured you may see slowdowns.
 
 ---
 
 ## ⚖️ On the content
 
-Everything a debate produces is AI-generated. The characters you see arguing are language models role-playing based on the PDF you upload — nothing they say appears in the source book, and none of it should be quoted as the author's words.
+Everything a debate produces is **AI-generated**. The characters you see arguing are language models role-playing based on the PDF you upload — nothing they say appears in the source book, and none of it should be quoted as the author's words.
 
 The demo debates in this repo were tested on George Orwell's **Animal Farm**, which entered the public domain in 2021 (US / UK / most EU jurisdictions after Orwell's life + 70 years). If you want to try the app on a book, please stick to works that are public domain or that you have permission to use. WhatIfSabha doesn't ship with any book — you upload your own PDF.
 
@@ -241,8 +422,17 @@ If you believe this project uses something it shouldn't, open an issue and I'll 
 
 I work on this in spare time, between other things. It started as a small curiosity — what if the characters themselves could argue about an alternate ending? — and it's grown in the directions I've been curious about on whatever given weekend. That means some parts are very polished (the moderator, the dispute ledger, the test suite around them) and some parts are rough (narrator prose, UI polish in places, docs). Issues and ideas are very welcome. If something breaks, drop the story, divergence, and provider combo in the issue — that's usually enough to reproduce.
 
+If you try it with a book you love and something surprising happens, I'd genuinely love to hear about it.
+
 ---
 
-## License
+<div align="center">
 
-MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Gajanan Wadekar.
+### 🌟 If you've read this far — thanks. Try it with a book you can't let go of.
+
+[![Live demo](https://img.shields.io/badge/🎬_Live_demo-what--if--sabha.pages.dev-4CAF50?style=for-the-badge)](https://what-if-sabha.pages.dev)
+[![GitHub](https://img.shields.io/badge/⭐_Star_on-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/wadekarg/What-If-Sabha)
+
+**MIT License** — see [LICENSE](LICENSE). Copyright (c) 2026 Gajanan Wadekar.
+
+</div>
