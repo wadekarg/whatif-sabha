@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
+  <!-- Rounded-square badge matching the WhatIfSabha navbar logo -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d88a30"/>
+      <stop offset="100%" stop-color="#c07820"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="160" height="160" rx="32" ry="32" fill="url(#bg)"/>
+  <!-- Dharma chakra — 8-spoke wheel in cream -->
+  <g transform="translate(80,80)" stroke="#fef9c3" stroke-width="6" stroke-linecap="round" fill="none">
+    <!-- outer ring -->
+    <circle r="50" stroke-width="7"/>
+    <!-- hub -->
+    <circle r="10" fill="#fef9c3" stroke="none"/>
+    <!-- 8 spokes -->
+    <line x1="0" y1="-46" x2="0" y2="-14"/>
+    <line x1="0" y1="14" x2="0" y2="46"/>
+    <line x1="-46" y1="0" x2="-14" y2="0"/>
+    <line x1="14" y1="0" x2="46" y2="0"/>
+    <line x1="-32.5" y1="-32.5" x2="-10" y2="-10"/>
+    <line x1="10" y1="10" x2="32.5" y2="32.5"/>
+    <line x1="32.5" y1="-32.5" x2="10" y2="-10"/>
+    <line x1="-10" y1="10" x2="-32.5" y2="32.5"/>
+  </g>
+</svg>

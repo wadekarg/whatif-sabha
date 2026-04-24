@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🌟 WhatIfSabha
+<img src="docs/logo.svg" width="120" alt="WhatIfSabha logo" />
+
+# WhatIfSabha
 
 ### *Upload a book. Change one thing. Watch the characters argue about it.*
 
