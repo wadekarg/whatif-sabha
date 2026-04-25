@@ -162,6 +162,66 @@ export default function DebateViewPage() {
   const [, setFocusedNodeId] = useState<string | null>(null);
 
   const [chatMessages, setChatMessages] = useState<{role:"user"|"assistant";content:string}[]>([]);
+
+  // ── TTS audio (pre-rendered MP3 files in /audio/<debate-id>/turn-<idx>.mp3) ──
+  const [audioIdx,     setAudioIdx]     = useState<number | null>(null);
+  const [audioAutoPlay, setAudioAutoPlay] = useState(false);
+  const audioRef        = useRef<HTMLAudioElement | null>(null);
+  const audioAutoPlayRef = useRef(false);
+  useEffect(() => { audioAutoPlayRef.current = audioAutoPlay; }, [audioAutoPlay]);
+
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setAudioIdx(null);
+  };
+
+  const playTurnAudio = (idx: number, transcriptArr: any[]) => {
+    stopAudio();
+    const id = bundledDebate?.debate_id;
+    if (!id) return;
+    const url = `/audio/${id}/turn-${idx}.mp3`;
+    const a = new Audio(url);
+    audioRef.current = a;
+    setAudioIdx(idx);
+    a.onended = () => {
+      audioRef.current = null;
+      setAudioIdx(null);
+      // Auto-play next non-skipped turn if enabled
+      if (!audioAutoPlayRef.current) return;
+      for (let next = idx + 1; next < transcriptArr.length; next++) {
+        const t = transcriptArr[next];
+        if (t?.isReaction || t?.isStageDirection) continue;
+        if (!t?.message) continue;
+        playTurnAudio(next, transcriptArr);
+        return;
+      }
+    };
+    a.onerror = () => {
+      audioRef.current = null;
+      setAudioIdx(null);
+    };
+    a.play().catch(() => {
+      audioRef.current = null;
+      setAudioIdx(null);
+    });
+  };
+
+  const playSummaryAudio = () => {
+    stopAudio();
+    const id = bundledDebate?.debate_id;
+    if (!id) return;
+    const a = new Audio(`/audio/${id}/summary.mp3`);
+    audioRef.current = a;
+    setAudioIdx(-1);
+    a.onended = () => { audioRef.current = null; setAudioIdx(null); };
+    a.onerror = () => { audioRef.current = null; setAudioIdx(null); };
+    a.play().catch(() => { audioRef.current = null; setAudioIdx(null); });
+  };
   const [chatInput, setChatInput]       = useState("");
   const [chatLoading, setChatLoading]   = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -818,6 +878,23 @@ export default function DebateViewPage() {
           )}
           <div className="flex items-center gap-2 shrink-0">
             <button
+              type="button"
+              onClick={() => {
+                const next = !audioAutoPlay;
+                setAudioAutoPlay(next);
+                audioAutoPlayRef.current = next;
+                if (!next) stopAudio();
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors print:hidden ${
+                audioAutoPlay
+                  ? "bg-[#1c1410] text-white border-[#1c1410]"
+                  : "bg-[#f7f3ed] text-[#6b5c4e] border-[#e8e0d5] hover:bg-white"
+              }`}
+              title={audioAutoPlay ? "Auto-play on" : "Auto-play off"}
+            >
+              {audioAutoPlay ? "🔊 Auto-play on" : "🔇 Auto-play off"}
+            </button>
+            <button
               onClick={handleExport}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#1c1410] text-xs font-medium border border-[#f0c060]/60 hover:bg-[#fde9c9] transition-colors print:hidden"
               aria-label="Export debate as PDF"
@@ -949,6 +1026,14 @@ export default function DebateViewPage() {
                             <span className="text-xs text-[#a09282]">{em.label}</span>
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => audioIdx === i ? stopAudio() : playTurnAudio(i, transcript)}
+                          aria-label={audioIdx === i ? "Stop" : "Play turn"}
+                          title={audioIdx === i ? "Stop" : "Play"}
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] transition-colors ${audioIdx === i ? "bg-[#1c1410] text-white" : "text-[#a09282] hover:text-[#1c1410] hover:bg-[#f0ebe4]"}`}>
+                          {audioIdx === i ? "■" : "▶"}
+                        </button>
                       </div>
                       {/* Reply quote preview */}
                       {quoteSnippet && (
