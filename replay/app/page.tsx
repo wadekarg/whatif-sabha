@@ -202,6 +202,27 @@ export default function StoryPage() {
           </Link>
         </div>
 
+        {/* ── Footer (matches live app) ── */}
+        <footer className="bg-[#faf7f2] border-t border-[#e8e0d5] py-3 px-6 mt-auto">
+          <div className="text-center text-[11px] italic text-[#c8b89a] mb-2">
+            What if things had gone differently?
+          </div>
+          <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs text-[#a09282]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded-md bg-[#c07820] flex items-center justify-center" style={{ fontSize: "14px", lineHeight: 1, color: "#fef9c3" }}>☸</span>
+              <span className="font-semibold text-[#1c1410]">WhatIf<span className="text-[#c07820]">Sabha</span></span>
+            </span>
+            <span className="text-[#e8e0d5]">·</span>
+            <a href="https://github.com/wadekarg/whatif-sabha" target="_blank" rel="noopener noreferrer" className="hover:text-[#c07820] transition-colors">GitHub</a>
+            <span className="text-[#e8e0d5]">·</span>
+            <a href="https://github.com/wadekarg" target="_blank" rel="noopener noreferrer" className="hover:text-[#c07820] transition-colors">@wadekarg</a>
+            <span className="text-[#e8e0d5]">·</span>
+            <a href="https://www.linkedin.com/in/gajananwadekar/" target="_blank" rel="noopener noreferrer" className="hover:text-[#c07820] transition-colors">LinkedIn</a>
+            <span className="text-[#e8e0d5]">·</span>
+            <span>MIT</span>
+          </div>
+        </footer>
+
       </div>
 
       {/* ── Right: tabbed Q&A panel ── */}
