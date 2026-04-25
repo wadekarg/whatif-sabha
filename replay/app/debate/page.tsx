@@ -211,6 +211,13 @@ export default function DebateViewPage() {
     });
   };
 
+  // Start playing from this turn AND turn auto-play on (matches the live ▶▶ behaviour)
+  const playFromHere = (idx: number, transcriptArr: any[]) => {
+    setAudioAutoPlay(true);
+    audioAutoPlayRef.current = true;
+    playTurnAudio(idx, transcriptArr);
+  };
+
   const playSummaryAudio = () => {
     stopAudio();
     const id = bundledDebate?.debate_id;
@@ -877,6 +884,16 @@ export default function DebateViewPage() {
             </div>
           )}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Speaking-now indicator (matches live page status row) */}
+            {audioIdx !== null && audioIdx >= 0 && transcript[audioIdx] && (
+              <span className="hidden sm:flex items-center gap-1.5 text-xs">
+                <span className="w-2 h-2 rounded-full bg-[#c07820] animate-pulse shrink-0" />
+                <span className="font-semibold truncate" style={{ color: colorOf(transcript[audioIdx].character, chars).hex }}>
+                  {transcript[audioIdx].character}
+                </span>
+                <span className="text-[#a09282] shrink-0">speaking 🔊</span>
+              </span>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -885,14 +902,14 @@ export default function DebateViewPage() {
                 audioAutoPlayRef.current = next;
                 if (!next) stopAudio();
               }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors print:hidden ${
+              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors shrink-0 ${
                 audioAutoPlay
-                  ? "bg-[#1c1410] text-white border-[#1c1410]"
-                  : "bg-[#f7f3ed] text-[#6b5c4e] border-[#e8e0d5] hover:bg-white"
+                  ? "bg-[#c07820] text-white border-[#c07820]"
+                  : "text-[#6b5c4e] border-[#e8e0d5] hover:border-[#c07820] hover:text-[#c07820]"
               }`}
-              title={audioAutoPlay ? "Auto-play on" : "Auto-play off"}
+              title={audioAutoPlay ? "Mute" : "Auto-play"}
             >
-              {audioAutoPlay ? "🔊 Auto-play on" : "🔇 Auto-play off"}
+              {audioAutoPlay ? "🔊 Auto-Play On" : "🔇 Auto-Play Off"}
             </button>
             <button
               onClick={handleExport}
@@ -1026,14 +1043,29 @@ export default function DebateViewPage() {
                             <span className="text-xs text-[#a09282]">{em.label}</span>
                           </span>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => audioIdx === i ? stopAudio() : playTurnAudio(i, transcript)}
-                          aria-label={audioIdx === i ? "Stop" : "Play turn"}
-                          title={audioIdx === i ? "Stop" : "Play"}
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] transition-colors ${audioIdx === i ? "bg-[#1c1410] text-white" : "text-[#a09282] hover:text-[#1c1410] hover:bg-[#f0ebe4]"}`}>
-                          {audioIdx === i ? "■" : "▶"}
-                        </button>
+                        {/* TTS buttons — top right (matches live page) */}
+                        <div className="ml-auto flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => audioIdx === i ? stopAudio() : playTurnAudio(i, transcript)}
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${
+                              audioIdx === i
+                                ? "bg-[#c07820] text-white shadow-sm"
+                                : "bg-transparent text-[#c8b89a] hover:bg-[#f0ebe4] hover:text-[#c07820]"
+                            }`}
+                            title={audioIdx === i ? "Stop" : "Play this message"}
+                          >
+                            {audioIdx === i ? "■" : "▶"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => playFromHere(i, transcript)}
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-transparent text-[#c8b89a] hover:bg-[#f0ebe4] hover:text-[#c07820] transition-all"
+                            title="Play from here"
+                          >
+                            ▶▶
+                          </button>
+                        </div>
                       </div>
                       {/* Reply quote preview */}
                       {quoteSnippet && (
