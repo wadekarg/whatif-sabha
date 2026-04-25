@@ -1,0 +1,27 @@
+{
+  "slug": "animal-farm",
+  "title": "Animal Farm",
+  "author": "George Orwell",
+  "tagline": "A bundled demo of WhatIfSabha running on Animal Farm.",
+  "demo_divergence": "What if Boxer killed those dogs when they were trying to chase Snowball away?",
+  "synopsis": "The animals of Manor Farm, led by the pigs, overthrow their drunken owner and try to build a self-governing society. In the years that follow, the pigs consolidate power, the idealists are driven out, and the revolution's slogans are rewritten until the new masters are indistinguishable from the old.",
+  "timeline": [
+    { "era": "Old Major's speech", "event": "The prize boar rallies the animals against human rule. Three nights later he dies." },
+    { "era": "The Rebellion", "event": "The animals drive Mr Jones off the farm and raise the green flag." },
+    { "era": "Early years", "event": "Snowball and Napoleon share leadership. The Seven Commandments are painted on the barn wall." },
+    { "era": "Snowball's expulsion", "event": "Napoleon's dogs chase Snowball off the farm. Napoleon takes sole power." },
+    { "era": "The windmill years", "event": "Boxer works himself to death. The windmill is built and destroyed twice." },
+    { "era": "The end", "event": "The pigs walk on two legs. The final commandment reads: 'All animals are equal, but some are more equal than others.'" }
+  ],
+  "cast": [
+    { "slug": "boru",     "name": "Boru",      "role": "moderator" },
+    { "slug": "napoleon", "name": "Napoleon",  "role": "antagonist" },
+    { "slug": "snowball", "name": "Snowball",  "role": "co-protagonist" },
+    { "slug": "boxer",    "name": "Boxer",     "role": "protagonist" },
+    { "slug": "squealer", "name": "Squealer",  "role": "supporting" },
+    { "slug": "clover",   "name": "Clover",    "role": "supporting" },
+    { "slug": "benjamin", "name": "Benjamin",  "role": "supporting" },
+    { "slug": "mr-jones", "name": "Mr. Jones", "role": "minor" }
+  ],
+  "qa": []
+}
