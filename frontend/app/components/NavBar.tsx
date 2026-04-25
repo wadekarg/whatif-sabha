@@ -11,12 +11,20 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [groq, setGroq] = useState("");
   const [cerebras, setCerebras] = useState("");
   const [nvidia, setNvidia] = useState("");
+  // Bring-your-own-provider — any OpenAI-compatible endpoint, anywhere
+  const [customBaseUrl, setCustomBaseUrl] = useState("");
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [customModel, setCustomModel] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [showMore, setShowMore] = useState(false);
   const [envStatus, setEnvStatus] = useState<{
-    anthropic:boolean;openai:boolean;gemini:boolean;groq:boolean;cerebras:boolean;nvidia:boolean
+    anthropic:boolean;openai:boolean;gemini:boolean;groq:boolean;cerebras:boolean;nvidia:boolean;
+    custom?:boolean; custom_base_url?:string|null; custom_model?:string|null;
   } | null>(null);
 
   useEffect(() => {
@@ -26,8 +34,36 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     setGroq(localStorage.getItem("wis_groq_key") || "");
     setCerebras(localStorage.getItem("wis_cerebras_key") || "");
     setNvidia(localStorage.getItem("wis_nvidia_key") || "");
+    setCustomBaseUrl(localStorage.getItem("wis_custom_base_url") || "");
+    setCustomApiKey(localStorage.getItem("wis_custom_api_key") || "");
+    setCustomModel(localStorage.getItem("wis_custom_model") || "");
     fetch(`${API}/settings/keys/status`).then(r => r.json()).then(setEnvStatus).catch(() => {});
   }, []);
+
+  // Auto-expand the custom panel if a custom provider is already configured
+  useEffect(() => {
+    if (envStatus?.custom) setShowCustom(true);
+  }, [envStatus]);
+
+  async function testCustomProvider() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const url = customBaseUrl.replace(/\/$/, "") + "/models";
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${customApiKey}` } });
+      if (r.ok) {
+        const data = await r.json().catch(() => null);
+        const count = Array.isArray(data?.data) ? data.data.length : null;
+        setTestResult({ ok: true, msg: count != null ? `Connected · ${count} models available` : "Connected" });
+      } else {
+        setTestResult({ ok: false, msg: `HTTP ${r.status} from ${url}` });
+      }
+    } catch (e: any) {
+      setTestResult({ ok: false, msg: `Cannot reach: ${e?.message || e}` });
+    } finally {
+      setTesting(false);
+    }
+  }
 
   // Auto-expand "More providers" if any of those keys are already set
   useEffect(() => {
@@ -46,17 +82,23 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({
           anthropic_key: anthropic, openai_key: openai,
           gemini_key: gemini, groq_key: groq, cerebras_key: cerebras, nvidia_key: nvidia,
+          custom_llm_base_url: customBaseUrl,
+          custom_llm_api_key:  customApiKey,
+          custom_llm_model:    customModel,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
       // Persist to localStorage
-      const pairs: [string, string, (v: string) => void][] = [
-        ["wis_anthropic_key", anthropic, setAnthropic],
-        ["wis_openai_key", openai, setOpenai],
-        ["wis_gemini_key", gemini, setGemini],
-        ["wis_groq_key", groq, setGroq],
-        ["wis_cerebras_key", cerebras, setCerebras],
-        ["wis_nvidia_key", nvidia, setNvidia],
+      const pairs: [string, string][] = [
+        ["wis_anthropic_key",    anthropic],
+        ["wis_openai_key",       openai],
+        ["wis_gemini_key",       gemini],
+        ["wis_groq_key",         groq],
+        ["wis_cerebras_key",     cerebras],
+        ["wis_nvidia_key",       nvidia],
+        ["wis_custom_base_url",  customBaseUrl],
+        ["wis_custom_api_key",   customApiKey],
+        ["wis_custom_model",     customModel],
       ];
       for (const [key, val] of pairs) {
         if (val) localStorage.setItem(key, val); else localStorage.removeItem(key);
@@ -190,6 +232,76 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
+          {/* Bring your own provider — any OpenAI-compatible endpoint */}
+          <div>
+            <button
+              onClick={() => setShowCustom(!showCustom)}
+              className="text-xs text-[#6b5c4e] hover:text-[#1c1410] flex items-center gap-1.5 transition-colors"
+            >
+              <span className="text-[10px]">{showCustom ? "▾" : "▸"}</span>
+              <span className="font-medium">Bring your own provider</span>
+              {envStatus?.custom && <span className="text-xs text-emerald-600">● active</span>}
+              <span className="text-[10px] text-[#a09282] italic ml-1">(any OpenAI-compatible API)</span>
+            </button>
+            {showCustom && (
+              <div className="mt-3 space-y-3 rounded-xl border border-[#e8e0d5] bg-white p-4">
+                <p className="text-xs text-[#6b5c4e] leading-relaxed">
+                  Works with any provider that exposes OpenAI dialect: DeepSeek, Qwen, Kimi, Zhipu,
+                  OpenRouter, Together, Fireworks, Perplexity, Ollama / LM Studio (local), Azure OpenAI, …
+                </p>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#1c1410]">Base URL</label>
+                  <input
+                    type="text"
+                    value={customBaseUrl}
+                    onChange={e => setCustomBaseUrl(e.target.value)}
+                    placeholder="https://api.deepseek.com/v1"
+                    className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#e8e0d5] bg-white focus:outline-none focus:border-[#c07820] font-mono placeholder:font-sans placeholder:text-[#b8a898] transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#1c1410]">API key</label>
+                  <input
+                    type="password"
+                    value={customApiKey}
+                    onChange={e => setCustomApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#e8e0d5] bg-white focus:outline-none focus:border-[#c07820] font-mono placeholder:font-sans placeholder:text-[#b8a898] transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#1c1410]">Model id</label>
+                  <input
+                    type="text"
+                    value={customModel}
+                    onChange={e => setCustomModel(e.target.value)}
+                    placeholder="deepseek-chat"
+                    className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#e8e0d5] bg-white focus:outline-none focus:border-[#c07820] font-mono placeholder:font-sans placeholder:text-[#b8a898] transition-colors"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={testCustomProvider}
+                    disabled={!customBaseUrl || !customApiKey || testing}
+                    className="text-xs px-3 py-1.5 rounded-full border border-[#e8e0d5] text-[#6b5c4e] hover:bg-[#f7f3ed] hover:border-[#c8b89a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {testing ? "Testing…" : "Test connection"}
+                  </button>
+                  {testResult && (
+                    <span className={`text-xs ${testResult.ok ? "text-emerald-700" : "text-red-600"}`}>
+                      {testResult.ok ? "✓" : "✕"} {testResult.msg}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="rounded-xl bg-[#fef9f0] border border-[#f0c060]/40 px-4 py-3">
             <p className="text-xs text-[#6b5c4e] leading-relaxed">
               <span className="font-semibold text-[#c07820]">Single-key mode:</span>{" "}
@@ -235,23 +347,31 @@ export default function NavBar() {
     const groq = localStorage.getItem("wis_groq_key");
     const cerebras = localStorage.getItem("wis_cerebras_key");
     const nvidia = localStorage.getItem("wis_nvidia_key");
+    const customBase  = localStorage.getItem("wis_custom_base_url");
+    const customKey   = localStorage.getItem("wis_custom_api_key");
+    const customModel = localStorage.getItem("wis_custom_model");
 
     const pushAndCheck = async () => {
-      if (anthropic || openai || gemini || groq || cerebras || nvidia) {
+      const haveAny = anthropic || openai || gemini || groq || cerebras || nvidia
+        || (customBase && customKey && customModel);
+      if (haveAny) {
         await fetch(`${API}/settings/keys`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             anthropic_key: anthropic, openai_key: openai,
             gemini_key: gemini, groq_key: groq, cerebras_key: cerebras, nvidia_key: nvidia,
+            custom_llm_base_url: customBase,
+            custom_llm_api_key:  customKey,
+            custom_llm_model:    customModel,
           }),
         }).catch(() => {});
       }
       const status = await fetch(`${API}/settings/keys/status`).then(r => r.json()).catch(() => null);
       if (status) {
-        // Any single key is enough
+        // Any single configured provider is enough
         setKeysConfigured(
-          status.anthropic || status.openai || status.gemini || status.groq || status.cerebras || status.nvidia
+          status.anthropic || status.openai || status.gemini || status.groq || status.cerebras || status.nvidia || status.custom
         );
       }
     };

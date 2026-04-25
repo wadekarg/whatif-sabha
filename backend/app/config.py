@@ -16,6 +16,9 @@ def update_runtime_keys(
     nvidia_key: str = None,
     anthropic_key: str = None,
     openai_key: str = None,
+    custom_llm_base_url: str = None,
+    custom_llm_api_key: str = None,
+    custom_llm_model: str = None,
 ):
     if gemini_key:
         _runtime_keys["GEMINI_API_KEY"] = gemini_key
@@ -29,6 +32,12 @@ def update_runtime_keys(
         _runtime_keys["ANTHROPIC_API_KEY"] = anthropic_key
     if openai_key:
         _runtime_keys["OPENAI_API_KEY"] = openai_key
+    if custom_llm_base_url:
+        _runtime_keys["CUSTOM_LLM_BASE_URL"] = custom_llm_base_url
+    if custom_llm_api_key:
+        _runtime_keys["CUSTOM_LLM_API_KEY"] = custom_llm_api_key
+    if custom_llm_model:
+        _runtime_keys["CUSTOM_LLM_MODEL"] = custom_llm_model
 
 
 def get_runtime_keys() -> dict:
@@ -42,6 +51,12 @@ class Settings(BaseSettings):
     NVIDIA_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    # Bring-your-own-provider — any OpenAI-compatible endpoint in the world
+    # (DeepSeek, Qwen, Kimi, Zhipu, OpenRouter, Together, Fireworks, Perplexity,
+    # Ollama, LM Studio, vLLM, Azure OpenAI, ...).
+    CUSTOM_LLM_BASE_URL: Optional[str] = None
+    CUSTOM_LLM_API_KEY: Optional[str] = None
+    CUSTOM_LLM_MODEL: Optional[str] = None
     GITHUB_MODELS_TOKEN: Optional[str] = None
     CLOUDFLARE_ACCOUNT_ID: Optional[str] = None
     CLOUDFLARE_API_TOKEN: Optional[str] = None
@@ -165,6 +180,29 @@ def _make_openai_llm(model: str, temperature: float = 0.7, max_tokens: int = 102
     )
 
 
+def _make_custom_llm(temperature: float = 0.7, max_tokens: int = 1024, model: str = None):
+    """Bring-your-own OpenAI-compatible provider.
+
+    Works with anything that exposes /chat/completions in OpenAI dialect:
+    DeepSeek, Qwen (Dashscope), Kimi (Moonshot), Zhipu GLM, OpenRouter,
+    Together, Fireworks, Perplexity, Ollama, LM Studio, vLLM, Azure OpenAI, etc.
+    Configured via CUSTOM_LLM_BASE_URL + CUSTOM_LLM_API_KEY + CUSTOM_LLM_MODEL.
+    """
+    from langchain_openai import ChatOpenAI
+    base_url = _key("CUSTOM_LLM_BASE_URL")
+    api_key  = _key("CUSTOM_LLM_API_KEY")
+    chosen_model = model or _key("CUSTOM_LLM_MODEL")
+    if not base_url or not api_key or not chosen_model:
+        return None
+    return ChatOpenAI(
+        model=chosen_model,
+        api_key=api_key,
+        base_url=base_url,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
 # ── Provider detection for single-key mode ──
 
 # Role-based model selection per provider
@@ -189,18 +227,27 @@ PROVIDER_ROLE_MODELS: dict[tuple[str, str], str] = {
 
 # Map provider name → factory function + key name
 _PROVIDER_FACTORIES = {
-    "anthropic": ("ANTHROPIC_API_KEY", _make_anthropic_llm),
-    "openai":    ("OPENAI_API_KEY",    _make_openai_llm),
-    "gemini":    ("GEMINI_API_KEY",    None),  # Gemini uses its own ChatGoogleGenerativeAI
-    "groq":      ("GROQ_API_KEY",      _make_groq_llm),
-    "cerebras":  ("CEREBRAS_API_KEY",  None),  # Cerebras uses its own ChatCerebras
-    "nvidia":    ("NVIDIA_API_KEY",    _make_nvidia_llm),
+    "anthropic": ("ANTHROPIC_API_KEY",     _make_anthropic_llm),
+    "openai":    ("OPENAI_API_KEY",        _make_openai_llm),
+    "gemini":    ("GEMINI_API_KEY",        None),  # Gemini uses its own ChatGoogleGenerativeAI
+    "groq":      ("GROQ_API_KEY",          _make_groq_llm),
+    "cerebras":  ("CEREBRAS_API_KEY",      None),  # Cerebras uses its own ChatCerebras
+    "nvidia":    ("NVIDIA_API_KEY",        _make_nvidia_llm),
+    # "custom" needs base_url + api_key + model — handled separately in _custom_configured()
 }
+
+
+def _custom_configured() -> bool:
+    """True iff all three CUSTOM_LLM_* env values are present."""
+    return bool(_key("CUSTOM_LLM_BASE_URL") and _key("CUSTOM_LLM_API_KEY") and _key("CUSTOM_LLM_MODEL"))
 
 
 def _available_providers() -> list[str]:
     """Return list of providers with valid API keys configured."""
-    return [name for name, (key_name, _) in _PROVIDER_FACTORIES.items() if _key(key_name)]
+    out = [name for name, (key_name, _) in _PROVIDER_FACTORIES.items() if _key(key_name)]
+    if _custom_configured():
+        out.append("custom")
+    return out
 
 
 def _make_llm_for_role(role: str, temperature: float, max_tokens: int = 1024):
@@ -212,6 +259,13 @@ def _make_llm_for_role(role: str, temperature: float, max_tokens: int = 1024):
     providers = _available_providers()
     if not providers:
         return None
+
+    # If user configured a custom provider, prefer it for every role —
+    # they explicitly told us "use this one".
+    if _custom_configured():
+        llm = _make_custom_llm(temperature=temperature, max_tokens=max_tokens)
+        if llm:
+            return llm
 
     # In single-provider mode OR when the preferred provider for this role isn't available
     for provider in providers:
@@ -303,9 +357,14 @@ def assign_models_to_characters(characters: list[dict], pool: list[dict]) -> dic
 def get_agent_fallbacks(max_tokens: int = 300) -> list:
     """
     Character agent fallback chain:
-    Cerebras → Anthropic → OpenAI → NVIDIA → GitHub Models → Cloudflare → Groq
+    Custom (if configured) → Cerebras → Anthropic → OpenAI → NVIDIA → GitHub Models → Cloudflare → Groq
     """
     candidates = []
+
+    # 0. Custom provider (bring-your-own) — if configured, user picked it on purpose, try first
+    custom = _make_custom_llm(temperature=0.85, max_tokens=max_tokens)
+    if custom:
+        candidates.append((custom, f"custom:{_key('CUSTOM_LLM_MODEL')}"))
 
     # 1. Cerebras — primary, fastest
     try:
@@ -369,11 +428,12 @@ def get_agent_fallbacks(max_tokens: int = 300) -> list:
 
 def get_judge_fallbacks() -> list:
     """
-    Groq first (sub-second on LPU) → Anthropic → OpenAI → NVIDIA fallback.
+    Custom (if configured) → Groq → Anthropic → OpenAI → NVIDIA fallback.
     Judge needs low temperature for structured JSON output.
     """
     s = get_settings()
     candidates = [
+        (_make_custom_llm(temperature=0.1, max_tokens=500), f"custom:{_key('CUSTOM_LLM_MODEL')}"),
         (_make_groq_llm(s.JUDGE_MODEL, temperature=0.1), f"groq:{s.JUDGE_MODEL}"),
         (_make_anthropic_llm("claude-haiku-4-5-20251001", temperature=0.1, max_tokens=500), "anthropic:haiku"),
         (_make_openai_llm("gpt-4o-mini", temperature=0.1, max_tokens=500), "openai:gpt-4o-mini"),
@@ -386,11 +446,12 @@ def get_judge_fallbacks() -> list:
 
 def get_narrator_fallbacks(temperature: float = 0.6) -> list:
     """
-    NVIDIA → Anthropic → OpenAI → Groq fallbacks.
+    Custom (if configured) → NVIDIA → Anthropic → OpenAI → Groq fallbacks.
     Narrator needs creative temperature for storytelling.
     """
     s = get_settings()
     candidates = [
+        (_make_custom_llm(temperature=temperature, max_tokens=2048), f"custom:{_key('CUSTOM_LLM_MODEL')}"),
         (_make_nvidia_llm(s.NVIDIA_NARRATOR_MODEL, temperature=temperature), s.NVIDIA_NARRATOR_MODEL),
         (_make_anthropic_llm("claude-sonnet-4-20250514", temperature=temperature, max_tokens=2048), "anthropic:sonnet"),
         (_make_openai_llm("gpt-4o-mini", temperature=temperature, max_tokens=2048), "openai:gpt-4o-mini"),
@@ -416,10 +477,15 @@ def get_analysis_llm():
 
 def get_analysis_fallbacks() -> list:
     """
-    Gemini → Anthropic → OpenAI → NVIDIA → GitHub Models → Cloudflare.
+    Custom (if configured) → Gemini → Anthropic → OpenAI → NVIDIA → GitHub Models → Cloudflare.
     For story analysis, chat, and any task needing deep story understanding.
     """
     candidates = []
+
+    # 0. Custom provider (bring-your-own) — first choice when configured
+    custom = _make_custom_llm(temperature=0.2, max_tokens=4096)
+    if custom:
+        candidates.append((custom, f"custom:{_key('CUSTOM_LLM_MODEL')}"))
 
     # 1. Gemini — primary (1M context, best for full story analysis)
     gemini_key = _key("GEMINI_API_KEY")
