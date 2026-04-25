@@ -25,7 +25,19 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [envStatus, setEnvStatus] = useState<{
     anthropic:boolean;openai:boolean;gemini:boolean;groq:boolean;cerebras:boolean;nvidia:boolean;
     custom?:boolean; custom_base_url?:string|null; custom_model?:string|null;
+    models?: Record<string, Record<string, string>>;
   } | null>(null);
+
+  // Per-provider live model lists (fetched on demand from /settings/providers/{p}/models)
+  const PROVIDERS = ["anthropic","openai","gemini","groq","cerebras","nvidia"] as const;
+  type ProviderName = typeof PROVIDERS[number];
+  type ModelCfg = { main?: string; agent?: string; analysis?: string; judge?: string; narrator?: string };
+
+  const [models,        setModels]        = useState<Record<string, string[]>>({});
+  const [modelCfg,      setModelCfg]      = useState<Record<string, ModelCfg>>({});
+  const [modelLoading,  setModelLoading]  = useState<Record<string, boolean>>({});
+  const [modelError,    setModelError]    = useState<Record<string, string>>({});
+  const [advancedOpen,  setAdvancedOpen]  = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setAnthropic(localStorage.getItem("wis_anthropic_key") || "");
@@ -37,8 +49,52 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     setCustomBaseUrl(localStorage.getItem("wis_custom_base_url") || "");
     setCustomApiKey(localStorage.getItem("wis_custom_api_key") || "");
     setCustomModel(localStorage.getItem("wis_custom_model") || "");
+    // Restore saved per-provider model picks
+    const initialCfg: Record<string, ModelCfg> = {};
+    for (const p of PROVIDERS) {
+      const stored = localStorage.getItem(`wis_${p}_models`);
+      if (stored) { try { initialCfg[p] = JSON.parse(stored); } catch {} }
+    }
+    setModelCfg(initialCfg);
     fetch(`${API}/settings/keys/status`).then(r => r.json()).then(setEnvStatus).catch(() => {});
   }, []);
+
+  async function fetchModelsFor(provider: string) {
+    setModelLoading(s => ({...s, [provider]: true}));
+    setModelError(s => { const x = {...s}; delete x[provider]; return x; });
+    try {
+      const r = await fetch(`${API}/settings/providers/${provider}/models`);
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({detail: r.statusText}));
+        setModelError(s => ({...s, [provider]: String(detail.detail || `HTTP ${r.status}`)}));
+        return;
+      }
+      const data = await r.json();
+      const list: string[] = Array.isArray(data.models) ? data.models : [];
+      setModels(s => ({...s, [provider]: list}));
+      // Auto-pick first model if none configured yet
+      setModelCfg(s => {
+        if (s[provider]?.main) return s;
+        if (list.length === 0) return s;
+        return {...s, [provider]: {...(s[provider] || {}), main: list[0]}};
+      });
+    } catch (e: any) {
+      setModelError(s => ({...s, [provider]: String(e?.message || e)}));
+    } finally {
+      setModelLoading(s => ({...s, [provider]: false}));
+    }
+  }
+
+  // After we know which providers have keys, auto-fetch their model lists
+  useEffect(() => {
+    if (!envStatus) return;
+    for (const p of PROVIDERS) {
+      if ((envStatus as any)[p] && !models[p] && !modelLoading[p]) {
+        fetchModelsFor(p);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [envStatus]);
 
   // Auto-expand the custom panel if a custom provider is already configured
   useEffect(() => {
@@ -76,6 +132,15 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     setSaving(true);
     setError("");
     try {
+      const cleanCfg = (cfg: ModelCfg | undefined) => {
+        if (!cfg) return undefined;
+        const out: ModelCfg = {};
+        for (const k of ["main","agent","analysis","judge","narrator"] as const) {
+          if (cfg[k]) out[k] = cfg[k];
+        }
+        return Object.keys(out).length ? out : undefined;
+      };
+
       const res = await fetch(`${API}/settings/keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -85,6 +150,12 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           custom_llm_base_url: customBaseUrl,
           custom_llm_api_key:  customApiKey,
           custom_llm_model:    customModel,
+          anthropic_models: cleanCfg(modelCfg.anthropic),
+          openai_models:    cleanCfg(modelCfg.openai),
+          gemini_models:    cleanCfg(modelCfg.gemini),
+          groq_models:      cleanCfg(modelCfg.groq),
+          cerebras_models:  cleanCfg(modelCfg.cerebras),
+          nvidia_models:    cleanCfg(modelCfg.nvidia),
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -102,6 +173,12 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
       ];
       for (const [key, val] of pairs) {
         if (val) localStorage.setItem(key, val); else localStorage.removeItem(key);
+      }
+      // Persist per-provider model picks
+      for (const p of PROVIDERS) {
+        const cfg = cleanCfg(modelCfg[p]);
+        if (cfg) localStorage.setItem(`wis_${p}_models`, JSON.stringify(cfg));
+        else     localStorage.removeItem(`wis_${p}_models`);
       }
       setSaved(true);
       setTimeout(() => { setSaved(false); onClose(); }, 1200);
@@ -140,6 +217,82 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 
+  // Per-provider model picker — main dropdown + collapsible Advanced (per role)
+  const ModelPicker = ({ provider }: { provider: ProviderName }) => {
+    const list   = models[provider] || [];
+    const cfg    = modelCfg[provider] || {};
+    const open   = !!advancedOpen[provider];
+    const loading = !!modelLoading[provider];
+    const error   = modelError[provider];
+    const isConfigured = !!(envStatus as any)?.[provider];
+
+    if (!isConfigured) return null;
+
+    const setRole = (role: keyof ModelCfg, v: string) =>
+      setModelCfg(s => ({ ...s, [provider]: { ...(s[provider] || {}), [role]: v || undefined } }));
+
+    const RoleSelect = ({ label, role }: { label: string; role: keyof ModelCfg }) => (
+      <label className="flex items-center gap-2 text-xs">
+        <span className="w-32 text-[#6b5c4e]">{label}</span>
+        <select
+          value={cfg[role] ?? cfg.main ?? ""}
+          onChange={e => setRole(role, e.target.value)}
+          className="flex-1 text-xs px-2 py-1.5 rounded-md border border-[#e8e0d5] bg-white focus:outline-none focus:border-[#c07820]"
+        >
+          {list.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </label>
+    );
+
+    return (
+      <div className="mt-2 space-y-2">
+        <div className="flex items-center gap-2">
+          <select
+            value={cfg.main || ""}
+            onChange={e => setRole("main", e.target.value)}
+            disabled={loading || list.length === 0}
+            className="flex-1 text-sm px-3 py-2 rounded-lg border border-[#e8e0d5] bg-white focus:outline-none focus:border-[#c07820]"
+          >
+            {loading && <option value="">Fetching models…</option>}
+            {!loading && list.length === 0 && <option value="">No models yet — click ↻</option>}
+            {!loading && list.length > 0 && !cfg.main && <option value="">— Select a model —</option>}
+            {list.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => fetchModelsFor(provider)}
+            disabled={loading}
+            title="Refresh model list"
+            className="w-9 h-9 flex items-center justify-center rounded-lg border border-[#e8e0d5] text-[#6b5c4e] hover:bg-white hover:border-[#c8b89a] disabled:opacity-50"
+          >
+            {loading ? "…" : "↻"}
+          </button>
+        </div>
+        {error && <p className="text-xs text-red-500">{error}</p>}
+
+        {list.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen(s => ({ ...s, [provider]: !open }))}
+            className="text-[11px] text-[#a09282] hover:text-[#6b5c4e] flex items-center gap-1.5"
+          >
+            <span className="text-[9px]">{open ? "▾" : "▸"}</span>
+            Advanced — different models per task
+          </button>
+        )}
+
+        {open && list.length > 0 && (
+          <div className="pl-3 border-l-2 border-[#e8e0d5] space-y-1.5 pt-1">
+            <RoleSelect label="Character voice"   role="agent" />
+            <RoleSelect label="Story chat"        role="analysis" />
+            <RoleSelect label="Debate moderator"  role="judge" />
+            <RoleSelect label="Narrator / summary" role="narrator" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -158,33 +311,26 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         {/* Scrollable keys area */}
         <div className="px-6 py-5 space-y-4 overflow-y-auto">
           {/* Quick Start — most common providers */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-[#c07820]">Quick Start</p>
-            <KeyInput
-              label="Anthropic (Claude)"
-              value={anthropic}
-              onChange={setAnthropic}
-              placeholder="sk-ant-..."
-              href="https://console.anthropic.com/settings/keys"
-              configured={envStatus?.anthropic}
-            />
-            <KeyInput
-              label="OpenAI"
-              value={openai}
-              onChange={setOpenai}
-              placeholder="sk-..."
-              href="https://platform.openai.com/api-keys"
-              configured={envStatus?.openai}
-            />
-            <KeyInput
-              label="Google Gemini"
-              value={gemini}
-              onChange={setGemini}
-              placeholder="AIza..."
-              href="https://aistudio.google.com/apikey"
-              configured={envStatus?.gemini}
-              linkText="Get free key →"
-            />
+            <div className="space-y-1.5">
+              <KeyInput label="Anthropic (Claude)" value={anthropic} onChange={setAnthropic}
+                placeholder="sk-ant-..." href="https://console.anthropic.com/settings/keys"
+                configured={envStatus?.anthropic} />
+              <ModelPicker provider="anthropic" />
+            </div>
+            <div className="space-y-1.5">
+              <KeyInput label="OpenAI" value={openai} onChange={setOpenai}
+                placeholder="sk-..." href="https://platform.openai.com/api-keys"
+                configured={envStatus?.openai} />
+              <ModelPicker provider="openai" />
+            </div>
+            <div className="space-y-1.5">
+              <KeyInput label="Google Gemini" value={gemini} onChange={setGemini}
+                placeholder="AIza..." href="https://aistudio.google.com/apikey"
+                configured={envStatus?.gemini} linkText="Get free key →" />
+              <ModelPicker provider="gemini" />
+            </div>
           </div>
 
           {/* More providers — collapsible */}
@@ -200,34 +346,25 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
               )}
             </button>
             {showMore && (
-              <div className="mt-3 space-y-3">
-                <KeyInput
-                  label="Groq"
-                  value={groq}
-                  onChange={setGroq}
-                  placeholder="gsk_..."
-                  href="https://console.groq.com/keys"
-                  configured={envStatus?.groq}
-                  linkText="Get free key →"
-                />
-                <KeyInput
-                  label="Cerebras"
-                  value={cerebras}
-                  onChange={setCerebras}
-                  placeholder="csk-..."
-                  href="https://cloud.cerebras.ai"
-                  configured={envStatus?.cerebras}
-                  linkText="Get free key →"
-                />
-                <KeyInput
-                  label="NVIDIA NIM"
-                  value={nvidia}
-                  onChange={setNvidia}
-                  placeholder="nvapi-..."
-                  href="https://build.nvidia.com"
-                  configured={envStatus?.nvidia}
-                  linkText="Get free key →"
-                />
+              <div className="mt-3 space-y-4">
+                <div className="space-y-1.5">
+                  <KeyInput label="Groq" value={groq} onChange={setGroq}
+                    placeholder="gsk_..." href="https://console.groq.com/keys"
+                    configured={envStatus?.groq} linkText="Get free key →" />
+                  <ModelPicker provider="groq" />
+                </div>
+                <div className="space-y-1.5">
+                  <KeyInput label="Cerebras" value={cerebras} onChange={setCerebras}
+                    placeholder="csk-..." href="https://cloud.cerebras.ai"
+                    configured={envStatus?.cerebras} linkText="Get free key →" />
+                  <ModelPicker provider="cerebras" />
+                </div>
+                <div className="space-y-1.5">
+                  <KeyInput label="NVIDIA NIM" value={nvidia} onChange={setNvidia}
+                    placeholder="nvapi-..." href="https://build.nvidia.com"
+                    configured={envStatus?.nvidia} linkText="Get free key →" />
+                  <ModelPicker provider="nvidia" />
+                </div>
               </div>
             )}
           </div>

@@ -8,6 +8,60 @@ from typing import Optional
 # Runtime key overrides — set via /settings/keys endpoint from the UI
 _runtime_keys: dict[str, str] = {}
 
+# Runtime per-provider model picks — set via /settings/keys endpoint.
+# Shape: { provider_name: { "main": str, "agent": str, "judge": str, ... } }
+# `main` applies to every role unless a role-specific override is also set.
+_runtime_models: dict[str, dict[str, str]] = {}
+
+
+def update_runtime_models(provider: str, config: dict):
+    """Replace the model picks for a provider. Empty dict clears them."""
+    cleaned = {k: v for k, v in (config or {}).items() if v}
+    if cleaned:
+        _runtime_models[provider] = cleaned
+    else:
+        _runtime_models.pop(provider, None)
+
+
+def get_runtime_models() -> dict:
+    return _runtime_models
+
+
+def model_for(provider: str, role: str) -> Optional[str]:
+    """Return the user-chosen model for a provider+role.
+
+    Resolution order:
+      1. Runtime per-role override (gear modal, Advanced section)
+      2. Runtime "main" pick (gear modal, primary dropdown)
+      3. <PROVIDER>_MODEL env var (new convention)
+      4. Legacy role-based env var if provider is its natural home
+         (preserves existing .env users — `JUDGE_MODEL=...` keeps working
+         when the judge role asks Groq, etc.)
+      5. None — provider is skipped for this role.
+    """
+    cfg = _runtime_models.get(provider, {})
+    if v := cfg.get(role):
+        return v
+    if v := cfg.get("main"):
+        return v
+    s = get_settings()
+    if v := getattr(s, f"{provider.upper()}_MODEL", None):
+        return v
+    # Legacy role-based env vars — natural-home pairings only
+    if provider == "groq" and role == "judge":
+        return s.JUDGE_MODEL or None
+    if provider == "groq" and role == "narrator":
+        return s.NARRATOR_MODEL or None
+    if provider == "gemini" and role == "analysis":
+        return s.ANALYSIS_MODEL or None
+    if provider == "cerebras" and role == "agent":
+        return s.CHARACTER_AGENT_MODEL or None
+    if provider == "nvidia" and role == "judge":
+        return getattr(s, "NVIDIA_JUDGE_MODEL", None) or None
+    if provider == "nvidia" and role == "narrator":
+        return getattr(s, "NVIDIA_NARRATOR_MODEL", None) or None
+    return None
+
 
 def update_runtime_keys(
     gemini_key: str = None,
@@ -57,6 +111,14 @@ class Settings(BaseSettings):
     CUSTOM_LLM_BASE_URL: Optional[str] = None
     CUSTOM_LLM_API_KEY: Optional[str] = None
     CUSTOM_LLM_MODEL: Optional[str] = None
+    # Per-provider model defaults — env-var fallback if user hasn't picked
+    # one in the gear modal. The gear modal's selection takes precedence.
+    ANTHROPIC_MODEL: Optional[str] = None
+    OPENAI_MODEL:    Optional[str] = None
+    GEMINI_MODEL:    Optional[str] = None
+    GROQ_MODEL:      Optional[str] = None
+    CEREBRAS_MODEL:  Optional[str] = None
+    NVIDIA_MODEL:    Optional[str] = None
     GITHUB_MODELS_TOKEN: Optional[str] = None
     CLOUDFLARE_ACCOUNT_ID: Optional[str] = None
     CLOUDFLARE_API_TOKEN: Optional[str] = None
@@ -205,26 +267,6 @@ def _make_custom_llm(temperature: float = 0.7, max_tokens: int = 1024, model: st
 
 # ── Provider detection for single-key mode ──
 
-# Role-based model selection per provider
-PROVIDER_ROLE_MODELS: dict[tuple[str, str], str] = {
-    ("anthropic", "agent"):    "claude-haiku-4-5-20251001",
-    ("anthropic", "judge"):    "claude-haiku-4-5-20251001",
-    ("anthropic", "narrator"): "claude-sonnet-4-20250514",
-    ("anthropic", "analysis"): "claude-sonnet-4-20250514",
-    ("openai", "agent"):       "gpt-4o-mini",
-    ("openai", "judge"):       "gpt-4o-mini",
-    ("openai", "narrator"):    "gpt-4o-mini",
-    ("openai", "analysis"):    "gpt-4o-mini",
-    ("gemini", "agent"):       "gemini-2.0-flash",
-    ("gemini", "judge"):       "gemini-2.0-flash",
-    ("gemini", "narrator"):    "gemini-2.0-flash",
-    ("gemini", "analysis"):    "gemini-2.0-flash",
-    ("groq", "agent"):         "llama-3.3-70b-versatile",
-    ("groq", "judge"):         "llama-3.3-70b-versatile",
-    ("groq", "narrator"):      "llama-3.3-70b-versatile",
-    ("groq", "analysis"):      "llama-3.3-70b-versatile",
-}
-
 # Map provider name → factory function + key name
 _PROVIDER_FACTORIES = {
     "anthropic": ("ANTHROPIC_API_KEY",     _make_anthropic_llm),
@@ -267,9 +309,11 @@ def _make_llm_for_role(role: str, temperature: float, max_tokens: int = 1024):
         if llm:
             return llm
 
-    # In single-provider mode OR when the preferred provider for this role isn't available
+    # Pick the user's chosen model for each available provider/role pair.
+    # No hardcoded model ids — model_for() resolves to runtime pick or env var,
+    # otherwise that provider is skipped (returns None).
     for provider in providers:
-        model = PROVIDER_ROLE_MODELS.get((provider, role))
+        model = model_for(provider, role)
         if not model:
             continue
         if provider == "anthropic":
@@ -287,47 +331,64 @@ def _make_llm_for_role(role: str, temperature: float, max_tokens: int = 1024):
             return _make_groq_llm(model, temperature=temperature)
         elif provider == "nvidia":
             return _make_nvidia_llm(model, temperature=temperature)
+        elif provider == "cerebras":
+            key = _key("CEREBRAS_API_KEY")
+            if key:
+                return ChatCerebras(model=model, cerebras_api_key=key, temperature=temperature, max_tokens=max_tokens)
     return None
 
 
 def get_model_pool() -> list[dict]:
     """
-    Build a pool of available LLM instances from all configured providers.
-    Each entry: {provider, model, llm, tier}
-    tier: "fast" (cerebras/groq), "smart" (gemini/nvidia)
+    Build a pool of available LLM instances from all configured providers,
+    spreading parallel character calls across them. Each entry:
+    {provider, model, llm, tier}.
+
+    Model id at every step comes from model_for(provider, "agent") — the
+    user's gear-modal pick or <PROVIDER>_MODEL env var. Providers without a
+    model configured for the agent role are skipped (no hardcoded ids).
     """
-    pool = []
+    pool: list = []
     s = get_settings()
 
     # Cerebras — ultra-fast, primary for characters
-    cerebras = None
-    try:
-        cerebras = get_agent_llm(max_tokens=300)
-        pool.append({"provider": "cerebras", "model": s.CHARACTER_AGENT_MODEL, "llm": cerebras, "tier": "fast"})
-    except Exception:
-        pass
+    if _key("CEREBRAS_API_KEY"):
+        cerebras_model = model_for("cerebras", "agent") or s.CHARACTER_AGENT_MODEL
+        if cerebras_model:
+            try:
+                llm = ChatCerebras(model=cerebras_model, cerebras_api_key=_key("CEREBRAS_API_KEY"),
+                                   temperature=0.85, max_tokens=300)
+                pool.append({"provider": "cerebras", "model": cerebras_model, "llm": llm, "tier": "fast"})
+            except Exception:
+                pass
 
-    # Groq — fast fallback
-    for model in [s.JUDGE_MODEL, "gemma2-9b-it", "llama-3.1-8b-instant"]:
-        llm = _make_groq_llm(model, temperature=0.75)
+    # Groq
+    if m := model_for("groq", "agent"):
+        llm = _make_groq_llm(m, temperature=0.75)
         if llm:
-            pool.append({"provider": "groq", "model": model, "llm": llm, "tier": "fast"})
+            pool.append({"provider": "groq", "model": m, "llm": llm, "tier": "fast"})
 
-    # NVIDIA — smart, good for complex reasoning
-    for model in [s.NVIDIA_JUDGE_MODEL, s.NVIDIA_NARRATOR_MODEL]:
-        llm = _make_nvidia_llm(model, temperature=0.7)
+    # NVIDIA
+    if m := model_for("nvidia", "agent"):
+        llm = _make_nvidia_llm(m, temperature=0.7)
         if llm:
-            pool.append({"provider": "nvidia", "model": model, "llm": llm, "tier": "smart"})
+            pool.append({"provider": "nvidia", "model": m, "llm": llm, "tier": "smart"})
 
-    # Anthropic — high quality
-    llm = _make_anthropic_llm("claude-haiku-4-5-20251001", temperature=0.85, max_tokens=300)
-    if llm:
-        pool.append({"provider": "anthropic", "model": "claude-haiku-4-5", "llm": llm, "tier": "fast"})
+    # Anthropic
+    if m := model_for("anthropic", "agent"):
+        llm = _make_anthropic_llm(m, temperature=0.85, max_tokens=300)
+        if llm:
+            pool.append({"provider": "anthropic", "model": m, "llm": llm, "tier": "fast"})
 
-    # OpenAI — reliable
-    llm = _make_openai_llm("gpt-4o-mini", temperature=0.85, max_tokens=300)
-    if llm:
-        pool.append({"provider": "openai", "model": "gpt-4o-mini", "llm": llm, "tier": "fast"})
+    # OpenAI
+    if m := model_for("openai", "agent"):
+        llm = _make_openai_llm(m, temperature=0.85, max_tokens=300)
+        if llm:
+            pool.append({"provider": "openai", "model": m, "llm": llm, "tier": "fast"})
+
+    # Custom provider — bring-your-own-API
+    if custom := _make_custom_llm(temperature=0.85, max_tokens=300):
+        pool.append({"provider": "custom", "model": _key("CUSTOM_LLM_MODEL"), "llm": custom, "tier": "fast"})
 
     return pool
 
@@ -356,12 +417,16 @@ def assign_models_to_characters(characters: list[dict], pool: list[dict]) -> dic
 
 def get_agent_fallbacks(max_tokens: int = 300) -> list:
     """
-    Character agent fallback chain:
-    Custom (if configured) → Cerebras → Anthropic → OpenAI → NVIDIA → GitHub Models → Cloudflare → Groq
+    Character agent fallback chain. Model id at each provider comes from the
+    user's pick in the gear modal (or the <PROVIDER>_MODEL env var). When a
+    provider has no model configured for the agent role, that provider is
+    skipped — no hardcoded model id is assumed.
+
+    Order: Custom → Cerebras → Anthropic → OpenAI → NVIDIA → Groq.
     """
     candidates = []
 
-    # 0. Custom provider (bring-your-own) — if configured, user picked it on purpose, try first
+    # 0. Custom (bring-your-own) — if configured, user picked it on purpose, try first
     custom = _make_custom_llm(temperature=0.85, max_tokens=max_tokens)
     if custom:
         candidates.append((custom, f"custom:{_key('CUSTOM_LLM_MODEL')}"))
@@ -372,94 +437,91 @@ def get_agent_fallbacks(max_tokens: int = 300) -> list:
     except Exception:
         pass
 
-    # 2. Anthropic Claude Haiku — fast, high quality
-    llm = _make_anthropic_llm("claude-haiku-4-5-20251001", temperature=0.85, max_tokens=max_tokens)
-    if llm:
-        candidates.append((llm, "anthropic:haiku"))
-
-    # 3. OpenAI GPT-4o-mini — fast, reliable
-    llm = _make_openai_llm("gpt-4o-mini", temperature=0.85, max_tokens=max_tokens)
-    if llm:
-        candidates.append((llm, "openai:gpt-4o-mini"))
-
-    # 4. NVIDIA — 91 free models, ~40 RPM, NO daily token limit
-    NVIDIA_AGENT_MODELS = [
-        "meta/llama-3.3-70b-instruct",
-        "meta/llama-4-maverick-17b-128e-instruct",       # Llama 4!
-        "mistralai/mistral-small-3.2-24b-instruct",
-        "google/gemma-4-31b-it",
-        "deepseek-ai/deepseek-v3.2",
-        "meta/llama-3.1-70b-instruct",
-    ]
-    for model in NVIDIA_AGENT_MODELS:
-        llm = _make_nvidia_llm(model, temperature=0.85)
+    # 2. Anthropic
+    if m := model_for("anthropic", "agent"):
+        llm = _make_anthropic_llm(m, temperature=0.85, max_tokens=max_tokens)
         if llm:
-            candidates.append((llm, f"nv:{model.split('/')[-1][:30]}"))
+            candidates.append((llm, f"anthropic:{m}"))
 
-    # 3. GitHub Models — GPT-4o-mini, Llama, etc.
-    GITHUB_AGENT_MODELS = [
-        "gpt-4o-mini",
-        "meta-llama-3.1-70b-instruct",
-        "Phi-4-mini-instruct",
-    ]
-    for model in GITHUB_AGENT_MODELS:
-        llm = _make_github_models_llm(model, temperature=0.85, max_tokens=max_tokens)
+    # 3. OpenAI
+    if m := model_for("openai", "agent"):
+        llm = _make_openai_llm(m, temperature=0.85, max_tokens=max_tokens)
         if llm:
-            candidates.append((llm, f"gh:{model[:20]}"))
+            candidates.append((llm, f"openai:{m}"))
 
-    # 4. Cloudflare Workers AI
-    CF_AGENT_MODELS = [
-        "@cf/meta/llama-3.1-8b-instruct",
-        "@cf/mistral/mistral-7b-instruct-v0.2",
-    ]
-    for model in CF_AGENT_MODELS:
-        llm = _make_cloudflare_llm(model, temperature=0.85, max_tokens=max_tokens)
+    # 4. NVIDIA — single model from user's pick (no hardcoded list)
+    if m := model_for("nvidia", "agent"):
+        llm = _make_nvidia_llm(m, temperature=0.85)
         if llm:
-            candidates.append((llm, f"cf:{model.split('/')[-1][:20]}"))
+            candidates.append((llm, f"nv:{m.split('/')[-1][:30]}"))
 
     # 5. Groq
-    for model in ["llama-3.3-70b-versatile", "gemma2-9b-it", "llama-3.1-8b-instant"]:
-        llm = _make_groq_llm(model, temperature=0.8)
+    if m := model_for("groq", "agent"):
+        llm = _make_groq_llm(m, temperature=0.85)
         if llm:
-            candidates.append((llm, f"groq:{model}"))
+            candidates.append((llm, f"groq:{m}"))
 
     return candidates
 
 
 def get_judge_fallbacks() -> list:
     """
-    Custom (if configured) → Groq → Anthropic → OpenAI → NVIDIA fallback.
-    Judge needs low temperature for structured JSON output.
+    Custom → Groq → Anthropic → OpenAI → NVIDIA. Model ids resolved per-provider
+    from the gear-modal pick or <PROVIDER>_MODEL env var. Judge needs low
+    temperature for structured JSON output.
     """
-    s = get_settings()
-    candidates = [
-        (_make_custom_llm(temperature=0.1, max_tokens=500), f"custom:{_key('CUSTOM_LLM_MODEL')}"),
-        (_make_groq_llm(s.JUDGE_MODEL, temperature=0.1), f"groq:{s.JUDGE_MODEL}"),
-        (_make_anthropic_llm("claude-haiku-4-5-20251001", temperature=0.1, max_tokens=500), "anthropic:haiku"),
-        (_make_openai_llm("gpt-4o-mini", temperature=0.1, max_tokens=500), "openai:gpt-4o-mini"),
-        (_make_nvidia_llm(s.NVIDIA_JUDGE_MODEL, temperature=0.1), s.NVIDIA_JUDGE_MODEL),
-        (_make_groq_llm("gemma2-9b-it", temperature=0.1), "groq:gemma2-9b-it"),
-        (_make_groq_llm("llama-3.1-8b-instant", temperature=0.1), "groq:llama-3.1-8b-instant"),
-    ]
-    return [(llm, label) for llm, label in candidates if llm is not None]
+    candidates: list = []
+
+    if custom := _make_custom_llm(temperature=0.1, max_tokens=500):
+        candidates.append((custom, f"custom:{_key('CUSTOM_LLM_MODEL')}"))
+
+    if m := model_for("groq", "judge"):
+        if llm := _make_groq_llm(m, temperature=0.1):
+            candidates.append((llm, f"groq:{m}"))
+
+    if m := model_for("anthropic", "judge"):
+        if llm := _make_anthropic_llm(m, temperature=0.1, max_tokens=500):
+            candidates.append((llm, f"anthropic:{m}"))
+
+    if m := model_for("openai", "judge"):
+        if llm := _make_openai_llm(m, temperature=0.1, max_tokens=500):
+            candidates.append((llm, f"openai:{m}"))
+
+    if m := model_for("nvidia", "judge"):
+        if llm := _make_nvidia_llm(m, temperature=0.1):
+            candidates.append((llm, f"nv:{m.split('/')[-1][:30]}"))
+
+    return candidates
 
 
 def get_narrator_fallbacks(temperature: float = 0.6) -> list:
     """
-    Custom (if configured) → NVIDIA → Anthropic → OpenAI → Groq fallbacks.
-    Narrator needs creative temperature for storytelling.
+    Custom → NVIDIA → Anthropic → OpenAI → Groq. Model ids resolved per-provider
+    from the gear-modal pick or <PROVIDER>_MODEL env var. Narrator needs
+    creative temperature for storytelling.
     """
-    s = get_settings()
-    candidates = [
-        (_make_custom_llm(temperature=temperature, max_tokens=2048), f"custom:{_key('CUSTOM_LLM_MODEL')}"),
-        (_make_nvidia_llm(s.NVIDIA_NARRATOR_MODEL, temperature=temperature), s.NVIDIA_NARRATOR_MODEL),
-        (_make_anthropic_llm("claude-sonnet-4-20250514", temperature=temperature, max_tokens=2048), "anthropic:sonnet"),
-        (_make_openai_llm("gpt-4o-mini", temperature=temperature, max_tokens=2048), "openai:gpt-4o-mini"),
-        (_make_groq_llm(s.NARRATOR_MODEL, temperature=temperature), s.NARRATOR_MODEL),
-        (_make_groq_llm("gemma2-9b-it", temperature=temperature), "gemma2-9b-it"),
-        (_make_groq_llm("llama-3.1-8b-instant", temperature=temperature), "llama-3.1-8b-instant"),
-    ]
-    return [(llm, label) for llm, label in candidates if llm is not None]
+    candidates: list = []
+
+    if custom := _make_custom_llm(temperature=temperature, max_tokens=2048):
+        candidates.append((custom, f"custom:{_key('CUSTOM_LLM_MODEL')}"))
+
+    if m := model_for("nvidia", "narrator"):
+        if llm := _make_nvidia_llm(m, temperature=temperature):
+            candidates.append((llm, f"nv:{m.split('/')[-1][:30]}"))
+
+    if m := model_for("anthropic", "narrator"):
+        if llm := _make_anthropic_llm(m, temperature=temperature, max_tokens=2048):
+            candidates.append((llm, f"anthropic:{m}"))
+
+    if m := model_for("openai", "narrator"):
+        if llm := _make_openai_llm(m, temperature=temperature, max_tokens=2048):
+            candidates.append((llm, f"openai:{m}"))
+
+    if m := model_for("groq", "narrator"):
+        if llm := _make_groq_llm(m, temperature=temperature):
+            candidates.append((llm, f"groq:{m}"))
+
+    return candidates
 
 
 def get_analysis_llm():
@@ -467,7 +529,9 @@ def get_analysis_llm():
     s = get_settings()
     key = _key("GEMINI_API_KEY")
     if key:
-        return ChatGoogleGenerativeAI(model=s.ANALYSIS_MODEL, google_api_key=key, temperature=0.2)
+        model = model_for("gemini", "analysis") or s.ANALYSIS_MODEL
+        if model:
+            return ChatGoogleGenerativeAI(model=model, google_api_key=key, temperature=0.2)
     # Soft fallback — try any available provider for analysis role
     llm = _make_llm_for_role("analysis", temperature=0.2, max_tokens=4096)
     if llm:
@@ -477,65 +541,41 @@ def get_analysis_llm():
 
 def get_analysis_fallbacks() -> list:
     """
-    Custom (if configured) → Gemini → Anthropic → OpenAI → NVIDIA → GitHub Models → Cloudflare.
+    Custom → Gemini → Anthropic → OpenAI → NVIDIA → Groq. Model ids resolved
+    per-provider from the gear-modal pick or <PROVIDER>_MODEL env var.
     For story analysis, chat, and any task needing deep story understanding.
     """
-    candidates = []
+    candidates: list = []
 
-    # 0. Custom provider (bring-your-own) — first choice when configured
-    custom = _make_custom_llm(temperature=0.2, max_tokens=4096)
-    if custom:
+    if custom := _make_custom_llm(temperature=0.2, max_tokens=4096):
         candidates.append((custom, f"custom:{_key('CUSTOM_LLM_MODEL')}"))
 
-    # 1. Gemini — primary (1M context, best for full story analysis)
+    # Gemini — primary (1M context, best for full story analysis)
     gemini_key = _key("GEMINI_API_KEY")
-    if gemini_key:
+    if gemini_key and (m := model_for("gemini", "analysis")):
         try:
-            s = get_settings()
             candidates.append((
-                ChatGoogleGenerativeAI(model=s.ANALYSIS_MODEL, google_api_key=gemini_key, temperature=0.2),
-                "gemini",
+                ChatGoogleGenerativeAI(model=m, google_api_key=gemini_key, temperature=0.2),
+                f"gemini:{m}",
             ))
         except Exception:
             pass
 
-    # 2. Anthropic Claude Sonnet — excellent analysis quality
-    llm = _make_anthropic_llm("claude-sonnet-4-20250514", temperature=0.2, max_tokens=4096)
-    if llm:
-        candidates.append((llm, "anthropic:sonnet"))
+    if m := model_for("anthropic", "analysis"):
+        if llm := _make_anthropic_llm(m, temperature=0.2, max_tokens=4096):
+            candidates.append((llm, f"anthropic:{m}"))
 
-    # 3. OpenAI GPT-4o-mini — reliable analysis
-    llm = _make_openai_llm("gpt-4o-mini", temperature=0.2, max_tokens=4096)
-    if llm:
-        candidates.append((llm, "openai:gpt-4o-mini"))
+    if m := model_for("openai", "analysis"):
+        if llm := _make_openai_llm(m, temperature=0.2, max_tokens=4096):
+            candidates.append((llm, f"openai:{m}"))
 
-    # 4. NVIDIA — no daily token limit, ~40 RPM, massive models available
-    NVIDIA_ANALYSIS_MODELS = [
-        "meta/llama-3.1-405b-instruct",                    # 405B — massive
-        "mistralai/mistral-large-3-675b-instruct-2512",     # 675B — largest available
-        "deepseek-ai/deepseek-v3.2",                        # DeepSeek latest
-        "meta/llama-3.3-70b-instruct",                      # 70B — reliable
-        "google/gemma-4-31b-it",                             # 31B — fast
-    ]
-    for model in NVIDIA_ANALYSIS_MODELS:
-        llm = _make_nvidia_llm(model, temperature=0.2)
-        if llm:
-            candidates.append((llm, f"nv:{model.split('/')[-1][:30]}"))
+    if m := model_for("nvidia", "analysis"):
+        if llm := _make_nvidia_llm(m, temperature=0.2):
+            candidates.append((llm, f"nv:{m.split('/')[-1][:30]}"))
 
-    # 3. GitHub Models — GPT-4o for analysis
-    GITHUB_ANALYSIS_MODELS = [
-        "gpt-4o-mini",
-        "meta-llama-3.1-70b-instruct",
-    ]
-    for model in GITHUB_ANALYSIS_MODELS:
-        llm = _make_github_models_llm(model, temperature=0.2, max_tokens=4000)
-        if llm:
-            candidates.append((llm, f"gh:{model[:20]}"))
-
-    # 4. Cloudflare
-    llm = _make_cloudflare_llm("@cf/meta/llama-3.1-8b-instruct", temperature=0.2, max_tokens=4000)
-    if llm:
-        candidates.append((llm, "cf:llama-3.1-8b"))
+    if m := model_for("groq", "analysis"):
+        if llm := _make_groq_llm(m, temperature=0.2):
+            candidates.append((llm, f"groq:{m}"))
 
     return candidates
 
@@ -577,7 +617,10 @@ def get_agent_llm(max_tokens: int = 180):
     s = get_settings()
     key = _key("CEREBRAS_API_KEY")
     if key:
-        return ChatCerebras(model=s.CHARACTER_AGENT_MODEL, cerebras_api_key=key, temperature=0.85, max_tokens=max_tokens)
+        # Prefer the gear-modal pick; fall back to legacy CHARACTER_AGENT_MODEL env
+        model = model_for("cerebras", "agent") or s.CHARACTER_AGENT_MODEL
+        if model:
+            return ChatCerebras(model=model, cerebras_api_key=key, temperature=0.85, max_tokens=max_tokens)
     # Soft fallback — try any available provider for character agent role
     llm = _make_llm_for_role("agent", temperature=0.85, max_tokens=max_tokens)
     if llm:
