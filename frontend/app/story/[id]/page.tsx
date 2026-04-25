@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { API } from "../../config";
+import Footer from "../../components/Footer";
 
 const STAGE_STEPS = ["uploaded", "analyzing", "researching"];
 
@@ -656,6 +657,8 @@ export default function StoryPage() {
 
             </div>
           )}
+
+          <Footer />
 
       </div>
 

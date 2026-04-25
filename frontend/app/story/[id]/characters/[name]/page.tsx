@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { API } from "../../../../config";
+import Footer from "../../../../components/Footer";
 
 /** Encode a character name for use in URL paths — also encodes dots to prevent
  *  Next.js from treating them as file extensions in dynamic segments. */
@@ -595,6 +596,7 @@ export default function CharacterDetailPage() {
         )}
 
       </div>{/* end inner content div */}
+        <Footer />
       </div>{/* end left panel */}
 
       {/* RIGHT: quick-summary sidebar */}

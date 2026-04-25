@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { characters, getCharacter, listAllCharacters, CHAR_COLORS } from "../../lib/data";
+import Footer from "../../components/Footer";
 import CharacterQA from "./CharacterQA";
 import CharacterArcView from "./CharacterArcView";
 
@@ -226,6 +227,7 @@ export default async function CharacterDetailPage({ params }: { params: Promise<
           </div>
 
         </div>
+        <Footer />
       </div>
     </main>
   );

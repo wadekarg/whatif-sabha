@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Footer from "../components/Footer";
 import { listAllCharacters } from "../lib/data";
 
 const ROLE_STYLE: Record<string, { border: string; text: string; dot: string; bg: string }> = {
@@ -33,7 +34,8 @@ export default function CharactersIndex() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 lg:px-12 py-8">
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-8 lg:px-12 py-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {sorted.map((c) => {
             const s = ROLE_STYLE[c.role] || ROLE_STYLE.minor;
@@ -81,6 +83,8 @@ export default function CharactersIndex() {
             );
           })}
         </div>
+        </div>
+        <Footer />
       </div>
     </main>
   );

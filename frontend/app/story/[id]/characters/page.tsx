@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { API } from "../../../config";
+import Footer from "../../../components/Footer";
 
 const ROLE_STYLE: Record<string, { border: string; bg: string; text: string; dot: string }> = {
   protagonist: { border: "border-l-[#c07820]",  bg: "bg-white",  text: "text-[#c07820]",  dot: "bg-[#c07820]"  },
@@ -43,7 +44,8 @@ export default function CharactersPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 lg:px-12 py-8">
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-8 lg:px-12 py-8">
         {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {[1, 2, 3, 4, 6, 8].map(i => (
@@ -109,6 +111,8 @@ export default function CharactersPage() {
             })}
           </div>
         )}
+        </div>
+        <Footer />
       </div>
     </main>
   );
