@@ -121,7 +121,14 @@ async def _fetch_anthropic_models(api_key: str) -> list[str]:
         )
         r.raise_for_status()
         data = r.json()
-        return [m["id"] for m in data.get("data", []) if _is_chat_capable(m.get("id", ""))]
+        seen: set[str] = set()
+        out: list[str] = []
+        for m in data.get("data", []):
+            mid = m.get("id", "")
+            if mid and _is_chat_capable(mid) and mid not in seen:
+                seen.add(mid)
+                out.append(mid)
+        return out
 
 
 async def _fetch_openai_compat_models(base_url: str, api_key: str) -> list[str]:
@@ -132,10 +139,12 @@ async def _fetch_openai_compat_models(base_url: str, api_key: str) -> list[str]:
         r.raise_for_status()
         data = r.json()
         items = data.get("data", []) or data.get("models", [])
+        seen: set[str] = set()
         ids: list[str] = []
         for m in items:
             mid = m.get("id") or m.get("name") or m
-            if isinstance(mid, str) and _is_chat_capable(mid):
+            if isinstance(mid, str) and _is_chat_capable(mid) and mid not in seen:
+                seen.add(mid)
                 ids.append(mid)
         return ids
 
@@ -146,14 +155,16 @@ async def _fetch_gemini_models(api_key: str) -> list[str]:
         r = await client.get(url)
         r.raise_for_status()
         data = r.json()
-        out = []
+        seen: set[str] = set()
+        out: list[str] = []
         for m in data.get("models", []):
             name = m.get("name", "")
             # Strip the "models/" prefix Gemini returns
             if name.startswith("models/"):
                 name = name[7:]
             methods = m.get("supportedGenerationMethods") or []
-            if "generateContent" in methods and _is_chat_capable(name):
+            if name and "generateContent" in methods and _is_chat_capable(name) and name not in seen:
+                seen.add(name)
                 out.append(name)
         return out
 

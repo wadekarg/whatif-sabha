@@ -70,7 +70,9 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         return;
       }
       const data = await r.json();
-      const list: string[] = Array.isArray(data.models) ? data.models : [];
+      const raw: string[] = Array.isArray(data.models) ? data.models : [];
+      // Defensive dedupe — some providers (NVIDIA NIM) return the same model id twice
+      const list = Array.from(new Set(raw));
       setModels(s => ({...s, [provider]: list}));
       // Auto-pick first model if none configured yet
       setModelCfg(s => {
