@@ -108,7 +108,12 @@ export default function Home() {
         if (pollStoppedRef.current) return;
         setStatus(data.status);
         if (Array.isArray(data.progress_log) && data.progress_log.length > 0) {
-          setActivityLog(data.progress_log.map((e: { msg: string }) => e.msg));
+          // Cap to the last 50 entries — backend log grows unbounded for big
+          // books (Mahabharata-scale ~200+ chunks). Without this cap the
+          // frontend re-renders the whole list every 2.5s and tabs OOM on
+          // long analyses.
+          const tail = data.progress_log.slice(-50);
+          setActivityLog(tail.map((e: { msg: string }) => e.msg));
         }
         if (data.status === "ready") {
           pollStoppedRef.current = true;
@@ -118,7 +123,19 @@ export default function Home() {
           ]);
           setStoryData(await sr.json());
           const ch = await cr.json();
-          setCharacters(Array.isArray(ch) ? ch : []);
+          // Stagger character render — large casts (100+ for epics like
+          // Mahabharata) overwhelm the browser if dropped in at once. Render
+          // in batches of 30 with a tick between so the main thread breathes.
+          const all = Array.isArray(ch) ? ch : [];
+          if (all.length <= 30) {
+            setCharacters(all);
+          } else {
+            setCharacters(all.slice(0, 30));
+            for (let i = 30; i < all.length; i += 30) {
+              const batch = all.slice(0, i + 30);
+              setTimeout(() => setCharacters(batch), (i / 30) * 50);
+            }
+          }
         } else if (data.status !== "error") {
           setTimeout(poll, 2500);
         }
