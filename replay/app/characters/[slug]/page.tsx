@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { characters, getCharacter, listAllCharacters, CHAR_COLORS } from "../../lib/data";
 import CharacterQA from "./CharacterQA";
+import CharacterArcView from "./CharacterArcView";
 
 const ROLE_COLOR: Record<string, string> = {
   protagonist: "#c07820",
@@ -154,6 +155,9 @@ export default async function CharacterDetailPage({ params }: { params: Promise<
               <p className="text-sm text-[#1c1410] leading-relaxed italic">{character.internal_voice}</p>
             </div>
           )}
+
+          {/* Story timeline bar + character arc with phases */}
+          <CharacterArcView character={character} />
 
           {/* Fair witness panel — backend-sourced, adversarial re-reading */}
           {character.fair_witness && (
