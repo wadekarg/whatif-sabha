@@ -185,21 +185,37 @@ PROVIDER_KEY_NAMES = {
     "nvidia":    "NVIDIA_API_KEY",
 }
 
+# Our blessed starter suggestion per provider — not enforced anywhere; the
+# frontend marks this as "(recommended)" in the dropdown and auto-selects it
+# the first time the user adds a key. If the provider has deprecated it, we
+# fall through to whatever's first in the live list.
+RECOMMENDED_MODELS = {
+    "anthropic": "claude-haiku-4-5-20251001",
+    "openai":    "gpt-4o-mini",
+    "gemini":    "gemini-3.1-flash-lite-preview",
+    "groq":      "llama-3.3-70b-versatile",
+    "cerebras":  "qwen-3-235b-a22b-instruct-2507",
+    "nvidia":    "meta/llama-3.3-70b-instruct",
+}
+
 
 @router.get("/providers/{provider}/models")
 async def list_provider_models(provider: str):
-    """Return the live list of chat-capable models the user's key can access."""
+    """Return the live list of chat-capable models the user's key can access,
+    plus our blessed `recommended` suggestion (or null if it's not in the
+    live list — e.g. the provider deprecated it)."""
     if provider == "custom":
         base_url = _key("CUSTOM_LLM_BASE_URL")
         api_key  = _key("CUSTOM_LLM_API_KEY")
         if not base_url or not api_key:
             raise HTTPException(status_code=400, detail="Custom provider not configured")
         try:
-            return {"provider": "custom", "models": await _fetch_openai_compat_models(base_url, api_key)}
+            models = await _fetch_openai_compat_models(base_url, api_key)
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=502, detail=f"Provider returned {e.response.status_code}")
         except httpx.RequestError as e:
             raise HTTPException(status_code=502, detail=f"Cannot reach provider: {e}")
+        return {"provider": "custom", "models": models, "recommended": None}
 
     if provider not in PROVIDER_KEY_NAMES:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
@@ -222,4 +238,7 @@ async def list_provider_models(provider: str):
 
     # Sort alphabetically for stable UI ordering
     models.sort()
-    return {"provider": provider, "models": models}
+    rec = RECOMMENDED_MODELS.get(provider)
+    if rec and rec not in models:
+        rec = None  # provider deprecated it; don't suggest
+    return {"provider": provider, "models": models, "recommended": rec}

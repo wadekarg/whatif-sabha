@@ -34,6 +34,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   type ModelCfg = { main?: string; agent?: string; analysis?: string; judge?: string; narrator?: string };
 
   const [models,        setModels]        = useState<Record<string, string[]>>({});
+  const [recommended,   setRecommended]   = useState<Record<string, string | null>>({});
   const [modelCfg,      setModelCfg]      = useState<Record<string, ModelCfg>>({});
   const [modelLoading,  setModelLoading]  = useState<Record<string, boolean>>({});
   const [modelError,    setModelError]    = useState<Record<string, string>>({});
@@ -73,12 +74,15 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
       const raw: string[] = Array.isArray(data.models) ? data.models : [];
       // Defensive dedupe — some providers (NVIDIA NIM) return the same model id twice
       const list = Array.from(new Set(raw));
+      const rec: string | null = (data.recommended as string) || null;
       setModels(s => ({...s, [provider]: list}));
-      // Auto-pick first model if none configured yet
+      setRecommended(s => ({...s, [provider]: rec}));
+      // Auto-pick the recommended model if no user pick yet, otherwise first model
       setModelCfg(s => {
         if (s[provider]?.main) return s;
         if (list.length === 0) return s;
-        return {...s, [provider]: {...(s[provider] || {}), main: list[0]}};
+        const pick = (rec && list.includes(rec)) ? rec : list[0];
+        return {...s, [provider]: {...(s[provider] || {}), main: pick}};
       });
     } catch (e: any) {
       setModelError(s => ({...s, [provider]: String(e?.message || e)}));
@@ -222,6 +226,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   // Per-provider model picker — main dropdown + collapsible Advanced (per role)
   const ModelPicker = ({ provider }: { provider: ProviderName }) => {
     const list   = models[provider] || [];
+    const rec    = recommended[provider] || null;
     const cfg    = modelCfg[provider] || {};
     const open   = !!advancedOpen[provider];
     const loading = !!modelLoading[provider];
@@ -233,6 +238,8 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     const setRole = (role: keyof ModelCfg, v: string) =>
       setModelCfg(s => ({ ...s, [provider]: { ...(s[provider] || {}), [role]: v || undefined } }));
 
+    const labelFor = (m: string) => rec && m === rec ? `${m}  (recommended)` : m;
+
     const RoleSelect = ({ label, role }: { label: string; role: keyof ModelCfg }) => (
       <label className="flex items-center gap-2 text-xs">
         <span className="w-32 text-[#6b5c4e]">{label}</span>
@@ -241,7 +248,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           onChange={e => setRole(role, e.target.value)}
           className="flex-1 text-xs px-2 py-1.5 rounded-md border border-[#e8e0d5] bg-white focus:outline-none focus:border-[#c07820]"
         >
-          {list.map(m => <option key={m} value={m}>{m}</option>)}
+          {list.map(m => <option key={m} value={m}>{labelFor(m)}</option>)}
         </select>
       </label>
     );
@@ -258,7 +265,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             {loading && <option value="">Fetching models…</option>}
             {!loading && list.length === 0 && <option value="">No models yet — click ↻</option>}
             {!loading && list.length > 0 && !cfg.main && <option value="">— Select a model —</option>}
-            {list.map(m => <option key={m} value={m}>{m}</option>)}
+            {list.map(m => <option key={m} value={m}>{labelFor(m)}</option>)}
           </select>
           <button
             type="button"
