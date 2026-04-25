@@ -26,7 +26,6 @@ const ROLE_COLOR: Record<string, string> = {
 
 export default function StoryPage() {
   const [rightTab, setRightTab] = useState<"story" | "character">("story");
-  const [storyOpenIdx, setStoryOpenIdx] = useState<number | null>(null);
   const [charChat, setCharChat] = useState<CharacterDossier | null>(null);
 
   const cast = listCast();
@@ -237,7 +236,7 @@ export default function StoryPage() {
               {story.qa.length === 0 ? (
                 <p className="text-center text-[#a09282] text-sm italic mt-8">No sample questions yet.</p>
               ) : story.qa.map((qa, i) => (
-                <QABubbles key={i} qa={qa} speakerColor="#c07820" speakerLabel="Boru" speakerInitial="✦" isOpen={storyOpenIdx === i} onToggle={() => setStoryOpenIdx(storyOpenIdx === i ? null : i)} />
+                <QABubbles key={i} qa={qa} speakerColor="#c07820" speakerInitial="✦" />
               ))}
             </div>
             <DisabledInput placeholder="Ask about characters, plot, themes…" />
@@ -288,42 +287,33 @@ export default function StoryPage() {
 /* ──────────────── Sub-components ──────────────── */
 
 function QABubbles({
-  qa, speakerColor, speakerLabel, speakerInitial, isOpen, onToggle,
+  qa, speakerColor, speakerInitial,
 }: {
   qa: StoryQA;
   speakerColor: string;
-  speakerLabel: string;
   speakerInitial: string;
-  isOpen: boolean;
-  onToggle: () => void;
 }) {
   return (
     <div className="space-y-2">
-      {/* User bubble — always visible, clickable to expand/collapse */}
-      <button onClick={onToggle} className="flex justify-end w-full group">
-        <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed bg-[#c07820] text-white text-left">
+      <div className="flex justify-end">
+        <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed bg-[#c07820] text-white">
           {qa.question}
-          <span className="opacity-60 ml-2 text-xs">{isOpen ? "▾" : "▸"}</span>
         </div>
-      </button>
+      </div>
 
-      {/* Assistant bubble — collapsed by default */}
-      {isOpen && (
-        <div className="flex justify-start">
-          <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs shrink-0 mr-2 mt-0.5 bg-[#fef3e2] border border-[#f0c060]" style={{ color: speakerColor }}>
-            {speakerInitial}
-          </div>
-          <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm text-sm leading-relaxed bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5] whitespace-pre-wrap">
-            {qa.answer}
-          </div>
+      <div className="flex justify-start">
+        <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs shrink-0 mr-2 mt-0.5 bg-[#fef3e2] border border-[#f0c060]" style={{ color: speakerColor }}>
+          {speakerInitial}
         </div>
-      )}
+        <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm text-sm leading-relaxed bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5] whitespace-pre-wrap">
+          {qa.answer}
+        </div>
+      </div>
     </div>
   );
 }
 
 function CharacterChatPane({ char }: { char: CharacterDossier }) {
-  const [openIdx, setOpenIdx] = useState<number | null>(0);
   const allChars = listAllCharacters();
   const charIdx = allChars.findIndex(c => c.slug === char.slug);
   const col = CHAR_COLORS[charIdx % CHAR_COLORS.length];
@@ -350,22 +340,19 @@ function CharacterChatPane({ char }: { char: CharacterDossier }) {
           </p>
         ) : char.qa.map((qa, i) => (
           <div key={i} className="space-y-2">
-            <button onClick={() => setOpenIdx(openIdx === i ? null : i)} className="flex justify-end w-full">
-              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed text-white text-left" style={{ backgroundColor: col }}>
+            <div className="flex justify-end">
+              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed text-white" style={{ backgroundColor: col }}>
                 {qa.question}
-                <span className="opacity-60 ml-2 text-xs">{openIdx === i ? "▾" : "▸"}</span>
               </div>
-            </button>
-            {openIdx === i && (
-              <div className="flex gap-2 justify-start">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5" style={{ backgroundColor: col }}>
-                  {char.name[0]}
-                </div>
-                <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl rounded-bl-sm bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5] text-sm leading-relaxed whitespace-pre-wrap">
-                  {qa.answer}
-                </div>
+            </div>
+            <div className="flex gap-2 justify-start">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5" style={{ backgroundColor: col }}>
+                {char.name[0]}
               </div>
-            )}
+              <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl rounded-bl-sm bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5] text-sm leading-relaxed whitespace-pre-wrap">
+                {qa.answer}
+              </div>
+            </div>
           </div>
         ))}
       </div>

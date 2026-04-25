@@ -1,6 +1,3 @@
-"use client";
-
-import { useState } from "react";
 import type { CharacterDossier } from "../../lib/data";
 
 export default function CharacterQA({
@@ -10,8 +7,6 @@ export default function CharacterQA({
   character: CharacterDossier;
   bubbleColor: string;
 }) {
-  const [openIdx, setOpenIdx] = useState<number | null>(0);
-
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -27,29 +22,23 @@ export default function CharacterQA({
             No pre-recorded samples for {character.name} yet. In the full app you could ask them anything live.
           </p>
         ) : (
-          character.qa.map((qa, i) => {
-            const open = openIdx === i;
-            return (
-              <div key={i} className="space-y-2">
-                <button onClick={() => setOpenIdx(open ? null : i)} className="flex justify-end w-full">
-                  <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed text-white text-left" style={{ backgroundColor: bubbleColor }}>
-                    {qa.question}
-                    <span className="opacity-60 ml-2 text-xs">{open ? "▾" : "▸"}</span>
-                  </div>
-                </button>
-                {open && (
-                  <div className="flex gap-2 justify-start">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5" style={{ backgroundColor: bubbleColor }}>
-                      {character.name[0]}
-                    </div>
-                    <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl rounded-bl-sm bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5] text-sm leading-relaxed whitespace-pre-wrap">
-                      {qa.answer}
-                    </div>
-                  </div>
-                )}
+          character.qa.map((qa, i) => (
+            <div key={i} className="space-y-2">
+              <div className="flex justify-end">
+                <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed text-white" style={{ backgroundColor: bubbleColor }}>
+                  {qa.question}
+                </div>
               </div>
-            );
-          })
+              <div className="flex gap-2 justify-start">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5" style={{ backgroundColor: bubbleColor }}>
+                  {character.name[0]}
+                </div>
+                <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl rounded-bl-sm bg-[#f7f3ed] text-[#1c1410] border border-[#e8e0d5] text-sm leading-relaxed whitespace-pre-wrap">
+                  {qa.answer}
+                </div>
+              </div>
+            </div>
+          ))
         )}
 
         <div className="pt-3 border-t border-[#e8e0d5]">
