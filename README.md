@@ -205,24 +205,44 @@ npm run dev
 
 <div align="center">
 
-### ✨ **The whole app runs on any single API key** ✨
+### ✨ **The whole app runs on any single API key — from any provider, anywhere** ✨
 
 </div>
 
-Supported providers: **Gemini · Cerebras · Groq · NVIDIA NIM · Anthropic · OpenAI**. All of the first four have usable free tiers.
-
-Drop *any one* of these into `backend/.env` and the app works end-to-end:
+**Six first-class providers**, free tiers in bold:
 
 ```bash
-GEMINI_API_KEY=...
-CEREBRAS_API_KEY=...
-GROQ_API_KEY=...
-NVIDIA_API_KEY=...
-ANTHROPIC_API_KEY=...
-OPENAI_API_KEY=...
+GEMINI_API_KEY=...      # 🌟 best free tier (1500 requests/day)
+GROQ_API_KEY=...        # 🚀 free tier — sub-second LPU inference
+CEREBRAS_API_KEY=...    # ⚡ free tier — fastest character turns
+NVIDIA_API_KEY=...      # 🎯 free tier — 90+ models on NIM
+ANTHROPIC_API_KEY=...   # 💳 paid — Claude (best quality)
+OPENAI_API_KEY=...      # 💳 paid — GPT-4o family
 ```
 
-Add **more than one** and the router splits roles by provider (Gemini for analysis, Cerebras for character turns, Groq for judge/narrator, etc.) and auto-fails over on rate-limit. With a single key the same key just does every role — slower on long debates but fully functional.
+**Plus — bring your own provider.** Anything that exposes an OpenAI-compatible `/chat/completions` endpoint works through a single generic slot:
+
+```bash
+CUSTOM_LLM_BASE_URL=https://api.deepseek.com/v1   # or wherever
+CUSTOM_LLM_API_KEY=sk-...
+CUSTOM_LLM_MODEL=deepseek-chat
+```
+
+This unlocks **DeepSeek · Qwen / Dashscope · Kimi (Moonshot) · Zhipu GLM · OpenRouter · Together · Fireworks · Perplexity · Ollama / LM Studio (local) · Azure OpenAI · GitHub Models · vLLM · llama.cpp** — basically any LLM provider in any country, plus self-hosted setups for full offline use.
+
+### 🪟 Picking models in the UI
+
+Click the **⚙ gear icon** in the top-right and the modal will:
+
+1. Fetch the **live list of chat-capable models** from each provider you've added a key for (calls each provider's real `/v1/models` API — no hardcoded model lists in the code).
+2. Show a dropdown per provider with our blessed pick marked **`(recommended)`**. First-time users can save and go.
+3. Expose an **Advanced** collapsible per provider — set different models for `Character voice / Story chat / Debate moderator / Narrator-summary` if you want fine-grained routing.
+
+Picks persist in your browser's localStorage and on the backend's runtime settings. As providers ship new models, they appear in the dropdown automatically — no app update needed.
+
+### 🔁 Multi-provider mode
+
+Add **more than one** key and the router builds a fallback chain: tries the user-picked model on the preferred provider for each role, auto-fails over to the next on rate-limit / quota errors. With a single key the same key just does every role — slower on long debates but fully functional.
 
 ---
 
@@ -295,6 +315,15 @@ Everything lives in `backend/.env` (see `backend/.env.example`). You only need *
 | `GROQ_API_KEY` | 🚀 Groq — fast judge/narrator |
 | `NVIDIA_API_KEY` | 🎯 NVIDIA NIM — broad model selection |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | 💳 Optional paid fallbacks |
+| `CUSTOM_LLM_BASE_URL` / `CUSTOM_LLM_API_KEY` / `CUSTOM_LLM_MODEL` | 🌍 Bring your own — any OpenAI-compatible endpoint (DeepSeek, Qwen, Kimi, OpenRouter, Ollama, LM Studio, Azure OpenAI…) |
+
+### 🎛️ Model overrides (optional — UI picker is the recommended path)
+
+Per-provider env-var overrides for users who'd rather not click. The gear-modal pick takes precedence over these if both are set.
+
+| Variable | Purpose |
+|---|---|
+| `ANTHROPIC_MODEL` / `OPENAI_MODEL` / `GEMINI_MODEL` / `GROQ_MODEL` / `CEREBRAS_MODEL` / `NVIDIA_MODEL` | Pin a specific model for that provider across all roles |
 
 ### ⚙️ App settings (all optional — defaults work)
 
@@ -304,7 +333,7 @@ Everything lives in `backend/.env` (see `backend/.env.example`). You only need *
 | `UPLOAD_DIR` | `./uploads` | PDFs + generated portraits |
 | `MAX_UPLOAD_SIZE_MB` | `50` | Upload cap |
 | `ALLOWED_ORIGINS` | `localhost:3000, localhost:3001` | CORS |
-| `ANALYSIS_MODEL` / `CHARACTER_AGENT_MODEL` / `JUDGE_MODEL` / `NARRATOR_MODEL` | *(set in .env.example)* | Per-role model IDs |
+| `ANALYSIS_MODEL` / `CHARACTER_AGENT_MODEL` / `JUDGE_MODEL` / `NARRATOR_MODEL` | *(set in .env.example)* | Legacy role-based model env vars — preserved for backwards compat |
 | `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | — | Enables Graphiti character memory |
 | `ENABLE_LIGHTRAG` | off | Narrative causal graph at upload (~60s) |
 | `REDIS_URL` | — | Optional caching layer |
@@ -322,7 +351,7 @@ Everything lives in `backend/.env` (see `backend/.env.example`). You only need *
 - 🐍 **Backend** — Python 3.10+, FastAPI, uvicorn, SSE streaming
 - ⚛️ **Frontend** — Next.js 16, TypeScript, Tailwind 4, D3 / force-graph
 - 💾 **State** — SQLite (debates, turns, characters) + ChromaDB (per-character RAG over story text). Optional Graphiti + Kuzu for persistent character "soul memory".
-- 🤖 **LLMs** — a provider router across **Gemini · Cerebras · NVIDIA NIM · Groq**, with role-based routing (character / judge / narrator / analysis) and automatic failover on rate-limit. Anthropic/OpenAI work as optional paid fallbacks.
+- 🤖 **LLMs** — a provider router across **Gemini · Cerebras · NVIDIA NIM · Groq · Anthropic · OpenAI** plus a **bring-your-own slot** for any OpenAI-compatible endpoint (DeepSeek, Qwen, Kimi, OpenRouter, Ollama, LM Studio, Azure OpenAI…). Model picks per provider come from a **live `/v1/models` dropdown** in the gear modal — no hardcoded model ids in the code, the list updates as providers ship new models. Role-based routing (character / judge / narrator / analysis), per-role overrides under "Advanced", automatic failover on rate-limit / quota.
 - 🖼️ **Character portraits** — generated via [Pollinations](https://pollinations.ai) during upload. Free, no API key. Generation is best-effort — a few portraits may not come through on any given upload; those characters fall back to an initials avatar.
 - 🔊 **Voice** — free, keyless TTS via Microsoft Edge (`edge-tts`). 16-voice pool, personality-driven base assignment across energy/authority/presence dimensions, emotion-driven per-turn modulation, audio cached to disk per turn.
 
