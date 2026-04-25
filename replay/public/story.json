@@ -4,25 +4,866 @@
   "author": "George Orwell",
   "tagline": "A bundled demo of WhatIfSabha running on Animal Farm.",
   "demo_divergence": "What if Boxer killed those dogs when they were trying to chase Snowball away?",
-  "synopsis": "The animals of Manor Farm, led by the pigs, overthrow their drunken owner and try to build a self-governing society. In the years that follow, the pigs consolidate power, the idealists are driven out, and the revolution's slogans are rewritten until the new masters are indistinguishable from the old.",
+  "themes": [
+    "Totalitarianism",
+    "Corruption of Power",
+    "Class Stratification",
+    "Manipulation of Language",
+    "Betrayal of Ideals"
+  ],
+  "word_count": 30507.0,
+  "synopsis": "A group of farm animals revolt against their human master to establish an egalitarian society, only to have their revolution betrayed by the pigs who become as tyrannical as the humans they replaced. The story serves as an allegory for the Russian Revolution and the rise of Stalinism.",
   "timeline": [
-    { "era": "Old Major's speech", "event": "The prize boar rallies the animals against human rule. Three nights later he dies." },
-    { "era": "The Rebellion", "event": "The animals drive Mr Jones off the farm and raise the green flag." },
-    { "era": "Early years", "event": "Snowball and Napoleon share leadership. The Seven Commandments are painted on the barn wall." },
-    { "era": "Snowball's expulsion", "event": "Napoleon's dogs chase Snowball off the farm. Napoleon takes sole power." },
-    { "era": "The windmill years", "event": "Boxer works himself to death. The windmill is built and destroyed twice." },
-    { "era": "The end", "event": "The pigs walk on two legs. The final commandment reads: 'All animals are equal, but some are more equal than others.'" }
+    {
+      "era": "Old Major's speech",
+      "event": "The prize boar rallies the animals against human rule. Three nights later he dies."
+    },
+    {
+      "era": "The Rebellion",
+      "event": "The animals drive Mr Jones off the farm and raise the green flag."
+    },
+    {
+      "era": "Early years",
+      "event": "Snowball and Napoleon share leadership. The Seven Commandments are painted on the barn wall."
+    },
+    {
+      "era": "Snowball's expulsion",
+      "event": "Napoleon's dogs chase Snowball off the farm. Napoleon takes sole power."
+    },
+    {
+      "era": "The windmill years",
+      "event": "Boxer works himself to death. The windmill is built and destroyed twice."
+    },
+    {
+      "era": "The end",
+      "event": "The pigs walk on two legs. The final commandment reads: 'All animals are equal, but some are more equal than others.'"
+    }
   ],
-  "cast": [
-    { "slug": "boru",     "name": "Boru",      "role": "moderator" },
-    { "slug": "napoleon", "name": "Napoleon",  "role": "antagonist" },
-    { "slug": "snowball", "name": "Snowball",  "role": "co-protagonist" },
-    { "slug": "boxer",    "name": "Boxer",     "role": "protagonist" },
-    { "slug": "squealer", "name": "Squealer",  "role": "supporting" },
-    { "slug": "clover",   "name": "Clover",    "role": "supporting" },
-    { "slug": "benjamin", "name": "Benjamin",  "role": "supporting" },
-    { "slug": "mr-jones", "name": "Mr. Jones", "role": "minor" }
-  ],
+  "overview": {
+    "knowledge_events": [
+      {
+        "character": "The Animals",
+        "learns": "The pigs are sleeping in beds.",
+        "timeline_position": 0.55,
+        "from_character": "Squealer",
+        "was_hidden_before": true,
+        "impact_on_character": "Causes confusion and erosion of trust in the Commandments."
+      },
+      {
+        "character": "The Animals",
+        "learns": "The Seven Commandments have been changed.",
+        "timeline_position": 0.95,
+        "from_character": null,
+        "was_hidden_before": true,
+        "impact_on_character": "Realization that the revolution has been completely subverted."
+      }
+    ],
+    "character_arcs": [
+      {
+        "name": "Napoleon",
+        "role": "protagonist",
+        "importance": 0.9,
+        "description": "Napoleon is a pig who emerges as the leader of Animal Farm after the rebellion against Mr. Jones. He is cunning, power-hungry, and manipulative, using propaganda and force to consolidate his power. As the story progresses, he becomes increasingly tyrannical and corrupt.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "excited and optimistic",
+            "motivations": [
+              "gaining power and control"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "cautious and calculating",
+            "motivations": [
+              "consolidating power and eliminating rivals"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "anxious and aggressive",
+            "motivations": [
+              "maintaining power and suppressing dissent"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "complacent and cynical",
+            "motivations": [
+              "enjoying privileges and luxuries"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Old Major",
+        "role": "supporting",
+        "importance": 0.8,
+        "description": "Old Major is a highly respected and wise boar on the farm who has a vision for a better future for all animals. He is the one who inspires the rebellion against Mr. Jones and establishes the principles of Animalism. He is a majestic-looking pig with a benevolent appearance, despite his old age and stoutness.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "passionate and determined",
+            "motivations": [
+              "to inspire the animals to rebel against Mr. Jones and establish a better future"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "n/a",
+            "motivations": [
+              "n/a"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "n/a",
+            "motivations": [
+              "n/a"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "n/a",
+            "motivations": [
+              "n/a"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Boxer",
+        "role": "protagonist",
+        "importance": 0.8,
+        "description": "Boxer is a hardworking and dedicated horse who is deeply committed to the principles of Animalism and the success of the farm. He is known for his strength, loyalty, and unwavering optimism. Despite his physical decline, he remains a symbol of the farm's ideals and a source of inspiration for the other animals.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "euphoric and hopeful",
+            "motivations": [
+              "to contribute to the success of the farm and the principles of Animalism"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "content and proud",
+            "motivations": [
+              "to maintain the success of the farm and the principles of Animalism"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "apprehensive and uncertain",
+            "motivations": [
+              "to continue contributing to the farm, despite growing concerns about the leadership"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "despondent and hopeless",
+            "motivations": [
+              "to survive and hold on to the last vestiges of the farm's ideals"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Benjamin",
+        "role": "supporting",
+        "importance": 0.8,
+        "description": "Benjamin is a wise, aged donkey who has witnessed the rise and fall of the animal rebellion on the farm. He is known for his cynicism and skepticism towards the pigs' leadership. Despite his age, Benjamin remains a steadfast and loyal companion to his fellow animals, particularly Boxer and Clover.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "cautiously optimistic",
+            "motivations": [
+              "survival",
+              "protection of fellow animals"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "disillusioned",
+            "motivations": [
+              "maintenance of the status quo",
+              "protection of fellow animals"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "despondent",
+            "motivations": [
+              "self-preservation",
+              "protection of fellow animals"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "enraged",
+            "motivations": [
+              "rescue of Boxer",
+              "exposure of Napoleon's deceit"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Clover",
+        "role": "supporting",
+        "importance": 0.7,
+        "description": "Clover is a wise and aged horse who plays a significant role in the story, often serving as a voice of reason and concern. She is a loyal member of the farm community and is particularly close to Benjamin. Clover's character represents a sense of tradition, wisdom, and moral integrity.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "hopeful but anxious",
+            "motivations": [
+              "support the rebellion",
+              "protect the farm"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "content and proud",
+            "motivations": [
+              "contribute to the farm's success",
+              "build a better life"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "uneasy and worried",
+            "motivations": [
+              "protect the farm from corruption",
+              "preserve the original ideals"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "sad and resigned",
+            "motivations": [
+              "survive and cope",
+              "preserve memories of the past"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Mr. Jones",
+        "role": "minor",
+        "importance": 0.6,
+        "description": "Mr. Jones is the owner of the Manor Farm, who is often drunk and neglects his farm, leading to the animals' rebellion. He is a symbol of the old regime and the oppression of the working class. His character serves as a catalyst for the events of the story.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "intoxicated and complacent",
+            "motivations": [
+              "maintaining power and control"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "absent",
+            "motivations": [
+              "none"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "absent",
+            "motivations": [
+              "none"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "absent",
+            "motivations": [
+              "none"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Mr. Whymper",
+        "role": "minor",
+        "importance": 0.6,
+        "description": "Mr. Whymper is a solicitor who acts as an intermediary between Animal Farm and the outside world, facilitating trade and communication while being somewhat exploitative and opportunistic.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "cautious optimism",
+            "motivations": [
+              "financial gain"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "confidence and cunning",
+            "motivations": [
+              "expanding his role as intermediary"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "pragmatic caution",
+            "motivations": [
+              "maintaining his position and profits"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "resigned acceptance",
+            "motivations": [
+              "self-preservation and maintaining his arrangement"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Mr. Pilkington",
+        "role": "minor",
+        "importance": 0.6,
+        "description": "Mr. Pilkington is a neighboring farmer who is initially mentioned as a potential buyer of Animal Farm's produce, but his character evolves to represent the external threat and skepticism towards the farm's success.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "cautious",
+            "motivations": [
+              "protect his own farm's interests"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "incredulous",
+            "motivations": [
+              "prove Animal Farm's failure"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "apprehensive",
+            "motivations": [
+              "find ways to exploit Animal Farm's situation"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "calculating",
+            "motivations": [
+              "capitalize on Animal Farm's desperation"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Snowball",
+        "role": "antagonist",
+        "importance": 0.3,
+        "description": "advocates for the building of the windmill and is chased away by Napoleon's dogs",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "unknown",
+            "motivations": []
+          }
+        ]
+      },
+      {
+        "name": "Squealer",
+        "role": "antagonist",
+        "importance": 0.3,
+        "description": "explains the new arrangement to the other animals and justifies Napoleon's actions",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "unknown",
+            "motivations": []
+          }
+        ]
+      },
+      {
+        "name": "Minimus",
+        "role": "minor",
+        "importance": 0.3,
+        "description": "sits with Napoleon and Squealer on the raised platform and has a gift for composing songs and poems",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "unknown",
+            "motivations": []
+          }
+        ]
+      },
+      {
+        "name": "Mr. Frederick",
+        "role": "minor",
+        "importance": 0.3,
+        "description": "is a potential business partner for Napoleon",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "unknown",
+            "motivations": []
+          }
+        ]
+      },
+      {
+        "name": "Moses",
+        "role": "supporting",
+        "importance": 0.3,
+        "description": "reappears on the farm and tells stories about Sugarcandy Mountain to the other animals",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "unknown",
+            "motivations": []
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "unknown",
+            "motivations": []
+          }
+        ]
+      },
+      {
+        "name": "Bluebell",
+        "role": "minor",
+        "importance": 0.2,
+        "description": "Bluebell is a horse on Animal Farm, known for her strength and loyalty. She is a hard worker and contributes to the farm's prosperity. Despite her minor role, Bluebell's actions and interactions reveal her character and emotional state throughout the story.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "excited and hopeful",
+            "motivations": [
+              "desire for freedom and equality"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "content and fulfilled",
+            "motivations": [
+              "desire to contribute to the farm's success",
+              "need for social approval"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "anxious and uncertain",
+            "motivations": [
+              "desire for stability and security",
+              "fear of punishment"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "defeated and hopeless",
+            "motivations": [
+              "desire for survival",
+              "need for self-preservation"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Jessie",
+        "role": "minor",
+        "importance": 0.2,
+        "description": "Jessie is a minor character in the story Animal Farm, likely one of the animals on the farm, given the context of the story. The specific details about Jessie are not directly provided in the given passages, but based on the story's context, Jessie could be inferred to be involved in the events unfolding on the farm. As a minor character, Jessie's actions and thoughts are not extensively detailed but are part of the collective experience of the animals.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "euphoric and hopeful",
+            "motivations": [
+              "to be part of something new and revolutionary"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "content and busy",
+            "motivations": [
+              "to contribute to the farm's success"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "anxious and uncertain",
+            "motivations": [
+              "to avoid conflict and maintain peace"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "defeated and hopeless",
+            "motivations": [
+              "to survive and maintain some level of dignity"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Muriel",
+        "role": "minor",
+        "importance": 0.2,
+        "description": "Muriel is a goat who lives on Animal Farm, she is a minor character who is not deeply involved in the main events of the story but is part of the community.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "apprehensive",
+            "motivations": [
+              "survival",
+              "stability"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "optimistic",
+            "motivations": [
+              "contributing to the community",
+              "building a better future"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "anxious",
+            "motivations": [
+              "protecting herself and others",
+              "preserving the original ideals of Animalism"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "despondent",
+            "motivations": [
+              "survival",
+              "avoiding trouble"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Mollie",
+        "role": "minor",
+        "importance": 0.2,
+        "description": "Mollie is a self-centered and vain horse who is more concerned with her appearance and social status than with the welfare of the other animals on the farm. She is often depicted as being frivolous and lacking in depth, but also has a certain charm and charisma that makes her a compelling character.",
+        "phase_count": 4,
+        "phases": [
+          {
+            "phase_id": "the_rebellion",
+            "emotional_state": "anxious and uncertain",
+            "motivations": [
+              "to maintain her social status and appearance"
+            ]
+          },
+          {
+            "phase_id": "the_golden_age",
+            "emotional_state": "excited and hopeful",
+            "motivations": [
+              "to contribute to the farm's success and prosperity"
+            ]
+          },
+          {
+            "phase_id": "the_rise_of_dictatorship",
+            "emotional_state": "fearful and uncertain",
+            "motivations": [
+              "to survive and thrive in a changing environment"
+            ]
+          },
+          {
+            "phase_id": "the_totalitarian_state",
+            "emotional_state": "despondent and hopeless",
+            "motivations": [
+              "to escape the farm and find a better life"
+            ]
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "from": "Napoleon",
+        "to": "Snowball",
+        "type": "rivals",
+        "description": "Napoleon views Snowball as a threat to his absolute authority.",
+        "strength": 1.0
+      },
+      {
+        "from": "Napoleon",
+        "to": "Boxer",
+        "type": "uses",
+        "description": "Napoleon exploits Boxer's loyalty and strength for labor.",
+        "strength": 0.9
+      },
+      {
+        "from": "Squealer",
+        "to": "Napoleon",
+        "type": "controls",
+        "description": "Squealer acts as the propaganda mouthpiece for Napoleon.",
+        "strength": 0.9
+      },
+      {
+        "from": "Napoleon",
+        "to": "The Dogs",
+        "type": "controls",
+        "description": "The dogs serve as Napoleon's personal secret police.",
+        "strength": 1.0
+      }
+    ],
+    "divergence_points": [
+      {
+        "event_id": "old_majors_speech",
+        "description": "What if Old Major had lived to lead the revolution himself?",
+        "affected_characters": [
+          "Old Major",
+          "Napoleon"
+        ]
+      },
+      {
+        "event_id": "expulsion_of_snowball",
+        "description": "What if Snowball had successfully defended himself against the dogs?",
+        "affected_characters": [
+          "Snowball",
+          "Napoleon"
+        ]
+      },
+      {
+        "event_id": "the_great_purge",
+        "description": "What if the animals had collectively resisted the dogs during the purge?",
+        "affected_characters": [
+          "Boxer",
+          "Napoleon"
+        ]
+      },
+      {
+        "event_id": "death_of_boxer",
+        "description": "What if Benjamin had successfully warned Boxer about the van's destination?",
+        "affected_characters": [
+          "Boxer",
+          "Benjamin"
+        ]
+      },
+      {
+        "event_id": "the_rebellion",
+        "description": "What if the animals had allowed Mr. Jones to return after a short period of chaos?",
+        "affected_characters": [
+          "Mr. Jones",
+          "Napoleon"
+        ]
+      },
+      {
+        "event_id": "the_rise_of_dictatorship",
+        "description": "What if the other animals had learned to read and write as well as the pigs?",
+        "affected_characters": [
+          "The Animals",
+          "Napoleon"
+        ]
+      },
+      {
+        "event_id": "the_totalitarian_state",
+        "description": "What if the neighboring farmers had intervened militarily earlier?",
+        "affected_characters": [
+          "Napoleon",
+          "Mr. Pilkington"
+        ]
+      },
+      {
+        "event_id": "the_golden_age",
+        "description": "What if the windmill had been built successfully without the internal sabotage?",
+        "affected_characters": [
+          "Snowball",
+          "Napoleon"
+        ]
+      }
+    ],
+    "timeline_phases": [
+      {
+        "phase_id": "the_rebellion",
+        "name": "The Rebellion",
+        "description": "The animals overthrow Mr. Jones and establish Animalism.",
+        "timeline_position_start": 0.0,
+        "timeline_position_end": 0.2,
+        "chapter_range": [
+          1,
+          2
+        ],
+        "trigger_event": "Old Major's speech and the neglect of the animals by Mr. Jones."
+      },
+      {
+        "phase_id": "the_golden_age",
+        "name": "The Golden Age",
+        "description": "Initial success and unity under the Seven Commandments.",
+        "timeline_position_start": 0.2,
+        "timeline_position_end": 0.4,
+        "chapter_range": [
+          3,
+          4
+        ],
+        "trigger_event": "The successful harvest and the Battle of the Cowshed."
+      },
+      {
+        "phase_id": "the_rise_of_dictatorship",
+        "name": "The Rise of Dictatorship",
+        "description": "Napoleon consolidates power through force and propaganda.",
+        "timeline_position_start": 0.4,
+        "timeline_position_end": 0.7,
+        "chapter_range": [
+          5,
+          7
+        ],
+        "trigger_event": "The expulsion of Snowball by the dogs."
+      },
+      {
+        "phase_id": "the_totalitarian_state",
+        "name": "The Totalitarian State",
+        "description": "The pigs fully adopt human vices and oppress the other animals.",
+        "timeline_position_start": 0.7,
+        "timeline_position_end": 1.0,
+        "chapter_range": [
+          8,
+          10
+        ],
+        "trigger_event": "The final transformation of the Seven Commandments."
+      }
+    ],
+    "key_events": [
+      {
+        "event_id": "old_majors_speech",
+        "name": "Old Major's Speech",
+        "description": "Old Major inspires the animals to dream of a world without human tyranny.",
+        "timeline_position": 0.05,
+        "chapter": 1,
+        "characters_involved": [
+          "Old Major"
+        ],
+        "is_turning_point": true,
+        "consequence": "The seeds of the Rebellion are planted."
+      },
+      {
+        "event_id": "expulsion_of_snowball",
+        "name": "Expulsion of Snowball",
+        "description": "Napoleon uses his trained dogs to chase Snowball off the farm.",
+        "timeline_position": 0.45,
+        "chapter": 5,
+        "characters_involved": [
+          "Napoleon",
+          "Snowball"
+        ],
+        "is_turning_point": true,
+        "consequence": "Napoleon gains absolute control over the farm."
+      },
+      {
+        "event_id": "the_great_purge",
+        "name": "The Great Purge",
+        "description": "Napoleon executes animals who 'confess' to conspiring with Snowball.",
+        "timeline_position": 0.65,
+        "chapter": 7,
+        "characters_involved": [
+          "Napoleon",
+          "Squealer"
+        ],
+        "is_turning_point": true,
+        "consequence": "Fear becomes the primary tool of governance."
+      },
+      {
+        "event_id": "death_of_boxer",
+        "name": "Death of Boxer",
+        "description": "Napoleon sells the loyal, dying Boxer to a glue boiler.",
+        "timeline_position": 0.85,
+        "chapter": 9,
+        "characters_involved": [
+          "Boxer",
+          "Napoleon"
+        ],
+        "is_turning_point": true,
+        "consequence": "The final moral collapse of the farm's leadership."
+      }
+    ]
+  },
   "qa": [
     {
       "question": "Why pick Animal Farm for the demo?",

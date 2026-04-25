@@ -795,32 +795,9 @@ export default function DebateViewPage() {
 
   return (
     <>
-      {/* ── Top header — NavBar row + what-if banner row, flush together ── */}
-      <header className="sticky top-0 left-0 right-0 z-50 bg-[#f7f3ed]/95 backdrop-blur-md border-b border-[#e8e0d5]">
-        {/* Row 1: logo + nav */}
-        <div className="px-8 lg:px-12 h-14 flex items-center justify-between">
-          <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 group shrink-0">
-            <div className="w-8 h-8 rounded-xl bg-[#c07820] flex items-center justify-center shadow-sm group-hover:bg-[#a86a18] transition-colors overflow-hidden">
-              <span style={{ color: "#fef9c3", fontSize: "28px", lineHeight: 1 }}>☸</span>
-            </div>
-            <span className="font-bold text-lg tracking-tight text-[#1c1410]">
-              WhatIf<span className="text-[#c07820]">Sabha</span>
-            </span>
-            <span className="ml-2 text-[10px] uppercase tracking-widest text-[#a09282] bg-[#f0ebe4] border border-[#e8e0d5] px-2 py-0.5 rounded-full">Demo</span>
-          </a>
-          <div className="flex items-center gap-1.5">
-            <a href={REPO_URL} target="_blank" rel="noreferrer"
-              className="text-sm font-medium transition-colors px-4 py-2 rounded-full border text-[#6b5c4e] hover:text-[#1c1410] border-[#e8e0d5] hover:border-[#c8b89a] bg-white/60 hover:bg-white">
-              View on GitHub
-            </a>
-            <a href={REPO_URL} target="_blank" rel="noreferrer"
-              className="text-sm font-medium transition-colors px-4 py-2 rounded-full border bg-[#c07820] text-white border-[#c07820] hover:bg-[#a86a18]">
-              Try it yourself →
-            </a>
-          </div>
-        </div>
-        {/* Row 2: what-if banner (Export PDF, completed badge, avatars) */}
-        <div className="border-t border-[#e8e0d5] bg-white/70 px-8 lg:px-12 py-2 flex items-center justify-between gap-4">
+      {/* ── Debate sub-header (what-if banner) — sits below the TopNav ── */}
+      <header className="sticky top-14 left-0 right-0 z-40 bg-[#f7f3ed]/95 backdrop-blur-md border-b border-[#e8e0d5]">
+        <div className="bg-white/70 px-8 lg:px-12 py-2 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-[10px] uppercase tracking-widest text-[#c07820] font-semibold shrink-0">What if</span>
             <p className="text-[#6b5c4e] text-xs truncate italic">"{debate.divergence_description}"</p>
