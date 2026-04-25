@@ -1,1 +1,58 @@
-{}
+{
+  "boru": {
+    "slug": "boru",
+    "name": "Boru",
+    "role": "moderator",
+    "description": "An elephant — calm, watchful, and slow to forget. Boru runs the room: he calls speakers by name, forces confrontations between contradictions, and pulls silent characters into the floor when the cast goes quiet. He carries no opinion of his own about the story; his job is to make the conversation go somewhere.",
+    "qa": []
+  },
+  "napoleon": {
+    "slug": "napoleon",
+    "name": "Napoleon",
+    "role": "antagonist",
+    "description": "A large, fierce-looking Berkshire boar who consolidates power on the farm after Snowball is exiled. Napoleon does not speak much in public; he prefers private decisions and the dogs that enforce them. By the end of the book the line between him and the humans is gone.",
+    "qa": []
+  },
+  "snowball": {
+    "slug": "snowball",
+    "name": "Snowball",
+    "role": "co-protagonist",
+    "description": "A vivacious, inventive pig who designs the windmill and plans the future of Animal Farm. He is run off the farm by Napoleon's dogs and afterwards becomes the regime's official scapegoat for every misfortune.",
+    "qa": []
+  },
+  "boxer": {
+    "slug": "boxer",
+    "name": "Boxer",
+    "role": "protagonist",
+    "description": "An enormous cart-horse, gentle and devoted to the revolution. His two answers to every problem are 'I will work harder' and 'Napoleon is always right.' He works himself into a slow collapse and is sold to the knacker for whisky money.",
+    "qa": []
+  },
+  "squealer": {
+    "slug": "squealer",
+    "name": "Squealer",
+    "role": "supporting",
+    "description": "A small fat pig and the regime's spokesman. He explains every reversal, every privilege, every commandment-rewrite, and the animals always end up convinced. He is, in his way, the most gifted pig on the farm.",
+    "qa": []
+  },
+  "clover": {
+    "slug": "clover",
+    "name": "Clover",
+    "role": "supporting",
+    "description": "A motherly cart-mare who watches more than she says. She suspects what is happening at every stage but cannot quite say it out loud — and when she finally tries to read the rewritten commandments, she cannot read.",
+    "qa": []
+  },
+  "benjamin": {
+    "slug": "benjamin",
+    "name": "Benjamin",
+    "role": "supporting",
+    "description": "An old donkey, cynical and literate. He understands what the pigs are doing from the start and refuses to take any side. His only sustained emotion comes when Boxer is taken to the knacker — and even then he is too late.",
+    "qa": []
+  },
+  "mr-jones": {
+    "slug": "mr-jones",
+    "name": "Mr. Jones",
+    "role": "minor",
+    "description": "The drunken owner of the Manor Farm whose neglect triggers the rebellion. After the animals drive him out he tries — and fails — to retake the farm by force. He spends the rest of the book offstage as a memory of the old order.",
+    "qa": []
+  }
+}
