@@ -884,41 +884,6 @@ export default function DebateViewPage() {
             </div>
           )}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Speaking-now indicator (matches live page status row) */}
-            {audioIdx !== null && audioIdx >= 0 && transcript[audioIdx] && (
-              <span className="hidden sm:flex items-center gap-1.5 text-xs">
-                <span className="w-2 h-2 rounded-full bg-[#c07820] animate-pulse shrink-0" />
-                <span className="font-semibold truncate" style={{ color: colorOf(transcript[audioIdx].character, chars).hex }}>
-                  {transcript[audioIdx].character}
-                </span>
-                <span className="text-[#a09282] shrink-0">speaking 🔊</span>
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                const next = !audioAutoPlay;
-                setAudioAutoPlay(next);
-                audioAutoPlayRef.current = next;
-                if (!next) stopAudio();
-              }}
-              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors shrink-0 ${
-                audioAutoPlay
-                  ? "bg-[#c07820] text-white border-[#c07820]"
-                  : "text-[#6b5c4e] border-[#e8e0d5] hover:border-[#c07820] hover:text-[#c07820]"
-              }`}
-              title={audioAutoPlay ? "Mute" : "Auto-play"}
-            >
-              {audioAutoPlay ? "🔊 Auto-Play On" : "🔇 Auto-Play Off"}
-            </button>
-            <button
-              onClick={handleExport}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#1c1410] text-xs font-medium border border-[#f0c060]/60 hover:bg-[#fde9c9] transition-colors print:hidden"
-              aria-label="Export debate as PDF"
-              title="Export debate as PDF — includes title, graph, and full transcript"
-            >
-              📥 Export PDF
-            </button>
             <span className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
               debate.status === "completed"
                 ? "border-emerald-200 text-emerald-700 bg-emerald-50"
@@ -939,30 +904,73 @@ export default function DebateViewPage() {
       >
         {/* LEFT: Transcript + chat */}
         <div className="flex flex-col overflow-hidden" style={{ width: `${splitPct}%` }}>
-          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-1 min-h-0">
 
-            {/* Emotion legend */}
-            <div className="mb-3">
-              <button
-                onClick={() => setShowLegend(v => !v)}
-                className="flex items-center gap-2 text-xs text-[#a09282] hover:text-[#6b5c4e] uppercase tracking-widest font-medium transition-colors"
-              >
-                <span>{showLegend ? "▾" : "▸"}</span>
-                Emotion colours
-              </button>
-              {showLegend && (
-                <div className="mt-2 bg-white border border-[#e8e0d5] rounded-xl px-4 py-3 grid grid-cols-3 gap-x-4 gap-y-1.5">
-                  {Object.entries(EMOTION_STYLE)
-                    .filter(([key]) => key !== "neutral")
-                    .map(([key, em]) => (
-                      <div key={key} className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
-                        <span className="text-xs text-[#6b5c4e]">{em.label}</span>
-                      </div>
-                    ))}
-                </div>
+          {/* Fixed toolbar — emotions + status + auto-play (matches live page) */}
+          <div data-print-hide="true" className="shrink-0 border-b border-[#e8e0d5] bg-white/90 px-5 py-1.5 flex items-center gap-3 min-h-[36px]">
+            {/* Emotion legend toggle */}
+            <button
+              onClick={() => setShowLegend(v => !v)}
+              className="flex items-center gap-1.5 text-[10px] text-[#a09282] hover:text-[#6b5c4e] uppercase tracking-widest font-medium transition-colors shrink-0"
+            >
+              <span>{showLegend ? "▾" : "▸"}</span>
+              Emotions
+            </button>
+            {/* Status — centered, shows speaking-now */}
+            <div className="flex-1 flex items-center justify-center gap-3 min-w-0">
+              {audioIdx !== null && audioIdx >= 0 && transcript[audioIdx] && (
+                <span className="flex items-center gap-1.5 text-xs truncate">
+                  <span className="w-2 h-2 rounded-full bg-[#c07820] animate-pulse shrink-0" />
+                  <span className="font-semibold truncate" style={{ color: colorOf(transcript[audioIdx].character, chars).hex }}>
+                    {transcript[audioIdx].character}
+                  </span>
+                  <span className="text-[#a09282] shrink-0">speaking 🔊</span>
+                </span>
               )}
             </div>
+            {/* Auto-play toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !audioAutoPlay;
+                setAudioAutoPlay(next);
+                audioAutoPlayRef.current = next;
+                if (!next) stopAudio();
+              }}
+              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors shrink-0 ${
+                audioAutoPlay
+                  ? "bg-[#c07820] text-white border-[#c07820]"
+                  : "text-[#6b5c4e] border-[#e8e0d5] hover:border-[#c07820] hover:text-[#c07820]"
+              }`}
+              title={audioAutoPlay ? "Mute" : "Auto-play"}
+            >
+              {audioAutoPlay ? "🔊 Auto-Play On" : "🔇 Auto-Play Off"}
+            </button>
+            {/* Export PDF — sits beside auto-play (matches live page) */}
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[#f0c060]/60 bg-[#fef3e2] text-[#1c1410] hover:bg-[#fde9c9] transition-colors shrink-0 print:hidden"
+              aria-label="Export debate as PDF"
+              title="Export debate as PDF — includes title, graph, and full transcript"
+            >
+              📥 Export PDF
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-1 min-h-0">
+
+            {/* Emotion legend popover (visible when toolbar toggle is on) */}
+            {showLegend && (
+              <div className="mb-3 bg-white border border-[#e8e0d5] rounded-xl px-4 py-3 grid grid-cols-3 gap-x-4 gap-y-1.5">
+                {Object.entries(EMOTION_STYLE)
+                  .filter(([key]) => key !== "neutral")
+                  .map(([key, em]) => (
+                    <div key={key} className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: em.dot }} />
+                      <span className="text-xs text-[#6b5c4e]">{em.label}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
 
             {transcript.map((entry, i) => {
               // Skip reactions (no longer generated, but old transcripts may have them)
