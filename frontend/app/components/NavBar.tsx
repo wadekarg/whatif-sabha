@@ -196,9 +196,45 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // Clear a single provider's key — sends an explicit empty string to the
+  // backend (overrides any value in .env) and wipes localStorage.
+  async function clearProviderKey(provider: ProviderName | "custom") {
+    if (!confirm(`Clear the ${provider} key? This removes it from the running app and overrides any value still in your backend .env file.`)) return;
+    setError("");
+    try {
+      const payload: Record<string, string> = {};
+      if (provider === "anthropic") { setAnthropic(""); payload.anthropic_key = ""; localStorage.removeItem("wis_anthropic_key"); }
+      else if (provider === "openai") { setOpenai(""); payload.openai_key = ""; localStorage.removeItem("wis_openai_key"); }
+      else if (provider === "gemini") { setGemini(""); payload.gemini_key = ""; localStorage.removeItem("wis_gemini_key"); }
+      else if (provider === "groq") { setGroq(""); payload.groq_key = ""; localStorage.removeItem("wis_groq_key"); }
+      else if (provider === "cerebras") { setCerebras(""); payload.cerebras_key = ""; localStorage.removeItem("wis_cerebras_key"); }
+      else if (provider === "nvidia") { setNvidia(""); payload.nvidia_key = ""; localStorage.removeItem("wis_nvidia_key"); }
+      else if (provider === "custom") {
+        setCustomBaseUrl(""); setCustomApiKey(""); setCustomModel("");
+        payload.custom_llm_base_url = ""; payload.custom_llm_api_key = ""; payload.custom_llm_model = "";
+        localStorage.removeItem("wis_custom_base_url");
+        localStorage.removeItem("wis_custom_api_key");
+        localStorage.removeItem("wis_custom_model");
+      }
+      const res = await fetch(`${API}/settings/keys`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      // Refresh the configured-status badges
+      try {
+        const statusRes = await fetch(`${API}/settings/keys/status`);
+        if (statusRes.ok) setEnvStatus(await statusRes.json());
+      } catch {}
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   const KeyInput = ({
-    label, value, onChange, placeholder, href, configured, linkText
-  }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; href: string; configured?: boolean; linkText?: string }) => (
+    label, value, onChange, placeholder, href, configured, linkText, onClear
+  }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; href: string; configured?: boolean; linkText?: string; onClear?: () => void | Promise<void> }) => (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -209,8 +245,20 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
               : <span className="text-xs text-[#b8a898] bg-[#f7f3ed] border border-[#e8e0d5] px-2 py-0.5 rounded-full font-medium">not set</span>
           )}
         </div>
-        <a href={href} target="_blank" rel="noopener noreferrer"
-          className="text-xs text-[#c07820] hover:underline">{linkText || "Get key →"}</a>
+        <div className="flex items-center gap-3">
+          {configured && onClear && (
+            <button
+              type="button"
+              onClick={() => onClear()}
+              className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium"
+              title="Remove this key from the running app and override any value in .env"
+            >
+              Clear key
+            </button>
+          )}
+          <a href={href} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-[#c07820] hover:underline">{linkText || "Get key →"}</a>
+        </div>
       </div>
       <input
         type="password"
@@ -326,19 +374,22 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-1.5">
               <KeyInput label="Anthropic (Claude)" value={anthropic} onChange={setAnthropic}
                 placeholder="sk-ant-..." href="https://console.anthropic.com/settings/keys"
-                configured={envStatus?.anthropic} />
+                configured={envStatus?.anthropic}
+                onClear={() => clearProviderKey("anthropic")} />
               <ModelPicker provider="anthropic" />
             </div>
             <div className="space-y-1.5">
               <KeyInput label="OpenAI" value={openai} onChange={setOpenai}
                 placeholder="sk-..." href="https://platform.openai.com/api-keys"
-                configured={envStatus?.openai} />
+                configured={envStatus?.openai}
+                onClear={() => clearProviderKey("openai")} />
               <ModelPicker provider="openai" />
             </div>
             <div className="space-y-1.5">
               <KeyInput label="Google Gemini" value={gemini} onChange={setGemini}
                 placeholder="AIza..." href="https://aistudio.google.com/apikey"
-                configured={envStatus?.gemini} linkText="Get free key →" />
+                configured={envStatus?.gemini} linkText="Get free key →"
+                onClear={() => clearProviderKey("gemini")} />
               <ModelPicker provider="gemini" />
             </div>
           </div>
@@ -360,19 +411,22 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                 <div className="space-y-1.5">
                   <KeyInput label="Groq" value={groq} onChange={setGroq}
                     placeholder="gsk_..." href="https://console.groq.com/keys"
-                    configured={envStatus?.groq} linkText="Get free key →" />
+                    configured={envStatus?.groq} linkText="Get free key →"
+                    onClear={() => clearProviderKey("groq")} />
                   <ModelPicker provider="groq" />
                 </div>
                 <div className="space-y-1.5">
                   <KeyInput label="Cerebras" value={cerebras} onChange={setCerebras}
                     placeholder="csk-..." href="https://cloud.cerebras.ai"
-                    configured={envStatus?.cerebras} linkText="Get free key →" />
+                    configured={envStatus?.cerebras} linkText="Get free key →"
+                    onClear={() => clearProviderKey("cerebras")} />
                   <ModelPicker provider="cerebras" />
                 </div>
                 <div className="space-y-1.5">
                   <KeyInput label="NVIDIA NIM" value={nvidia} onChange={setNvidia}
                     placeholder="nvapi-..." href="https://build.nvidia.com"
-                    configured={envStatus?.nvidia} linkText="Get free key →" />
+                    configured={envStatus?.nvidia} linkText="Get free key →"
+                    onClear={() => clearProviderKey("nvidia")} />
                   <ModelPicker provider="nvidia" />
                 </div>
               </div>

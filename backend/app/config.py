@@ -74,28 +74,51 @@ def update_runtime_keys(
     custom_llm_api_key: str = None,
     custom_llm_model: str = None,
 ):
-    if gemini_key:
-        _runtime_keys["GEMINI_API_KEY"] = gemini_key
-    if groq_key:
-        _runtime_keys["GROQ_API_KEY"] = groq_key
-    if cerebras_key:
-        _runtime_keys["CEREBRAS_API_KEY"] = cerebras_key
-    if nvidia_key:
-        _runtime_keys["NVIDIA_API_KEY"] = nvidia_key
-    if anthropic_key:
-        _runtime_keys["ANTHROPIC_API_KEY"] = anthropic_key
-    if openai_key:
-        _runtime_keys["OPENAI_API_KEY"] = openai_key
-    if custom_llm_base_url:
-        _runtime_keys["CUSTOM_LLM_BASE_URL"] = custom_llm_base_url
-    if custom_llm_api_key:
-        _runtime_keys["CUSTOM_LLM_API_KEY"] = custom_llm_api_key
-    if custom_llm_model:
-        _runtime_keys["CUSTOM_LLM_MODEL"] = custom_llm_model
+    """Set or clear runtime keys.
+
+    Sentinels:
+      - None = caller did not pass this field; leave unchanged.
+      - ""   = caller explicitly cleared the field; override any .env value.
+      - "x"  = set to "x".
+
+    Empty-string ("cleared") values are stored explicitly so downstream code
+    can tell "user cleared this" apart from "user never set it".
+    """
+    pairs = (
+        ("GEMINI_API_KEY",      gemini_key),
+        ("GROQ_API_KEY",        groq_key),
+        ("CEREBRAS_API_KEY",    cerebras_key),
+        ("NVIDIA_API_KEY",      nvidia_key),
+        ("ANTHROPIC_API_KEY",   anthropic_key),
+        ("OPENAI_API_KEY",      openai_key),
+        ("CUSTOM_LLM_BASE_URL", custom_llm_base_url),
+        ("CUSTOM_LLM_API_KEY",  custom_llm_api_key),
+        ("CUSTOM_LLM_MODEL",    custom_llm_model),
+    )
+    for env_name, value in pairs:
+        if value is None:
+            continue  # not provided
+        # Empty string is the "explicit clear" sentinel — store it as-is.
+        _runtime_keys[env_name] = value
 
 
 def get_runtime_keys() -> dict:
     return _runtime_keys
+
+
+def get_effective_key(env_name: str) -> str:
+    """Resolve a key respecting the runtime-clear sentinel.
+
+    If the user has explicitly cleared a key via the UI, the runtime dict
+    will have that key set to ''. We return None in that case (treat as
+    not configured) instead of falling back to whatever is in .env.
+    """
+    if env_name in _runtime_keys:
+        # Explicitly set in runtime — including '' (cleared) takes precedence.
+        return _runtime_keys[env_name] or None
+    # Not in runtime — fall back to .env via Settings.
+    s = get_settings()
+    return getattr(s, env_name, None) or None
 
 
 class Settings(BaseSettings):
@@ -150,8 +173,15 @@ def get_settings() -> Settings:
 
 
 def _key(env_key: str) -> str:
-    """Return runtime override if set, else fall back to .env value."""
-    return _runtime_keys.get(env_key) or (get_settings().__dict__.get(env_key) or "")
+    """Return runtime override if set, else fall back to .env value.
+
+    Respects the explicit-clear sentinel: if the user has cleared a key
+    via the UI (runtime value == ""), we honour that and return ""
+    instead of falling back to .env.
+    """
+    if env_key in _runtime_keys:
+        return _runtime_keys[env_key] or ""
+    return get_settings().__dict__.get(env_key) or ""
 
 
 def _is_rate_limit(exc: Exception) -> bool:

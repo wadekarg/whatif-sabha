@@ -44,16 +44,20 @@ class KeysRequest(BaseModel):
 
 @router.post("/keys")
 async def set_api_keys(body: KeysRequest):
+    # Pass values through verbatim. update_runtime_keys distinguishes:
+    #   None = field not provided (don't touch)
+    #   ""   = explicit clear (overrides .env)
+    #   "x"  = set new value
     update_runtime_keys(
-        gemini_key=body.gemini_key or None,
-        groq_key=body.groq_key or None,
-        cerebras_key=body.cerebras_key or None,
-        nvidia_key=body.nvidia_key or None,
-        anthropic_key=body.anthropic_key or None,
-        openai_key=body.openai_key or None,
-        custom_llm_base_url=body.custom_llm_base_url or None,
-        custom_llm_api_key=body.custom_llm_api_key or None,
-        custom_llm_model=body.custom_llm_model or None,
+        gemini_key=body.gemini_key,
+        groq_key=body.groq_key,
+        cerebras_key=body.cerebras_key,
+        nvidia_key=body.nvidia_key,
+        anthropic_key=body.anthropic_key,
+        openai_key=body.openai_key,
+        custom_llm_base_url=body.custom_llm_base_url,
+        custom_llm_api_key=body.custom_llm_api_key,
+        custom_llm_model=body.custom_llm_model,
     )
     # Per-provider model picks
     for provider, cfg in (
@@ -73,25 +77,25 @@ async def set_api_keys(body: KeysRequest):
 @router.get("/keys/status")
 async def get_keys_status():
     """Returns which keys are configured and the current model picks per provider,
-    without revealing values."""
-    runtime = get_runtime_keys()
-    s = get_settings()
+    without revealing values. Respects the explicit-clear sentinel — a key
+    cleared via the UI overrides any value still in .env."""
+    from app.config import get_effective_key
     models = get_runtime_models()
 
-    custom_base  = runtime.get("CUSTOM_LLM_BASE_URL") or s.CUSTOM_LLM_BASE_URL
-    custom_key   = runtime.get("CUSTOM_LLM_API_KEY")  or s.CUSTOM_LLM_API_KEY
-    custom_model = runtime.get("CUSTOM_LLM_MODEL")    or s.CUSTOM_LLM_MODEL
+    custom_base  = get_effective_key("CUSTOM_LLM_BASE_URL")
+    custom_key   = get_effective_key("CUSTOM_LLM_API_KEY")
+    custom_model = get_effective_key("CUSTOM_LLM_MODEL")
 
     return {
-        "anthropic": bool(runtime.get("ANTHROPIC_API_KEY") or s.ANTHROPIC_API_KEY),
-        "openai":    bool(runtime.get("OPENAI_API_KEY")    or s.OPENAI_API_KEY),
-        "gemini":    bool(runtime.get("GEMINI_API_KEY")    or s.GEMINI_API_KEY),
-        "groq":      bool(runtime.get("GROQ_API_KEY")      or s.GROQ_API_KEY),
-        "cerebras":  bool(runtime.get("CEREBRAS_API_KEY")  or s.CEREBRAS_API_KEY),
-        "nvidia":    bool(runtime.get("NVIDIA_API_KEY")    or s.NVIDIA_API_KEY),
+        "anthropic": bool(get_effective_key("ANTHROPIC_API_KEY")),
+        "openai":    bool(get_effective_key("OPENAI_API_KEY")),
+        "gemini":    bool(get_effective_key("GEMINI_API_KEY")),
+        "groq":      bool(get_effective_key("GROQ_API_KEY")),
+        "cerebras":  bool(get_effective_key("CEREBRAS_API_KEY")),
+        "nvidia":    bool(get_effective_key("NVIDIA_API_KEY")),
         "custom":    bool(custom_base and custom_key and custom_model),
-        "custom_base_url": custom_base or None,
-        "custom_model":    custom_model or None,
+        "custom_base_url": custom_base,
+        "custom_model":    custom_model,
         # Echo back the user's per-provider model picks
         "models": models,
     }
