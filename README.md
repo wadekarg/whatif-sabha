@@ -20,7 +20,7 @@
 
 ## 🧭 Jump to
 
-&nbsp;&nbsp;[💭 Where it came from](#-where-it-came-from) &nbsp;·&nbsp; [📖 What it does](#-what-it-does) &nbsp;·&nbsp; [📸 Guided tour](#-a-guided-tour) &nbsp;·&nbsp; [⚡ Quick start](#-quick-start) &nbsp;·&nbsp; [🔑 API keys](#-api-keys--you-only-need-one) &nbsp;·&nbsp; [🎭 How the debate works](#-how-the-debate-works) &nbsp;·&nbsp; [🔊 Voice](#-voice--every-character-has-one) &nbsp;·&nbsp; [🛠 Config](#%EF%B8%8F-config-reference) &nbsp;·&nbsp; [🧪 Tests](#-running-tests) &nbsp;·&nbsp; [🆘 Troubleshooting](#-troubleshooting)
+&nbsp;&nbsp;[💭 Where it came from](#-where-it-came-from) &nbsp;·&nbsp; [📖 What it does](#-what-it-does) &nbsp;·&nbsp; [📸 Guided tour](#-a-guided-tour) &nbsp;·&nbsp; [⚡ Quick start](#-quick-start) &nbsp;·&nbsp; [🔑 API keys](#-api-keys--start-with-gemini-free) &nbsp;·&nbsp; [🎭 How the debate works](#-how-the-debate-works) &nbsp;·&nbsp; [🔊 Voice](#-voice--every-character-has-one) &nbsp;·&nbsp; [🛠 Config](#%EF%B8%8F-config-reference) &nbsp;·&nbsp; [🧪 Tests](#-running-tests) &nbsp;·&nbsp; [🆘 Troubleshooting](#-troubleshooting)
 
 ---
 
@@ -151,7 +151,7 @@ After the debate closes, the world persists. Any character will answer you from 
 
 ## ⚡ Quick start
 
-> 🎯 **You need:** Python **3.10–3.12** · Node 20+ · **one free API key** (under 5 minutes — grab one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey))
+> 🎯 **You need:** Python **3.10–3.12** · Node 20+ · **a free Gemini API key** (under 30 sec — grab one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Other providers are supported as add-ons but Gemini is the recommended primary because of its 1M context window — see [API keys](#-api-keys--start-with-gemini-free) for the details and trade-offs.
 >
 > *(Python 3.13 isn't supported yet — `chromadb 0.5.23` and a couple of other deps haven't published 3.13 wheels. If you only have 3.13 installed, use `pyenv` or `uv` to grab 3.12 alongside it.)*
 
@@ -199,48 +199,85 @@ Then **open [http://localhost:3000](http://localhost:3000)**, click the **⚙️
 
 ---
 
-## 🔑 API keys — you only need ONE
+## 🔑 API keys — start with Gemini (free)
 
-<div align="center">
+> **TL;DR**: A free **Gemini** key handles everything. You can mix and match other providers (Cerebras, Groq, NVIDIA, Anthropic, OpenAI, your own endpoint) for speed/quality on specific roles, but if you only get one key, make it Gemini.
 
-### ✨ **The whole app runs on any single API key — from any provider, anywhere** ✨
+### Why Gemini specifically?
 
-</div>
+The pipeline has steps that need to ingest the **whole book in one shot** — story-structure analysis, theme extraction, divergence-point discovery. That demands a large context window. Here's what each provider gives you:
 
-**Six first-class providers**, free tiers in bold:
+| Provider | Free? | Context window | Realistic for full-book ingest? |
+|---|---|---|---|
+| **Gemini** | ✅ 1500 req/day, 15 RPM | **~1,000,000 tokens** | ✅ Yes — any book, including the *Mahabharata* |
+| Anthropic (Claude) | 💳 paid | ~200,000 tokens | ✅ Most novels |
+| OpenAI (GPT-4o) | 💳 paid | ~128,000 tokens | ✅ Most novels |
+| NVIDIA NIM | ✅ free tier | ~128,000 tokens | ✅ Most novels |
+| Groq | ✅ free tier | ~32,000 tokens | ⚠ Short books only (≤25k words) |
+| Cerebras | ✅ free tier | **~8,000 tokens** | ❌ Excerpts only (≤6k words) |
+| Bring-your-own (DeepSeek, OpenRouter, Ollama, etc.) | varies | varies | check the provider's spec |
 
-```bash
-GEMINI_API_KEY=...      # 🌟 best free tier (1500 requests/day)
-GROQ_API_KEY=...        # 🚀 free tier — sub-second LPU inference
-CEREBRAS_API_KEY=...    # ⚡ free tier — fastest character turns
-NVIDIA_API_KEY=...      # 🎯 free tier — 90+ models on NIM
-ANTHROPIC_API_KEY=...   # 💳 paid — Claude (best quality)
-OPENAI_API_KEY=...      # 💳 paid — GPT-4o family
+**The honest gotcha**: if you set up *only* Cerebras (or only Groq) and try to upload a full book, the analysis step will fail with a context-length error. Cerebras and Groq are excellent for the **fast turn-by-turn character voices during the debate** (they're literally the fastest LLM inference available), but they can't swallow a whole novel for analysis. We use them for what they're good at and lean on Gemini / Anthropic / OpenAI / NVIDIA for the long-context steps.
+
+### 🌟 Recommended setup
+
+For **completely free, full-book support**:
+
+```
+Gemini key       — handles long-context analysis + character extraction
++ Cerebras key   — handles fast character voices during the live debate
 ```
 
-**Plus — bring your own provider.** Anything that exposes an OpenAI-compatible `/chat/completions` endpoint works through a single generic slot:
+Both have generous free tiers. The router automatically uses Gemini for analysis and Cerebras for character turns. You won't hit rate limits on hobby use.
 
-```bash
-CUSTOM_LLM_BASE_URL=https://api.deepseek.com/v1   # or wherever
-CUSTOM_LLM_API_KEY=sk-...
-CUSTOM_LLM_MODEL=deepseek-chat
-```
+For a **single-key minimum**: just **Gemini**. Slower on the debate (Gemini ~10 tok/sec vs Cerebras ~1000 tok/sec), but it works end-to-end on any book size.
 
-This unlocks **DeepSeek · Qwen / Dashscope · Kimi (Moonshot) · Zhipu GLM · OpenRouter · Together · Fireworks · Perplexity · Ollama / LM Studio (local) · Azure OpenAI · GitHub Models · vLLM · llama.cpp** — basically any LLM provider in any country, plus self-hosted setups for full offline use.
+For **paid-key users**: add **Anthropic** (best quality), **OpenAI** (best long-form prose). Router chains them as fallbacks for rate-limit resilience.
+
+### Free-tier rate limits (Gemini)
+
+You will not hit these on hobby use. For reference:
+
+| Limit | Free tier | Typical book upload |
+|---|---|---|
+| RPM (requests/minute) | 15 | ~5-8 calls |
+| TPM (tokens/minute) | 1,000,000 | ~50K-200K |
+| RPD (requests/day) | 1,500 | ~10-30 |
+
+### Get keys
+
+| Provider | Where | Time |
+|---|---|---|
+| Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | 30 sec |
+| Cerebras | [cloud.cerebras.ai](https://cloud.cerebras.ai) | 1 min |
+| Groq | [console.groq.com/keys](https://console.groq.com/keys) | 1 min |
+| NVIDIA NIM | [build.nvidia.com](https://build.nvidia.com) | 2 min |
+| Anthropic | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) | 1 min (paid) |
+| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | 1 min (paid) |
+
+### 🌍 Bring your own provider
+
+Anything that exposes an OpenAI-compatible `/chat/completions` endpoint works through a single generic slot in the gear icon — three fields: base URL, API key, model name. This unlocks:
+
+**DeepSeek · Qwen / Dashscope · Kimi (Moonshot) · Zhipu GLM · OpenRouter · Together · Fireworks · Perplexity · Ollama / LM Studio (local) · Azure OpenAI · GitHub Models · vLLM · llama.cpp** — basically any LLM provider, plus fully-offline self-hosted setups.
+
+The same context-window caveat applies: pick a provider whose serving model has a context window ≥ your typical PDF size.
 
 ### 🪟 Picking models in the UI
 
-Click the **⚙ gear icon** in the top-right and the modal will:
+Click the **⚙ gear icon** in the top-right. For each provider you've added a key for, the modal:
 
-1. Fetch the **live list of chat-capable models** from each provider you've added a key for (calls each provider's real `/v1/models` API — no hardcoded model lists in the code).
-2. Show a dropdown per provider with our blessed pick marked **`(recommended)`**. First-time users can save and go.
-3. Expose an **Advanced** collapsible per provider — set different models for `Character voice / Story chat / Debate moderator / Narrator-summary` if you want fine-grained routing.
+1. Fetches the **live list of chat-capable models** (calls each provider's real `/v1/models` API — no hardcoded model lists in the code).
+2. Shows a dropdown with our blessed pick marked **`(recommended)`**. First-time users save and go.
+3. Has an **Advanced** collapsible per provider — set different models for `Character voice / Story chat / Debate moderator / Narrator-summary` if you want fine-grained routing.
 
-Picks persist in your browser's localStorage and on the backend's runtime settings. As providers ship new models, they appear in the dropdown automatically — no app update needed.
+Each provider input also has a **Clear key** button if you want to remove a key (e.g., a revoked or rate-limited one) — clearing actively overrides any leftover value in `.env`.
+
+Picks persist in your browser's localStorage and on the backend's runtime settings. As providers ship new models, they appear in the dropdown automatically.
 
 ### 🔁 Multi-provider mode
 
-Add **more than one** key and the router builds a fallback chain: tries the user-picked model on the preferred provider for each role, auto-fails over to the next on rate-limit / quota errors. With a single key the same key just does every role — slower on long debates but fully functional.
+Add **more than one** key and the router builds a fallback chain per role. On rate-limit / quota / context-length errors, it falls through to the next provider that has a model configured for that role. So *Gemini + Cerebras* gives you Gemini's robustness for analysis with Cerebras's speed for voices, with each backing up the other if one rate-limits.
 
 ---
 
@@ -302,18 +339,21 @@ Once the debate ends, a few things happen:
 
 ## 🛠️ Config reference
 
-Everything lives in `backend/.env` (see `backend/.env.example`). You only need **one** of the API keys; multiple enables failover.
+Everything lives in `backend/.env` (see `backend/.env.example`). At minimum a **Gemini key** (free) is recommended for full-book support; additional keys add fallback resilience and per-role routing — see the [API keys section](#-api-keys--start-with-gemini-free) for context-window trade-offs by provider.
 
 ### 🔑 API keys
 
-| Variable | Purpose |
-|---|---|
-| `GEMINI_API_KEY` | 🌟 Google Gemini — good all-rounder, best free tier |
-| `CEREBRAS_API_KEY` | 🧠 Cerebras — ultra-fast character turns |
-| `GROQ_API_KEY` | 🚀 Groq — fast judge/narrator |
-| `NVIDIA_API_KEY` | 🎯 NVIDIA NIM — broad model selection |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | 💳 Optional paid fallbacks |
-| `CUSTOM_LLM_BASE_URL` / `CUSTOM_LLM_API_KEY` / `CUSTOM_LLM_MODEL` | 🌍 Bring your own — any OpenAI-compatible endpoint (DeepSeek, Qwen, Kimi, OpenRouter, Ollama, LM Studio, Azure OpenAI…) |
+| Variable | Purpose | Context | Free? |
+|---|---|---|---|
+| `GEMINI_API_KEY` | 🌟 Recommended primary — handles long-context analysis | ~1M | ✅ |
+| `CEREBRAS_API_KEY` | ⚡ Ultra-fast character voices during the live debate | ~8K | ✅ |
+| `GROQ_API_KEY` | 🚀 Fast inference, good for character voices and short tasks | ~32K | ✅ |
+| `NVIDIA_API_KEY` | 🎯 NVIDIA NIM — broad model selection, decent context | ~128K | ✅ |
+| `ANTHROPIC_API_KEY` | 💳 Best quality (Claude) | ~200K | 💳 |
+| `OPENAI_API_KEY` | 💳 GPT-4o family | ~128K | 💳 |
+| `CUSTOM_LLM_BASE_URL` / `CUSTOM_LLM_API_KEY` / `CUSTOM_LLM_MODEL` | 🌍 Bring your own — any OpenAI-compatible endpoint (DeepSeek, Qwen, Kimi, OpenRouter, Ollama, LM Studio, Azure OpenAI…) | varies | varies |
+
+**Heads-up on context-windows**: Cerebras (~8K) and Groq (~32K) are excellent at fast turn-by-turn character voices but **cannot ingest a full novel** for the analysis step. If you only have one of those keys, upload will fail with a context-length error. Pair them with Gemini (or any other long-context provider) for full-book support. See the [API keys section](#-api-keys--start-with-gemini-free) for details.
 
 ### 🎛️ Model overrides (optional — UI picker is the recommended path)
 
