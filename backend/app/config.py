@@ -521,6 +521,18 @@ def get_judge_fallbacks() -> list:
         if llm := _make_nvidia_llm(m, temperature=0.1):
             candidates.append((llm, f"nv:{m.split('/')[-1][:30]}"))
 
+    cerebras_key = _key("CEREBRAS_API_KEY")
+    if cerebras_key:
+        m = model_for("cerebras", "judge") or model_for("cerebras", "agent")
+        if m:
+            try:
+                candidates.append((
+                    ChatCerebras(model=m, cerebras_api_key=cerebras_key, temperature=0.1, max_tokens=500),
+                    f"cerebras:{m}",
+                ))
+            except Exception:
+                pass
+
     return candidates
 
 
@@ -550,6 +562,18 @@ def get_narrator_fallbacks(temperature: float = 0.6) -> list:
     if m := model_for("groq", "narrator"):
         if llm := _make_groq_llm(m, temperature=temperature):
             candidates.append((llm, f"groq:{m}"))
+
+    cerebras_key = _key("CEREBRAS_API_KEY")
+    if cerebras_key:
+        m = model_for("cerebras", "narrator") or model_for("cerebras", "agent")
+        if m:
+            try:
+                candidates.append((
+                    ChatCerebras(model=m, cerebras_api_key=cerebras_key, temperature=temperature, max_tokens=2048),
+                    f"cerebras:{m}",
+                ))
+            except Exception:
+                pass
 
     return candidates
 
@@ -606,6 +630,22 @@ def get_analysis_fallbacks() -> list:
     if m := model_for("groq", "analysis"):
         if llm := _make_groq_llm(m, temperature=0.2):
             candidates.append((llm, f"groq:{m}"))
+
+    # Cerebras — last in the chain because of shorter context window
+    # (~32K tokens vs Gemini's 1M). For short PDFs (≤Animal Farm size)
+    # it works fine; for novels it'll fail with context-length and
+    # the chain will have already tried longer-context providers above.
+    cerebras_key = _key("CEREBRAS_API_KEY")
+    if cerebras_key:
+        m = model_for("cerebras", "analysis") or model_for("cerebras", "agent")
+        if m:
+            try:
+                candidates.append((
+                    ChatCerebras(model=m, cerebras_api_key=cerebras_key, temperature=0.2, max_tokens=4096),
+                    f"cerebras:{m}",
+                ))
+            except Exception:
+                pass
 
     return candidates
 

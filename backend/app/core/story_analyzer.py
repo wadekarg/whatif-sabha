@@ -265,12 +265,22 @@ async def analyze_story_structure(full_text: str) -> dict:
     """
     Extract story structure — title, themes, events, phases.
     Does NOT extract characters (handled by multi_pass_extractor).
-    Uses fallback chain: Gemini → NVIDIA → GitHub → Cloudflare.
+    Uses fallback chain (in order): Custom → Gemini → Anthropic → OpenAI →
+    NVIDIA → Groq → Cerebras.
     """
     from app.config import get_analysis_fallbacks
     prompt = STRUCTURE_PROMPT.format(story_text=full_text)
 
-    for llm, label in get_analysis_fallbacks():
+    chain = get_analysis_fallbacks()
+    if not chain:
+        raise ValueError(
+            "No LLM providers configured for story analysis. "
+            "Open the gear icon (⚙) and add at least one of: "
+            "Gemini (free), Anthropic, OpenAI, NVIDIA NIM (free), Groq (free), or Cerebras (free)."
+        )
+
+    failures: list[str] = []  # collect per-provider error messages for diagnosis
+    for llm, label in chain:
         try:
             response = await llm.ainvoke(prompt)
             raw = response.content
@@ -283,13 +293,25 @@ async def analyze_story_structure(full_text: str) -> dict:
             raw = re.sub(r"\n?```$", "", raw.strip())
             raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
             return json.loads(raw)
-        except json.JSONDecodeError:
-            continue  # bad JSON, try next model
+        except json.JSONDecodeError as e:
+            failures.append(f"{label}: malformed JSON ({type(e).__name__})")
+            continue
         except Exception as e:
-            if "429" in str(e) or "rate" in str(e).lower() or "quota" in str(e).lower():
-                continue  # rate limited, try next
-            raise
-    raise ValueError("All LLM providers failed for story structure analysis")
+            msg = str(e)
+            short = msg[:200].replace("\n", " ")
+            failures.append(f"{label}: {short}")
+            # Retry on rate limits, context-length, and quota errors
+            if any(k in msg.lower() for k in ("429", "rate", "quota", "context", "too long", "permission_denied")):
+                continue
+            # Other errors — also try next provider rather than blowing up the whole chain
+            continue
+
+    detail = "\n  - ".join(failures) if failures else "(no providers attempted)"
+    raise ValueError(
+        f"All {len(chain)} LLM provider(s) failed for story structure analysis:\n  - {detail}\n\n"
+        "Tip: most likely the document is longer than the configured providers' context windows, "
+        "or a key has been revoked. Try adding a Gemini key (free tier, 1M context) — gear icon (⚙)."
+    )
 
 
 async def analyze_story(full_text: str) -> dict:
