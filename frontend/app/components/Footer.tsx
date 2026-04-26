@@ -1,11 +1,13 @@
 // Live-app footer — slim asymmetric (Option D).
+import BrandMark from "./BrandMark";
+
 export default function Footer() {
   return (
     <footer className="bg-[#faf7f2] border-t border-[#e8e0d5] py-3.5 px-6">
       <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-[#a09282]">
         <span className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-md bg-[#c07820] flex items-center justify-center" style={{ fontSize: "14px", lineHeight: 1, color: "#fef9c3" }}>☸</span>
+            <BrandMark size={16} />
             <span className="font-semibold text-[#1c1410]">WhatIf<span className="text-[#c07820]">Sabha</span></span>
           </span>
           <span className="hidden md:inline-block w-px h-4 bg-[#e8e0d5]" />

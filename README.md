@@ -2,6 +2,8 @@
 
 <img src="docs/logo.svg" width="420" alt="WhatIfSabha" />
 
+#### *what if things had gone differently?*
+
 ### *Upload a book. Change one thing. Watch the characters argue about it.*
 
 [![Python](https://img.shields.io/badge/python-3.10+-4B8BBE?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -12,7 +14,7 @@
 [![Status](https://img.shields.io/badge/status-side--project-D98B4E?style=flat-square)]()
 [![One Free Key](https://img.shields.io/badge/runs_on-ONE_free_API_key-4CAF50?style=flat-square&logo=sparkles)](#-api-keys--you-only-need-one)
 
-### 🔗 [**See the demo →**](https://what-if-sabha.pages.dev)
+### 🔗 [**See the demo →**](https://whatif-sabha.pages.dev)
 
 </div>
 
@@ -63,7 +65,7 @@ While this streams, a live **interaction graph** shows who's talking to whom, a 
 
 ## 🎬 See it in action
 
-> ### 🔗 **See the demo:** **[https://what-if-sabha.pages.dev](https://what-if-sabha.pages.dev)**
+> ### 🔗 **See the demo:** **[https://whatif-sabha.pages.dev](https://whatif-sabha.pages.dev)**
 >
 > Bundled demo: *Animal Farm* with the divergence **"What if Boxer killed those dogs when they were trying to chase Snowball away?"** — 44 turns, 17 characters, full graph + ledger + Boru's notes timeline + closing + summary.
 
@@ -263,7 +265,7 @@ Boru is the interesting part. He's not just picking the next speaker by score �
 - 🔇 **Anti-repetition** — Boru's last few openers are injected into his own prompt as a "don't start with these" list. Dispute subjects get diversified.
 - 🛑 **Hard stop after closing** — once the closing is delivered, no late stage directions slip through.
 
-This whole layer is covered by tests in `backend/tests/` (~86 tests across several files — `test_sabha_orchestrator_return.py`, `test_orchestrator_picker.py`, `test_dispute_retirement.py`, `test_reentry_logic.py`, `test_intended_speaker_parsing.py`, `test_boru_anti_repetition.py`, `test_character_speech_act.py`).
+This whole layer is covered by tests in `backend/tests/` (~90 tests across `test_sabha_orchestrator_return.py`, `test_orchestrator_picker.py`, `test_dispute_retirement.py`, `test_reentry_logic.py`, `test_intended_speaker_parsing.py`, `test_boru_anti_repetition.py`, `test_character_speech_act.py`).
 
 ---
 
@@ -298,7 +300,7 @@ Once the debate ends, a few things happen:
 - 🌐 **Live interaction graph** — force-directed, updating per turn. Arrows styled by speech act (question vs response vs statement).
 - 📋 **Boru's notes timeline** — his progress notes from every round, kept as a history you can scroll through.
 - 📄 **PDF export** — builds a bound PDF with: title page, the real D3 graph (not a synthetic stand-in), cast strip, full transcript, ledger page with notes + open questions + claims, positions page, and the summary.
-- 🌍 **Static replay site** — the `replay/` subproject is a Next.js static export. Deploy to Cloudflare Pages for a zero-backend shareable replay.
+- 🌍 **Static replay site** — the `replay/` subproject is a Next.js static export with its own multi-page tour (story · characters · debate replay) and pre-rendered Edge TTS audio bundled in, so the [hosted demo](https://whatif-sabha.pages.dev) plays voices without any backend. Deploy to Cloudflare Pages for a zero-backend shareable replay.
 
 ---
 
@@ -486,7 +488,7 @@ If you try it with a book you love and something surprising happens, I'd genuine
 
 ### 🌟 If you've read this far — thanks. Try it with a book you can't let go of.
 
-[![See the demo](https://img.shields.io/badge/🎬_See_the_demo-what--if--sabha.pages.dev-4CAF50?style=for-the-badge)](https://what-if-sabha.pages.dev)
+[![See the demo](https://img.shields.io/badge/🎬_See_the_demo-whatif--sabha.pages.dev-4CAF50?style=for-the-badge)](https://whatif-sabha.pages.dev)
 [![GitHub](https://img.shields.io/badge/⭐_Star_on-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/wadekarg/whatif-sabha)
 
 **MIT License** — see [LICENSE](LICENSE). Copyright (c) 2026 Gajanan Wadekar.

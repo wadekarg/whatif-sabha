@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import BrandMark from "./BrandMark";
 
 export default function TopNav() {
   const pathname = usePathname() || "/";
@@ -12,9 +13,7 @@ export default function TopNav() {
 
   const Logo = () => (
     <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-      <div className="w-8 h-8 rounded-xl bg-[#c07820] flex items-center justify-center shadow-sm group-hover:bg-[#a86a18] transition-colors overflow-hidden">
-        <span style={{ color: "#fef9c3", fontSize: "28px", lineHeight: 1 }}>☸</span>
-      </div>
+      <BrandMark size={32} className="shrink-0" />
       <span className="font-bold text-lg tracking-tight text-[#1c1410]">
         WhatIf<span className="text-[#c07820]">Sabha</span>
       </span>

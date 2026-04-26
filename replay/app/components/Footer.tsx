@@ -1,9 +1,11 @@
 // Demo-wide footer — editorial masthead style.
+import BrandMark from "./BrandMark";
+
 export default function Footer() {
   return (
     <footer className="bg-[#faf7f2] border-t border-[#e8e0d5] py-5 px-6 text-center">
       <div className="flex items-center justify-center gap-2 text-[#1c1410]">
-        <span className="w-5 h-5 rounded-md bg-[#c07820] flex items-center justify-center" style={{ fontSize: "16px", lineHeight: 1, color: "#fef9c3" }}>☸</span>
+        <BrandMark size={20} />
         <span className="font-semibold tracking-[0.18em] uppercase text-[13px]">WhatIf<span className="text-[#c07820]">Sabha</span></span>
       </div>
       <div className="italic text-[#a09282] text-xs mt-1.5 mb-3">what if things had gone differently?</div>
