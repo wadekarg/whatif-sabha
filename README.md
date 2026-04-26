@@ -1,7 +1,6 @@
 <div align="center">
 
-<img src="docs/logo.svg" width="420" alt="WhatIfSabha" /><br>
-*what if things had gone differently?*
+<img src="docs/logo.svg" width="420" alt="WhatIfSabha" />
 
 ### *Upload a book. Change one thing. Watch the characters argue about it.*
 

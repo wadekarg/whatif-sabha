@@ -1,10 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 100" width="460" height="100" role="img" aria-label="WhatIfSabha">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 95" width="460" height="95" role="img" aria-label="WhatIfSabha — what if things had gone differently?">
   <style>
-    .whatif { fill: #1c1410; }
-    .sabha  { fill: #c07820; }
-    .brand  { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-weight: 700; font-size: 44px; letter-spacing: -0.02em; }
+    .whatif  { fill: #1c1410; }
+    .sabha   { fill: #c07820; }
+    .brand   { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-weight: 700; font-size: 44px; letter-spacing: -0.02em; }
+    .tagline { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-style: italic; font-size: 13px; fill: #a09282; letter-spacing: 0.02em; }
     @media (prefers-color-scheme: dark) {
-      .whatif { fill: #f5f0e8; }
+      .whatif  { fill: #f5f0e8; }
+      .tagline { fill: #c8b89a; }
     }
   </style>
   <!-- Orange rounded-square badge -->
@@ -26,7 +28,9 @@
     <circle cx="40" cy="50" r="19" stroke-width="4.05"/>
   </g>
   <!-- Brand text: WhatIf (dark) + Sabha (orange) -->
-  <text x="88" y="66" class="brand">
+  <text x="88" y="62" class="brand">
     <tspan class="whatif">WhatIf</tspan><tspan class="sabha">Sabha</tspan>
   </text>
+  <!-- Tagline — italic muted, sits right under the brand -->
+  <text x="89" y="80" class="tagline">what if things had gone differently?</text>
 </svg>
