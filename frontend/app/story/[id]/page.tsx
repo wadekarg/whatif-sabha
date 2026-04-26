@@ -330,7 +330,7 @@ export default function StoryPage() {
             <div className={`px-6 pb-3 flex flex-wrap gap-2 ${showSuggestions ? "" : "hidden"}`}>
               {(suggestionsExpanded ? suggestions : suggestions.slice(0, 5)).map((s: any, i: number) => (
                 <button
-                  key={s.event_id || i}
+                  key={`${s.event_id || "sugg"}-${i}`}
                   onClick={() => {
                     setWhatIf(s.description);
                     setSuggestionsExpanded(false);
