@@ -17,6 +17,13 @@ env/
 # Node
 node_modules/
 npm-debug.log*
+# package-lock.json is intentionally NOT committed — Tailwind v4's native
+# bindings (@tailwindcss/oxide-*) are platform-specific, and a lock file
+# generated on Linux pins the linux-x64 variant and breaks `npm install`
+# for macOS / Windows contributors with EBADPLATFORM. Letting npm regenerate
+# the lock file per-platform avoids the error at the cost of strict
+# transitive-version reproducibility (acceptable for a side project).
+package-lock.json
 
 # Database
 *.db

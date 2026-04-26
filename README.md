@@ -449,6 +449,27 @@ npm run dev
 </details>
 
 <details>
+<summary><b><code>npm install</code> fails with <code>EBADPLATFORM</code> on macOS or Windows</b></summary>
+
+You're seeing something like:
+
+```
+npm error notsup Unsupported platform for @tailwindcss/oxide-linux-x64-gnu@4.x.x:
+                 wanted {"os":"linux"} (current: {"os":"darwin"})
+```
+
+This happens when an old `package-lock.json` from a Linux machine sneaks into your clone and pins the Linux-only Tailwind native binding. The repo no longer commits `package-lock.json` for this exact reason — but if you've cloned an older revision, regenerate:
+
+```bash
+cd frontend          # or `cd replay` if it's there
+rm -rf node_modules package-lock.json
+npm install
+```
+
+`npm install` regenerates the lock file with the correct platform binary for your machine.
+</details>
+
+<details>
 <summary><b><code>pip install</code> fails with <code>Could not find a version that satisfies the requirement pysqlite3-binary</code> or chromadb errors</b></summary>
 
 Two likely causes:
