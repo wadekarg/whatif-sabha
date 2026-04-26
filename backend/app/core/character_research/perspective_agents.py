@@ -46,25 +46,46 @@ async def get_all_perspectives(
         external_context=external_context or "No external context available.",
     )
 
-    # Run all four LLMs in parallel — different model families = different analytical biases
-    gemini_task   = _get_perspective(get_analysis_llm(), prompt, "gemini")
-    groq_task     = _get_perspective(get_judge_llm(), prompt, "groq")
-    cerebras_task = _get_perspective(get_agent_llm(), prompt, "cerebras")
+    # Run perspectives in parallel — different model families = different analytical biases.
+    # Each get_X_llm() raises ValueError if no key for that role is configured. We wrap
+    # those calls so the gather doesn't blow up when the user only has one or two providers.
+    def _safe_get(getter, label):
+        try:
+            llm = getter()
+            return _get_perspective(llm, prompt, label) if llm else None
+        except Exception as e:
+            print(f"  [{label}] perspective skipped — provider not configured: {str(e)[:80]}")
+            return None
 
-    # kimi-k2: Moonshot (Chinese AI lab) — distinct cultural/philosophical framing
+    gemini_task   = _safe_get(get_analysis_llm, "gemini")
+    groq_task     = _safe_get(get_judge_llm, "groq")
+    cerebras_task = _safe_get(get_agent_llm, "cerebras")
+
+    # NVIDIA — separate path; the make_nvidia_llm helper already returns None when unconfigured
     s = get_settings()
-    nvidia_llm = _make_nvidia_llm(s.NVIDIA_JUDGE_MODEL, temperature=0.3)
-    nvidia_task = _get_perspective(nvidia_llm, prompt, "nvidia") if nvidia_llm else None
+    nvidia_task = None
+    try:
+        nvidia_llm = _make_nvidia_llm(s.NVIDIA_JUDGE_MODEL, temperature=0.3)
+        if nvidia_llm:
+            nvidia_task = _get_perspective(nvidia_llm, prompt, "nvidia")
+    except Exception:
+        pass
 
-    tasks = [gemini_task, groq_task, cerebras_task]
-    if nvidia_task:
-        tasks.append(nvidia_task)
+    pairs = [
+        ("gemini",   gemini_task),
+        ("groq",     groq_task),
+        ("cerebras", cerebras_task),
+        ("nvidia",   nvidia_task),
+    ]
+    active = [(label, t) for label, t in pairs if t is not None]
+    if not active:
+        # No providers configured at all — return empty perspectives (caller handles this).
+        return {label: "[Analysis unavailable: no provider configured]" for label, _ in pairs}
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*[t for _, t in active], return_exceptions=True)
 
-    labels = ["gemini", "groq", "cerebras"] + (["nvidia"] if nvidia_task else [])
-    perspectives = {}
-    for label, result in zip(labels, results):
+    perspectives = {label: "[Analysis unavailable: provider not configured]" for label, _ in pairs}
+    for (label, _), result in zip(active, results):
         if isinstance(result, Exception):
             perspectives[label] = f"[Analysis unavailable: {str(result)[:100]}]"
         else:

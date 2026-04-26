@@ -9,9 +9,12 @@ import asyncio
 import aiohttp
 import logging
 import os
+import ssl
 import hashlib
 from urllib.parse import quote
 from typing import Optional
+
+import certifi
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,16 @@ POLLINATIONS_URL = "https://image.pollinations.ai/prompt/{prompt}?width={width}&
 
 # Portrait directory
 PORTRAIT_DIR = "./uploads/portraits"
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """SSL context backed by certifi's root cert bundle.
+
+    Required on macOS where the python.org installer ships without a system
+    cert store; otherwise aiohttp raises 'unable to get local issuer certificate'.
+    Works on all platforms because certifi's bundle is a superset of system roots.
+    """
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 def _ensure_portrait_dir():
@@ -138,7 +151,7 @@ async def generate_all_portraits(
     results = {}
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=_ssl_context())) as session:
         async def _generate_bounded(char: dict):
             async with semaphore:
                 # Try up to 3 times with increasing backoff
@@ -178,7 +191,7 @@ async def generate_boru_portrait(story_id: str = "global") -> Optional[str]:
         "phases": [{"personality_traits": ["wise", "witty", "authoritative"]}],
     }
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=_ssl_context())) as session:
         return await generate_single_portrait(
             boru_char, story_id, "WhatIfSabha", session,
             width=384, height=384,

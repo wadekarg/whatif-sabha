@@ -43,6 +43,11 @@ pydantic-settings==2.6.1
 aiofiles==24.1.0
 redis==5.2.1
 httpx==0.28.1
+# Required for SSL on macOS (python.org installer ships without a system cert
+# store, so aiohttp errors with 'unable to get local issuer certificate' when
+# fetching Pollinations portraits). certifi is already a transitive dep of
+# aiohttp/httpx but pinning it explicitly so portrait_generator can import it.
+certifi>=2024.2.2
 
 # --- Character Soul Memory ---
 # Graphiti: temporal knowledge graph for persistent character memory across debates
