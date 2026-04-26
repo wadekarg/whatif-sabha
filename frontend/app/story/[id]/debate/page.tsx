@@ -1459,11 +1459,11 @@ export default function DebatePage() {
                     <div className="flex-1 h-px bg-[#e8e0d5]" />
                   </div>
                   <div className="text-xs font-medium text-[#a09282] uppercase tracking-widest mb-2">Story suggests</div>
-                  {suggestions.map((s) => {
+                  {suggestions.map((s, i) => {
                     const active = divergence === s.description;
                     return (
                       <button
-                        key={s.event_id}
+                        key={`${s.event_id || "sugg"}-${i}`}
                         onClick={() => setDivergence(s.description)}
                         className={`w-full text-left px-4 py-3 rounded-xl border transition-all duration-150 group ${
                           active
@@ -2604,8 +2604,8 @@ export default function DebatePage() {
                 defaultOpen={true}
                 empty="No open questions yet"
               >
-                {ledgerState.open_questions.map((q: any) => (
-                  <div key={q.id} className={`border rounded-lg overflow-hidden ${q.status === "unanswered" ? "border-amber-200" : "border-[#e8e0d5]"}`}>
+                {ledgerState.open_questions.map((q: any, i: number) => (
+                  <div key={`${q.id || "oq"}-${i}`} className={`border rounded-lg overflow-hidden ${q.status === "unanswered" ? "border-amber-200" : "border-[#e8e0d5]"}`}>
                     <div className={`px-3 py-2 ${q.status === "unanswered" ? "bg-amber-50/60" : "bg-white"}`}>
                       <p className="text-xs text-[#1c1410] leading-relaxed font-medium">{q.question}</p>
                       <div className="flex items-center gap-1.5 mt-1 text-[10px] text-[#a09282]">
@@ -2639,8 +2639,8 @@ export default function DebatePage() {
                   defaultOpen={false}
                   empty=""
                 >
-                  {ledgerState.resolved_questions.map((q: any) => (
-                    <div key={q.id} className="border border-emerald-200 rounded-lg overflow-hidden">
+                  {ledgerState.resolved_questions.map((q: any, i: number) => (
+                    <div key={`${q.id || "rq"}-${i}`} className="border border-emerald-200 rounded-lg overflow-hidden">
                       <div className="px-3 py-2 bg-emerald-50/40">
                         <p className="text-xs text-[#6b5c4e] leading-relaxed line-through decoration-emerald-300">{q.question}</p>
                       </div>
