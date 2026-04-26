@@ -151,30 +151,28 @@ After the debate closes, the world persists. Any character will answer you from 
 
 ## ⚡ Quick start
 
-> 🎯 **You need:** Python 3.10+ · Node 20+ · **one free API key** (under 5 minutes — see the [API keys section](#-api-keys--you-only-need-one))
+> 🎯 **You need:** Python **3.10–3.12** · Node 20+ · **one free API key** (under 5 minutes — grab one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey))
+>
+> *(Python 3.13 isn't supported yet — `chromadb 0.5.23` and a couple of other deps haven't published 3.13 wheels. If you only have 3.13 installed, use `pyenv` or `uv` to grab 3.12 alongside it.)*
+
+The simplest path: **start the app, then paste your API key into the in-app settings panel** — no config files to edit.
 
 ### 🐳 Option A — Docker (easiest, ~3 minutes)
 
 ```bash
 git clone https://github.com/wadekarg/whatif-sabha.git whatif-sabha
 cd whatif-sabha
-cp backend/.env.example backend/.env
-
-# Edit backend/.env and paste any ONE of the API keys (free tiers work).
-# Grab a free key at: https://aistudio.google.com/apikey  (fastest path)
-
+cp backend/.env.example backend/.env   # creates an empty .env (no editing needed)
 docker compose up
 ```
 
-**Then open** 👉 **[http://localhost:3000](http://localhost:3000)**
-
-That's it. Upload a PDF, type a what-if, watch it debate.
+Then **open [http://localhost:3000](http://localhost:3000)**, click the **⚙️ gear icon** in the top-right, paste your free Gemini key (or any other supported provider), save, and you're done. Upload a PDF, type a what-if, watch it debate.
 
 ---
 
 ### 🛠 Option B — Local (no Docker)
 
-You'll run two terminals — one for the backend, one for the frontend.
+Two terminals — one for the backend, one for the frontend.
 
 **Terminal 1 — Backend:**
 
@@ -183,7 +181,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate       # on Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env            # paste ONE API key into .env
+cp .env.example .env            # creates an empty .env (no editing needed)
 uvicorn app.main:app --port 8001 --reload
 ```
 
@@ -195,9 +193,9 @@ npm install
 npm run dev
 ```
 
-**Then open** 👉 **[http://localhost:3000](http://localhost:3000)**
+Then **open [http://localhost:3000](http://localhost:3000)**, click the **⚙️ gear icon** in the top-right, paste your free Gemini key, save. Done.
 
-> 💡 **Hot tip:** If you don't want to touch `.env`, just start both servers and click the **⚙️ gear icon** in the top-right of the UI — you can paste API keys there and they'll push to the backend automatically.
+> 💡 **Why the gear icon, not `.env`?** The in-app settings store keys in the backend's runtime DB and let you pick models live per provider. It also works for non-developers without editing files. The `.env` route is still supported — see the **[Config reference](#%EF%B8%8F-config-reference)** below — and is recommended for headless deployments and CI.
 
 ---
 
@@ -448,6 +446,39 @@ cd frontend
 rm -rf .next
 npm run dev
 ```
+</details>
+
+<details>
+<summary><b><code>pip install</code> fails with <code>Could not find a version that satisfies the requirement pysqlite3-binary</code> or chromadb errors</b></summary>
+
+Two likely causes:
+
+**1. Python 3.13** — neither `chromadb 0.5.23` nor `pysqlite3-binary` ship wheels for 3.13 yet. Use **Python 3.10, 3.11, or 3.12** instead. With `pyenv`:
+
+```bash
+pyenv install 3.12
+pyenv local 3.12
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Or with `uv`:
+
+```bash
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
+
+**2. `pip` is out of date** — the conditional install marker (`sys_platform == "linux"`) needs a recent pip. Upgrade first:
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+`pysqlite3-binary` is only needed on older Linux distros to override the system sqlite3 for ChromaDB. macOS and Windows have a new-enough sqlite3 by default — the requirements file already skips it on those platforms. The backend code falls back gracefully if it's missing.
 </details>
 
 ---

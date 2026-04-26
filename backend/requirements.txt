@@ -15,7 +15,10 @@ edge-tts>=7.0.0
 
 # Vector DB
 chromadb==0.5.23
-pysqlite3-binary==0.5.4.post2
+# Override system sqlite3 only on Linux. Wheels aren't published for macOS / Windows
+# (their system sqlite3 is already new enough for ChromaDB). Skip on Python 3.13+
+# until pysqlite3-binary publishes wheels for it.
+pysqlite3-binary==0.5.4.post2; sys_platform == "linux" and python_version < "3.13"
 sentence-transformers==3.3.1
 
 # Database
