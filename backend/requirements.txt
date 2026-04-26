@@ -20,6 +20,11 @@ chromadb==0.5.23
 # until pysqlite3-binary publishes wheels for it.
 pysqlite3-binary==0.5.4.post2; sys_platform == "linux" and python_version < "3.13"
 sentence-transformers==3.3.1
+# Pin numpy<2 — PyTorch 2.x and the sentence-transformers wheels are built
+# against NumPy 1.x ABI. NumPy 2.x triggers
+# "A module compiled using NumPy 1.x cannot be run in NumPy 2.x" + a
+# RuntimeError("Numpy is not available") at embedding time.
+numpy<2
 
 # Database
 sqlalchemy==2.0.36
