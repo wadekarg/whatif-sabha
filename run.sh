@@ -485,9 +485,9 @@ cleanup() {
   info "Shutting down..."
   # Kill background jobs and their entire process groups (set -m makes each job its own group)
   kill -TERM %1 %2 2>/dev/null || true
-  # Wait up to 3s for graceful shutdown
+  # Wait up to 5s for graceful shutdown — gives uvicorn time to drain SSE streams
   local i=0
-  while [ $i -lt 30 ] && jobs -r 2>/dev/null | grep -q .; do
+  while [ $i -lt 50 ] && jobs -r 2>/dev/null | grep -q .; do
     sleep 0.1
     i=$((i + 1))
   done
