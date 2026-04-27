@@ -522,6 +522,48 @@ start_services() {
   ) 2>&1 | tee .run-logs/frontend.log | awk '{print "[frontend] "$0; fflush()}' &
 }
 
+wait_for_ready() {
+  local elapsed=0
+  while [ $elapsed -lt 60 ]; do
+    if curl -fs -o /dev/null --max-time 1 http://localhost:3000 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+    if [ $elapsed -gt 0 ] && [ $((elapsed % 10)) -eq 0 ]; then
+      info "Frontend still compiling... (${elapsed}s)"
+    fi
+  done
+  warn "Frontend didn't respond within 60s. It may still come up — check .run-logs/frontend.log"
+  return 1
+}
+
+open_browser() {
+  [ "$NO_OPEN" = "1" ] && return 0
+  local url="http://localhost:3000"
+  case "$PLATFORM" in
+    macos) open "$url" 2>/dev/null || true ;;
+    linux) xdg-open "$url" >/dev/null 2>&1 || true ;;
+    wsl)
+      if command -v wslview >/dev/null 2>&1; then
+        wslview "$url" 2>/dev/null || true
+      else
+        cmd.exe /c "start $url" 2>/dev/null || true
+      fi
+      ;;
+  esac
+}
+
+print_banner() {
+  echo
+  printf "%s═══════════════════════════════════════════%s\n" "$GREEN" "$RESET"
+  printf "%s  WhatIfSabha is running!%s\n" "$BOLD" "$RESET"
+  printf "  → %shttp://localhost:3000%s\n" "$BLUE" "$RESET"
+  echo  "  Press Ctrl+C to stop"
+  printf "%s═══════════════════════════════════════════%s\n" "$GREEN" "$RESET"
+  echo
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
@@ -533,6 +575,9 @@ main() {
   check_ports
   setup_trap
   start_services
+  wait_for_ready || true
+  print_banner
+  open_browser
   wait
 }
 
