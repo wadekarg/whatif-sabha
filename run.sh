@@ -367,13 +367,55 @@ handle_install_failure() {
   exit 1
 }
 
+install_backend() {
+  [ "$BACKEND_NEEDS_INSTALL" = "1" ] || return 0
+
+  info "Installing backend dependencies (this takes a few minutes the first time)..."
+  cd backend
+
+  # Venv staleness — recreate if the Python interpreter changed since last build
+  local cached_python=""
+  [ -f ../.run-cache/python.path ] && cached_python=$(cat ../.run-cache/python.path)
+  if [ -d venv ] && [ "$cached_python" != "$PYTHON_BIN" ]; then
+    info "Python interpreter changed ($cached_python -> $PYTHON_BIN); rebuilding venv"
+    rm -rf venv
+  fi
+
+  if [ ! -d venv ]; then
+    "$PYTHON_BIN" -m venv venv
+  fi
+
+  # shellcheck disable=SC1091
+  source venv/bin/activate
+
+  # Truncate install log for this run
+  : > ../.run-logs/install.log
+
+  if ! pip install --upgrade pip >> ../.run-logs/install.log 2>&1; then
+    cd ..
+    handle_install_failure backend
+  fi
+
+  if ! pip install -r requirements.txt --upgrade-strategy only-if-needed \
+       >> ../.run-logs/install.log 2>&1; then
+    cd ..
+    handle_install_failure backend
+  fi
+
+  echo "$PYTHON_BIN" > ../.run-cache/python.path
+  compute_hash requirements.txt > ../.run-cache/requirements.hash
+  cd ..
+  success "Backend ready"
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
   detect_platform
   check_prereqs
   compute_install_state
-  echo "BACKEND_NEEDS_INSTALL=$BACKEND_NEEDS_INSTALL FRONTEND_NEEDS_INSTALL=$FRONTEND_NEEDS_INSTALL"
+  install_backend
+  echo "Backend phase complete."
 }
 
 # Only run main when this script is executed directly, not when sourced.
