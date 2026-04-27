@@ -285,12 +285,51 @@ check_prereqs() {
   fi
 }
 
+compute_install_state() {
+  mkdir -p .run-cache .run-logs
+
+  local req_hash pkg_hash cached_req cached_pkg cached_python
+
+  req_hash=$(compute_hash backend/requirements.txt)
+  pkg_hash=$(compute_hash frontend/package.json)
+  cached_req=$( [ -f .run-cache/requirements.hash ] && cat .run-cache/requirements.hash || echo "" )
+  cached_pkg=$( [ -f .run-cache/package.hash ]      && cat .run-cache/package.hash      || echo "" )
+  cached_python=$( [ -f .run-cache/python.path ]    && cat .run-cache/python.path       || echo "" )
+
+  if [ "$REINSTALL" = "1" ]; then
+    BACKEND_NEEDS_INSTALL=1
+    FRONTEND_NEEDS_INSTALL=1
+    info "Forced reinstall (--reinstall)"
+    return 0
+  fi
+
+  # Backend: hash mismatch OR Python interpreter changed OR venv missing
+  if [ "$req_hash" != "$cached_req" ] \
+     || [ "$cached_python" != "$PYTHON_BIN" ] \
+     || [ ! -d backend/venv ]; then
+    BACKEND_NEEDS_INSTALL=1
+  fi
+
+  # Frontend: hash mismatch OR node_modules missing
+  if [ "$pkg_hash" != "$cached_pkg" ] || [ ! -d frontend/node_modules ]; then
+    FRONTEND_NEEDS_INSTALL=1
+  fi
+
+  if [ "$BACKEND_NEEDS_INSTALL" = "0" ]; then
+    success "Backend deps unchanged (skip install)"
+  fi
+  if [ "$FRONTEND_NEEDS_INSTALL" = "0" ]; then
+    success "Frontend deps unchanged (skip install)"
+  fi
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
   detect_platform
   check_prereqs
-  echo "Done."
+  compute_install_state
+  echo "BACKEND_NEEDS_INSTALL=$BACKEND_NEEDS_INSTALL FRONTEND_NEEDS_INSTALL=$FRONTEND_NEEDS_INSTALL"
 }
 
 # Only run main when this script is executed directly, not when sourced.
