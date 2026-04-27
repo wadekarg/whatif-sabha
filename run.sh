@@ -107,6 +107,10 @@ detect_platform() {
 compute_hash() {
   # Compute sha256 of the file at $1 and print just the hex digest.
   # macOS lacks sha256sum; ships shasum -a 256 instead.
+  if [ -z "${1:-}" ] || [ ! -f "$1" ]; then
+    fail "compute_hash: file not found or empty path: '${1:-}'"
+    exit 1
+  fi
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
