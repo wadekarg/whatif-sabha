@@ -78,13 +78,19 @@ detect_platform() {
       fi
       # Detect distro for prereq install messages
       if [ -r /etc/os-release ]; then
-        # shellcheck disable=SC1091
-        . /etc/os-release
-        case "${ID:-}" in
+        # Read only the ID field — sourcing the file pollutes our namespace
+        # with NAME/VERSION/etc. and risks collisions with later-task globals.
+        local _id
+        _id=$(grep -m1 '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
+        case "${_id:-}" in
           debian|ubuntu|linuxmint|pop) DISTRO="debian" ;;
           fedora|rhel|centos)          DISTRO="fedora" ;;
           arch|manjaro)                DISTRO="arch" ;;
-          *)                           DISTRO="${ID:-unknown}" ;;
+          "")                          DISTRO="unknown" ;;
+          *)
+            DISTRO="$_id"
+            warn "Unrecognised distro '$_id' — generic install hints will be shown."
+            ;;
         esac
       else
         DISTRO="unknown"
