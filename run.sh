@@ -121,6 +121,15 @@ compute_hash() {
   fi
 }
 
+version_ge() {
+  # Returns 0 if version $1 >= version $2, else 1.
+  # Versions are dotted strings like "3.12.7" or "20.10.0".
+  # Implementation: sort -V, take the lower one, check it's $2.
+  local lower
+  lower=$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)
+  [ "$lower" = "$2" ]
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
