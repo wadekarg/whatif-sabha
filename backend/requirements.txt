@@ -28,6 +28,7 @@ numpy<2
 
 # Database
 sqlalchemy==2.0.36
+greenlet>=3.0.0  # required by sqlalchemy async; was implicitly installed before, now explicit
 alembic==1.14.0
 aiosqlite==0.20.0
 

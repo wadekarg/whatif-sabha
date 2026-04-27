@@ -501,6 +501,8 @@ setup_trap() {
 }
 
 start_services() {
+  [ -d backend ]  || { fail "'backend/' directory not found.";  exit 1; }
+  [ -d frontend ] || { fail "'frontend/' directory not found."; exit 1; }
   info "Starting backend on :8001"
   # Truncate per-service logs (install log already truncated by compute_install_state)
   : > .run-logs/backend.log
