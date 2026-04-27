@@ -500,6 +500,26 @@ setup_trap() {
   trap cleanup INT TERM EXIT
 }
 
+start_services() {
+  info "Starting backend on :8001"
+  # Truncate per-service logs (install log already truncated by compute_install_state)
+  : > .run-logs/backend.log
+  : > .run-logs/frontend.log
+
+  (
+    cd backend
+    # shellcheck disable=SC1091
+    source venv/bin/activate
+    exec uvicorn app.main:app --port 8001 --reload
+  ) 2>&1 | tee .run-logs/backend.log | awk '{print "[backend] "$0; fflush()}' &
+
+  info "Starting frontend on :3000"
+  (
+    cd frontend
+    exec npm run dev
+  ) 2>&1 | tee .run-logs/frontend.log | awk '{print "[frontend] "$0; fflush()}' &
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
@@ -510,7 +530,8 @@ main() {
   install_frontend
   check_ports
   setup_trap
-  echo "Pre-flight complete."
+  start_services
+  wait
 }
 
 # Only run main when this script is executed directly, not when sourced.
