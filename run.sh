@@ -452,6 +452,54 @@ install_frontend() {
   success "Frontend ready"
 }
 
+port_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -i ":$port" -sTCP:LISTEN -t >/dev/null 2>&1
+  else
+    # Fallback via bash /dev/tcp — works on most modern bash builds
+    (echo > "/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
+  fi
+}
+
+check_ports() {
+  local conflict=0
+  if port_in_use 8001; then
+    fail "Port 8001 is in use. WhatIfSabha may already be running."
+    echo "  Inspect:  lsof -i:8001"
+    echo "  Free it:  lsof -ti:8001 | xargs kill"
+    conflict=1
+  fi
+  if port_in_use 3000; then
+    fail "Port 3000 is in use."
+    echo "  Inspect:  lsof -i:3000"
+    echo "  Free it:  lsof -ti:3000 | xargs kill"
+    conflict=1
+  fi
+  [ $conflict -eq 0 ] || exit 1
+}
+
+cleanup() {
+  trap '' INT TERM EXIT  # disarm to prevent recursion
+  echo
+  info "Shutting down..."
+  # Kill background jobs and their entire process groups (set -m makes each job its own group)
+  kill -TERM %1 %2 2>/dev/null || true
+  # Wait up to 3s for graceful shutdown
+  local i=0
+  while [ $i -lt 30 ] && jobs -r 2>/dev/null | grep -q .; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  kill -KILL %1 %2 2>/dev/null || true
+  success "Stopped."
+}
+
+setup_trap() {
+  set -m  # job control mode: each background job gets its own process group
+  trap cleanup INT TERM EXIT
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
@@ -460,7 +508,9 @@ main() {
   compute_install_state
   install_backend
   install_frontend
-  echo "Install phase complete."
+  check_ports
+  setup_trap
+  echo "Pre-flight complete."
 }
 
 # Only run main when this script is executed directly, not when sourced.
