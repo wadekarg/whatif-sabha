@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # ── Colors (TTY-aware) ────────────────────────────────────────────────────────
-# shellcheck disable=SC2034  # color vars used by helper functions added in later tasks
+# shellcheck disable=SC2034  # BOLD forward-declared; used by handle_install_failure and print_banner (later tasks)
 if [ -t 1 ]; then
   RED=$'\033[31m'
   GREEN=$'\033[32m'
@@ -27,20 +27,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
 # ── Globals (populated by phase functions) ───────────────────────────────────
-# shellcheck disable=SC2034  # globals used by phase functions added in later tasks
-PLATFORM=""        # macos | linux | wsl
-# shellcheck disable=SC2034
-DISTRO=""          # debian | ubuntu | fedora | arch | unknown (linux/wsl only)
-# shellcheck disable=SC2034
-PYTHON_BIN=""      # path to python3.x interpreter
-# shellcheck disable=SC2034
-NO_OPEN=0
-# shellcheck disable=SC2034
-REINSTALL=0
-# shellcheck disable=SC2034
-BACKEND_NEEDS_INSTALL=0
-# shellcheck disable=SC2034
-FRONTEND_NEEDS_INSTALL=0
+# shellcheck disable=SC2034  # all globals are forward-declared; populated by phase functions in later tasks
+{ PLATFORM=""        # macos | linux | wsl
+  DISTRO=""          # debian | ubuntu | fedora | arch | unknown (linux/wsl only)
+  PYTHON_BIN=""      # path to python3.x interpreter
+  NO_OPEN=0
+  REINSTALL=0
+  BACKEND_NEEDS_INSTALL=0
+  FRONTEND_NEEDS_INSTALL=0
+}
 
 # Subsequent phase functions get appended below.
 
