@@ -201,13 +201,76 @@ print_python_install_hint() {
   esac
 }
 
+check_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    fail "Node.js not found."
+    print_node_install_hint
+    return 1
+  fi
+  local version
+  version="$(node --version 2>/dev/null | sed 's/^v//')"
+  if ! version_ge "$version" "18"; then
+    fail "Node.js $version found, but >= 18 required."
+    print_node_install_hint
+    return 1
+  fi
+  success "Node $version"
+  return 0
+}
+
+print_node_install_hint() {
+  case "$PLATFORM" in
+    macos) echo "  brew install node" ;;
+    linux|wsl)
+      case "$DISTRO" in
+        debian) echo "  sudo apt install nodejs npm  (note: Ubuntu's apt may have an old version; for Node 20+ see https://github.com/nodesource/distributions)" ;;
+        fedora) echo "  sudo dnf install nodejs npm" ;;
+        arch)   echo "  sudo pacman -S nodejs npm" ;;
+        *)      echo "  Install Node >= 18 via your distro's package manager." ;;
+      esac
+      ;;
+  esac
+}
+
+check_npm() {
+  if ! command -v npm >/dev/null 2>&1; then
+    fail "npm not found. (Usually bundled with Node.js — install Node and npm should come with it.)"
+    print_node_install_hint
+    return 1
+  fi
+  success "npm $(npm --version)"
+  return 0
+}
+
+check_git() {
+  if ! command -v git >/dev/null 2>&1; then
+    fail "git not found."
+    case "$PLATFORM" in
+      macos)     echo "  xcode-select --install   (or brew install git)" ;;
+      linux|wsl) echo "  Install git via your distro's package manager (e.g. sudo apt install git)." ;;
+    esac
+    return 1
+  fi
+  return 0
+}
+
 check_prereqs() {
+  local ok=1
   if ! find_python; then
     fail "Python >= 3.10 not found."
     print_python_install_hint
+    ok=0
+  else
+    success "Python $("$PYTHON_BIN" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])') ($PYTHON_BIN)"
+  fi
+  check_node || ok=0
+  check_npm  || ok=0
+  check_git  || ok=0
+  if [ $ok -eq 0 ]; then
+    echo
+    fail "Install missing prerequisites and re-run ./run.sh"
     exit 1
   fi
-  success "Python $("$PYTHON_BIN" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])') ($PYTHON_BIN)"
 }
 
 # ── Main flow ────────────────────────────────────────────────────────────────
