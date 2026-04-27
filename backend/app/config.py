@@ -491,6 +491,22 @@ def get_agent_fallbacks(max_tokens: int = 300) -> list:
         if llm:
             candidates.append((llm, f"groq:{m}"))
 
+    # 6. Gemini — long-context fallback. Slower than Cerebras for character
+    # voices but its 1M window means it handles any conversation length,
+    # including long debates where the running history pushes other
+    # providers over their context budget.
+    gemini_key = _key("GEMINI_API_KEY")
+    if gemini_key:
+        m = model_for("gemini", "agent") or model_for("gemini", "analysis") or model_for("gemini", "main")
+        if m:
+            try:
+                candidates.append((
+                    ChatGoogleGenerativeAI(model=m, google_api_key=gemini_key, temperature=0.85),
+                    f"gemini:{m}",
+                ))
+            except Exception:
+                pass
+
     return candidates
 
 
@@ -533,6 +549,20 @@ def get_judge_fallbacks() -> list:
             except Exception:
                 pass
 
+    # Gemini — long-context fallback. Last in chain since others are faster,
+    # but Gemini's 1M window means it never fails on context-length errors.
+    gemini_key = _key("GEMINI_API_KEY")
+    if gemini_key:
+        m = model_for("gemini", "judge") or model_for("gemini", "analysis") or model_for("gemini", "main")
+        if m:
+            try:
+                candidates.append((
+                    ChatGoogleGenerativeAI(model=m, google_api_key=gemini_key, temperature=0.1),
+                    f"gemini:{m}",
+                ))
+            except Exception:
+                pass
+
     return candidates
 
 
@@ -571,6 +601,20 @@ def get_narrator_fallbacks(temperature: float = 0.6) -> list:
                 candidates.append((
                     ChatCerebras(model=m, cerebras_api_key=cerebras_key, temperature=temperature, max_tokens=2048),
                     f"cerebras:{m}",
+                ))
+            except Exception:
+                pass
+
+    # Gemini — long-context fallback. Lower priority than fast providers
+    # but always works for any context size.
+    gemini_key = _key("GEMINI_API_KEY")
+    if gemini_key:
+        m = model_for("gemini", "narrator") or model_for("gemini", "analysis") or model_for("gemini", "main")
+        if m:
+            try:
+                candidates.append((
+                    ChatGoogleGenerativeAI(model=m, google_api_key=gemini_key, temperature=temperature),
+                    f"gemini:{m}",
                 ))
             except Exception:
                 pass
