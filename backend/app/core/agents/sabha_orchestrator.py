@@ -17,7 +17,7 @@ import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from app.config import get_analysis_llm, _make_nvidia_llm, _make_github_models_llm, _make_cloudflare_llm, get_narrator_fallbacks
+from app.config import get_analysis_llm, _make_nvidia_llm, _make_github_models_llm, _make_cloudflare_llm, get_narrator_fallbacks, model_for
 from app.core.usage_tracker import tracker
 
 logger = logging.getLogger(__name__)
@@ -139,13 +139,21 @@ async def _invoke_with_fallback(messages: list) -> str:
     """Invoke LLM with automatic fallback across all providers."""
     providers = []
 
-    # 1. NVIDIA — most reliable, no daily limit, ~40 RPM, clean instruct output
-    NVIDIA_ORCH_MODELS = [
+    # 1. NVIDIA — most reliable, no daily limit, ~40 RPM, clean instruct output.
+    # Use the user's gear-modal pick first (if set), then a small list of
+    # known-good GA model ids. Speculative future-version ids removed —
+    # they 404 silently and waste latency.
+    nvidia_pick = model_for("nvidia", "judge") or model_for("nvidia", "main")
+    NVIDIA_ORCH_MODELS = []
+    if nvidia_pick:
+        NVIDIA_ORCH_MODELS.append(nvidia_pick)
+    NVIDIA_ORCH_MODELS += [
         "meta/llama-3.3-70b-instruct",                      # 70B — proven, clean
-        "google/gemma-4-31b-it",                             # 31B — fast
-        "mistralai/mistral-small-3.2-24b-instruct",           # 24B — clean (3.1 retired 2026-04-15)
-        "meta/llama-4-maverick-17b-128e-instruct",           # Llama 4
+        "mistralai/mistral-small-3.1-24b-instruct",         # 24B — clean fallback
     ]
+    # Dedup while preserving order
+    seen = set()
+    NVIDIA_ORCH_MODELS = [m for m in NVIDIA_ORCH_MODELS if not (m in seen or seen.add(m))]
     for model in NVIDIA_ORCH_MODELS:
         llm = _make_nvidia_llm(model, temperature=0.4)
         if llm:

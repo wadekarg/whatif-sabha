@@ -575,8 +575,8 @@ export default function StoryPage() {
                                         {/* Characters */}
                                         {item._type === "event" && item.characters_involved?.length > 0 && (
                                           <div className="flex gap-1 flex-wrap">
-                                            {item.characters_involved.slice(0, 4).map((c: string) => (
-                                              <span key={c} className="text-xs px-1.5 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
+                                            {item.characters_involved.slice(0, 4).map((c: string, ci: number) => (
+                                              <span key={`ci-${ci}-${c}`} className="text-xs px-1.5 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
                                             ))}
                                           </div>
                                         )}
@@ -641,8 +641,8 @@ export default function StoryPage() {
                             <p className="text-sm text-[#1c1410] font-medium leading-relaxed">{d.description}</p>
                             {d.affected_characters?.length > 0 && (
                               <div className="flex gap-1.5 flex-wrap mt-2">
-                                {d.affected_characters.map((c: string) => (
-                                  <span key={c} className="text-xs px-2 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
+                                {d.affected_characters.map((c: string, ai: number) => (
+                                  <span key={`ac-${ai}-${c}`} className="text-xs px-2 py-0.5 rounded-full bg-[#f7f3ed] border border-[#e8e0d5] text-[#6b5c4e]">{c}</span>
                                 ))}
                               </div>
                             )}

@@ -186,12 +186,20 @@ Be authentic to who you are — your personality, your voice, your way of speaki
 
     from app.config import get_agent_llm, get_narrator_fallbacks, _is_rate_limit
 
-    # Try Cerebras first (same as character agents — most reliable), then Groq/NVIDIA
-    candidates = [get_agent_llm(max_tokens=400)]
+    # Try Cerebras first (same as character agents — most reliable), then Groq/NVIDIA.
+    # get_agent_llm() raises ValueError if no providers configured for the agent
+    # role; catch it so candidates stays empty and we yield a clear error event below.
+    candidates = []
+    try:
+        candidates.append(get_agent_llm(max_tokens=400))
+    except Exception:
+        pass
     for llm, _label in get_narrator_fallbacks(temperature=0.75):
         candidates.append(llm)
 
     if not candidates:
+        yield ("I cannot reach this character right now — no language model is configured. "
+               "Open the gear icon (⚙) and add an API key (Gemini's free tier works well).")
         return
 
     last_exc = None

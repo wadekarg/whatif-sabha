@@ -113,7 +113,7 @@ THE ALTERNATE ENDING:"""
 
     fallbacks = get_narrator_fallbacks(temperature=0.75)
     if not fallbacks:
-        raise ValueError("No narrator LLM available — check your Groq API key.")
+        raise ValueError("No language model configured for the narrator. Add an API key in the gear icon (⚙) — Gemini's free tier works well — and re-trigger the debate.")
 
     last_exc = None
     for llm, label in fallbacks:
@@ -240,7 +240,7 @@ THE DEBATE REPORT:"""
 
     fallbacks = get_narrator_fallbacks(temperature=0.7)
     if not fallbacks:
-        raise ValueError("No narrator LLM available.")
+        raise ValueError("No language model configured for the narrator. Add an API key in the gear icon (⚙).")
 
     last_exc = None
     for llm, label in fallbacks:

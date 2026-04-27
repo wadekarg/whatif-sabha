@@ -154,9 +154,10 @@ class Settings(BaseSettings):
     # Feature flags
     ENABLE_LIGHTRAG: bool = False
 
-    # Primary model IDs
-    ANALYSIS_MODEL: str = "gemini-3.1-flash-lite-preview"
-    CHARACTER_AGENT_MODEL: str = "qwen-3-235b-a22b-instruct-2507"
+    # Primary model IDs (defaults — overridden by gear-modal pick if set).
+    # Keep to GA model ids; preview/experimental ids 404 on first-time users.
+    ANALYSIS_MODEL: str = "gemini-2.0-flash"
+    CHARACTER_AGENT_MODEL: str = "llama3.3-70b"
     JUDGE_MODEL: str = "llama-3.3-70b-versatile"
     NARRATOR_MODEL: str = "llama-3.3-70b-versatile"
     # NVIDIA NIM models — no daily token limit, ~40 RPM free tier
@@ -634,7 +635,7 @@ def get_analysis_llm():
     llm = _make_llm_for_role("analysis", temperature=0.2, max_tokens=4096)
     if llm:
         return llm
-    raise ValueError("No API key configured. Add any key via the ⚙ Settings button.")
+    raise ValueError("No language model configured for this role. Open the gear icon (⚙) in the top-right and add at least one API key (Gemini's free tier is recommended).")
 
 
 def get_analysis_fallbacks() -> list:
@@ -739,14 +740,14 @@ def get_agent_llm(max_tokens: int = 180):
     llm = _make_llm_for_role("agent", temperature=0.85, max_tokens=max_tokens)
     if llm:
         return llm
-    raise ValueError("No API key configured. Add any key via the ⚙ Settings button.")
+    raise ValueError("No language model configured for this role. Open the gear icon (⚙) in the top-right and add at least one API key (Gemini's free tier is recommended).")
 
 
 def get_judge_llm():
     """Kept for compatibility — use get_judge_fallbacks() for resilient calls."""
     llms = get_judge_fallbacks()
     if not llms:
-        raise ValueError("Groq API key not set. Add it via the ⚙ Settings button.")
+        raise ValueError("No language model configured for this role. Open the gear icon (⚙) and add an API key (Gemini's free tier is recommended).")
     return llms[0][0]
 
 
@@ -754,5 +755,5 @@ def get_narrator_llm():
     """Kept for compatibility — use get_narrator_fallbacks() for resilient calls."""
     llms = get_narrator_fallbacks()
     if not llms:
-        raise ValueError("Groq API key not set. Add it via the ⚙ Settings button.")
+        raise ValueError("No language model configured for this role. Open the gear icon (⚙) and add an API key (Gemini's free tier is recommended).")
     return llms[0][0]

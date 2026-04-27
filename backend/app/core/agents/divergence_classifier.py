@@ -112,17 +112,30 @@ DIVERGENCE: "What if Old Major lived ten more years?"
 Now produce the JSON for the current divergence.
 """
 
-    try:
-        llm = get_analysis_llm()
-        raw = await llm.ainvoke([HumanMessage(content=prompt)])
-        parsed = _extract_json(raw.content)
-        if not parsed:
-            logger.warning("divergence classifier: could not parse JSON, falling back to empty state")
-            return dict(_EMPTY_STATE)
-        return _sanitize(parsed, char_names)
-    except Exception as e:
-        logger.warning(f"divergence classifier failed: {e}")
+    # Use the full analysis fallback chain so a single provider hiccup
+    # (e.g. Gemini 503 / 404 on a deprecated model id) doesn't kill the
+    # divergence framing. Try each provider until one returns parseable JSON.
+    from app.config import get_analysis_fallbacks
+    chain = get_analysis_fallbacks()
+    if not chain:
+        logger.warning("divergence classifier: no provider configured — empty state")
         return dict(_EMPTY_STATE)
+
+    last_err = None
+    for llm, label in chain:
+        try:
+            raw = await llm.ainvoke([HumanMessage(content=prompt)])
+            parsed = _extract_json(raw.content)
+            if parsed:
+                return _sanitize(parsed, char_names)
+            logger.info(f"divergence classifier {label}: unparseable JSON, trying next")
+        except Exception as e:
+            last_err = e
+            logger.info(f"divergence classifier {label} failed ({type(e).__name__}: {str(e)[:80]}), trying next")
+            continue
+
+    logger.warning(f"divergence classifier: all providers failed ({last_err}), empty state")
+    return dict(_EMPTY_STATE)
 
 
 def status_for(character_name: str, world_state: dict | None) -> str | None:

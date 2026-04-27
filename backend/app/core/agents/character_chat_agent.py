@@ -121,6 +121,11 @@ async def character_chat_stream(
 
     fallbacks = get_narrator_fallbacks(temperature=0.8)
     if not fallbacks:
+        # Tell the user explicitly instead of silently returning an empty
+        # response (which the frontend renders as a forever-loading "…").
+        yield ("I cannot reach my voice right now — no language model is configured "
+               "for character chat. Open the gear icon (⚙) in the top-right and add "
+               "an API key (Gemini's free tier works well). Then try again.")
         return
 
     last_exc = None

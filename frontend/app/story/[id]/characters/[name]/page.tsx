@@ -278,11 +278,11 @@ export default function CharacterDetailPage() {
                       {hasDiff && (
                         <div className="ml-12 mb-2 mt-1 bg-[#fef9f0] border border-[#f0c060]/40 rounded-xl px-4 py-2.5 space-y-1">
                           <div className="text-xs text-[#c07820] font-semibold uppercase tracking-widest mb-1">↕ What changed</div>
-                          {(diff!.added as string[]).map((t) => <div key={t} className="text-xs text-emerald-700 flex gap-1.5 items-center"><span className="text-emerald-500 font-bold">+</span> trait: {t}</div>)}
-                          {(diff!.removed as string[]).map((t) => <div key={t} className="text-xs text-red-500 flex gap-1.5 items-center"><span className="font-bold">−</span> trait: {t}</div>)}
-                          {(diff!.newKnowledge as string[]).map((k) => <div key={k} className="text-xs text-blue-700 flex gap-1.5 items-center"><span className="text-blue-500 font-bold">↗</span> learned: {k}</div>)}
-                          {(diff!.newMotivations as string[]).map((m) => <div key={m} className="text-xs text-purple-700 flex gap-1.5 items-center"><span className="font-bold">→</span> new drive: {m}</div>)}
-                          {(diff!.lostMotivations as string[]).map((m) => <div key={m} className="text-xs text-[#a09282] flex gap-1.5 items-center"><span className="font-bold">↓</span> lost drive: {m}</div>)}
+                          {(diff!.added as string[]).map((t, i) => <div key={`a-${i}-${t}`} className="text-xs text-emerald-700 flex gap-1.5 items-center"><span className="text-emerald-500 font-bold">+</span> trait: {t}</div>)}
+                          {(diff!.removed as string[]).map((t, i) => <div key={`r-${i}-${t}`} className="text-xs text-red-500 flex gap-1.5 items-center"><span className="font-bold">−</span> trait: {t}</div>)}
+                          {(diff!.newKnowledge as string[]).map((k, i) => <div key={`k-${i}-${k}`} className="text-xs text-blue-700 flex gap-1.5 items-center"><span className="text-blue-500 font-bold">↗</span> learned: {k}</div>)}
+                          {(diff!.newMotivations as string[]).map((m, i) => <div key={`m-${i}-${m}`} className="text-xs text-purple-700 flex gap-1.5 items-center"><span className="font-bold">→</span> new drive: {m}</div>)}
+                          {(diff!.lostMotivations as string[]).map((m, i) => <div key={`lm-${i}-${m}`} className="text-xs text-[#a09282] flex gap-1.5 items-center"><span className="font-bold">↓</span> lost drive: {m}</div>)}
                         </div>
                       )}
 
@@ -317,8 +317,8 @@ export default function CharacterDetailPage() {
                                 )}
                                 {!isOpen && phase.personality_traits?.length > 0 && (
                                   <div className="flex flex-wrap gap-1 mt-2">
-                                    {phase.personality_traits.slice(0, 4).map((t: string) => (
-                                      <span key={t} className="text-xs bg-[#f7f3ed] text-[#6b5c4e] px-2 py-0.5 rounded-full border border-[#e8e0d5]">{t}</span>
+                                    {phase.personality_traits.slice(0, 4).map((t: string, i: number) => (
+                                      <span key={`pt-${i}-${t}`} className="text-xs bg-[#f7f3ed] text-[#6b5c4e] px-2 py-0.5 rounded-full border border-[#e8e0d5]">{t}</span>
                                     ))}
                                     {phase.personality_traits.length > 4 && <span className="text-xs text-[#a09282]">+{phase.personality_traits.length - 4}</span>}
                                   </div>
@@ -571,8 +571,8 @@ export default function CharacterDetailPage() {
                   <div className="flex items-start gap-3">
                     <div className="text-xs text-[#a09282] uppercase tracking-widest w-28 shrink-0 pt-1.5 font-medium">True traits</div>
                     <div className="flex flex-wrap gap-2 flex-1">
-                      {fw.fair_personality_traits.map((t: string) => (
-                        <span key={t} className="text-xs bg-white text-[#6b5c4e] px-3 py-1 rounded-full border border-[#e8e0d5]">{t}</span>
+                      {fw.fair_personality_traits.map((t: string, i: number) => (
+                        <span key={`fpt-${i}-${t}`} className="text-xs bg-white text-[#6b5c4e] px-3 py-1 rounded-full border border-[#e8e0d5]">{t}</span>
                       ))}
                     </div>
                   </div>
@@ -618,8 +618,8 @@ export default function CharacterDetailPage() {
               <div className="space-y-1.5">
                 <div className="text-xs text-[#a09282] uppercase tracking-widest font-medium">Traits</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {lastPhase.personality_traits.slice(0, 8).map((t: string) => (
-                    <span key={t} className="text-xs bg-[#f7f3ed] text-[#6b5c4e] px-2.5 py-1 rounded-full border border-[#e8e0d5]">{t}</span>
+                  {lastPhase.personality_traits.slice(0, 8).map((t: string, i: number) => (
+                    <span key={`lpt-${i}-${t}`} className="text-xs bg-[#f7f3ed] text-[#6b5c4e] px-2.5 py-1 rounded-full border border-[#e8e0d5]">{t}</span>
                   ))}
                 </div>
               </div>

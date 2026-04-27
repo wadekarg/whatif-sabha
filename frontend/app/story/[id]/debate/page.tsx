@@ -1227,8 +1227,22 @@ export default function DebatePage() {
         });
         setStreaming(null);
       } else if (ev.type === "turn_error") {
-        // One turn failed — debate continues, just log it silently
+        // One turn failed — surface the reason inline as a system message
+        // so the user can see WHY a character couldn't speak (rate limits,
+        // context overflow, unavailable provider). Otherwise users see
+        // the streaming bubble vanish with no explanation.
         setStreaming(null);
+        const reason = ev.reason || "the model couldn't respond";
+        const character = ev.character || "A character";
+        setTranscript(prev => [
+          ...prev,
+          {
+            character: "(system)",
+            message: `⚠ ${character} couldn't respond: ${reason}. Continuing with the next speaker…`,
+            round: prev.length,
+            isStageDirection: true,
+          } as any,
+        ]);
       }
     };
     es.onerror = () => {
@@ -2840,10 +2854,10 @@ export default function DebatePage() {
                               </div>
                               {ev.characters?.length > 0 && (
                                 <div className="flex flex-wrap gap-1 shrink-0">
-                                  {(ev.characters as string[]).map((c: string) => {
+                                  {(ev.characters as string[]).map((c: string, ci2: number) => {
                                     const ci = activeCharacters.indexOf(c);
                                     const ccol = CHAR_COLORS[ci >= 0 ? ci % CHAR_COLORS.length : 0].hex;
-                                    return <span key={c} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: ccol + "18", color: ccol }}>{c}</span>;
+                                    return <span key={`evc-${ci2}-${c}`} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: ccol + "18", color: ccol }}>{c}</span>;
                                   })}
                                 </div>
                               )}

@@ -1645,10 +1645,10 @@ export default function DebateViewPage() {
                                 </div>
                                 {ev.characters?.length > 0 && (
                                   <div className="flex flex-wrap gap-1 shrink-0">
-                                    {(ev.characters as string[]).map((c: string) => {
+                                    {(ev.characters as string[]).map((c: string, ci2: number) => {
                                       const ci = chars.indexOf(c);
                                       const ccol = CHAR_COLORS[ci >= 0 ? ci % CHAR_COLORS.length : 0].hex;
-                                      return <span key={c} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: ccol + "18", color: ccol }}>{c}</span>;
+                                      return <span key={`evc2-${ci2}-${c}`} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: ccol + "18", color: ccol }}>{c}</span>;
                                     })}
                                   </div>
                                 )}

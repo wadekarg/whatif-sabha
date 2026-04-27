@@ -137,7 +137,13 @@ export default function Home() {
               setTimeout(() => setCharacters(batch), (i / 30) * 50);
             }
           }
-        } else if (data.status !== "error") {
+        } else if (data.status === "error") {
+          // Surface backend error so the user knows what happened instead of
+          // staring at a frozen activity log
+          pollStoppedRef.current = true;
+          setError(data.error || data.error_message || "Analysis failed. Please try again or check your API key in the gear icon.");
+          setStatus("error");
+        } else {
           setTimeout(poll, 2500);
         }
       } catch (e) { console.error("Poll error:", e); if (!pollStoppedRef.current) setTimeout(poll, 3000); }
