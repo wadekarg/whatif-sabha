@@ -3,6 +3,7 @@
 # See docs/superpowers/specs/2026-04-26-run-script-design.md for the design.
 
 set -euo pipefail
+unset CDPATH
 
 # ── Colors (TTY-aware) ────────────────────────────────────────────────────────
 # shellcheck disable=SC2034  # BOLD forward-declared; used by handle_install_failure and print_banner (later tasks)
@@ -371,6 +372,7 @@ install_backend() {
   [ "$BACKEND_NEEDS_INSTALL" = "1" ] || return 0
 
   info "Installing backend dependencies (this takes a few minutes the first time)..."
+  [ -d backend ] || { fail "'backend/' directory not found. Are you in the repo root?"; exit 1; }
   cd backend
 
   # Venv staleness — recreate if the Python interpreter changed since last build
@@ -382,10 +384,30 @@ install_backend() {
   fi
 
   if [ ! -d venv ]; then
-    "$PYTHON_BIN" -m venv venv
+    if ! "$PYTHON_BIN" -m venv venv >> ../.run-logs/install.log 2>&1; then
+      cd ..
+      fail "Failed to create Python venv with $PYTHON_BIN."
+      echo "  Common cause: missing 'venv' module."
+      case "$PLATFORM" in
+        linux|wsl)
+          case "$DISTRO" in
+            debian) echo "  Fix: sudo apt install python3.12-venv  (or python3-venv)" ;;
+            fedora) echo "  Fix: sudo dnf install python3-pip       (venv comes with python3 on fedora)" ;;
+            arch)   echo "  Fix: should be bundled — try reinstalling python: sudo pacman -S python" ;;
+            *)      echo "  Fix: install your distro's python3-venv package." ;;
+          esac
+          ;;
+        macos) echo "  Fix: reinstall Python: brew reinstall python@3.12" ;;
+      esac
+      echo "  Last 10 lines of install log:"
+      tail -n 10 .run-logs/install.log 2>/dev/null | sed 's/^/    /' || true
+      exit 1
+    fi
   fi
 
   # shellcheck disable=SC1091
+  # Activate venv. PATH change leaks beyond this function — that's intentional;
+  # Task 13's start_services needs python/uvicorn from the venv.
   source venv/bin/activate
 
   # Truncate install log for this run
