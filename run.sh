@@ -78,20 +78,28 @@ detect_platform() {
       fi
       # Detect distro for prereq install messages
       if [ -r /etc/os-release ]; then
-        # Read only the ID field — sourcing the file pollutes our namespace
-        # with NAME/VERSION/etc. and risks collisions with later-task globals.
-        local _id
+        # Read only the ID and ID_LIKE fields — sourcing the file pollutes our
+        # namespace with NAME/VERSION/etc. and risks collisions with later-task globals.
+        local _id _id_like _matched
         _id=$(grep -m1 '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
-        case "${_id:-}" in
-          debian|ubuntu|linuxmint|pop) DISTRO="debian" ;;
-          fedora|rhel|centos)          DISTRO="fedora" ;;
-          arch|manjaro)                DISTRO="arch" ;;
-          "")                          DISTRO="unknown" ;;
-          *)
+        _id_like=$(grep -m1 '^ID_LIKE=' /etc/os-release | cut -d= -f2 | tr -d '"')
+        _matched=""
+        # Try primary ID first, then each token in ID_LIKE for derivatives.
+        for _candidate_id in "$_id" $_id_like; do
+          case "$_candidate_id" in
+            debian|ubuntu|linuxmint|pop) DISTRO="debian"; _matched=1; break ;;
+            fedora|rhel|centos)          DISTRO="fedora"; _matched=1; break ;;
+            arch|manjaro)                DISTRO="arch";   _matched=1; break ;;
+          esac
+        done
+        if [ -z "$_matched" ]; then
+          if [ -z "$_id" ]; then
+            DISTRO="unknown"
+          else
             DISTRO="$_id"
-            warn "Unrecognised distro '$_id' — generic install hints will be shown."
-            ;;
-        esac
+            warn "Unrecognised distro '$_id' (ID_LIKE='$_id_like') — generic install hints will be shown."
+          fi
+        fi
       else
         DISTRO="unknown"
       fi
@@ -154,16 +162,16 @@ find_python() {
   for candidate in "${candidates[@]}"; do
     if command -v "$candidate" >/dev/null 2>&1; then
       # Capture stderr to detect Apple's "command line developer tools" stub
-      stderr_capture=$("$candidate" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>&1) || stderr_capture=""
-      if echo "$stderr_capture" | grep -qi "command line developer tools"; then
+      stderr_capture=$("$candidate" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>&1) || true
+      if echo "$stderr_capture" | grep -qiE "command line developer tools|xcrun: error|xcode-select"; then
         fail "Apple's Python stub triggered. Install Xcode Command Line Tools first:"
         echo "  xcode-select --install"
         exit 1
       fi
-      version="$stderr_capture"
-      if echo "$version" | grep -qE '^[0-9]+\.[0-9]+$'; then
+      version=$(echo "$stderr_capture" | grep -E '^[0-9]+\.[0-9]+$' | head -n1)
+      if [ -n "$version" ]; then
         if version_ge "$version" "3.10"; then
-          PYTHON_BIN="$candidate"
+          PYTHON_BIN=$(command -v "$candidate")
           return 0
         fi
       fi
