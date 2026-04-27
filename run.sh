@@ -39,10 +39,37 @@ cd "$REPO_ROOT"
 
 # Subsequent phase functions get appended below.
 
+parse_flags() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --reinstall) REINSTALL=1 ;;
+      --no-open)   NO_OPEN=1 ;;
+      -h|--help)
+        cat <<'EOF'
+Usage: ./run.sh [--reinstall] [--no-open] [--help]
+
+  --reinstall   Force pip and npm install even if dependency hashes match.
+                Use this after `git pull` brings new deps, or if a previous
+                install was interrupted.
+  --no-open     Don't open the browser automatically. URL is still printed.
+  --help        Show this help and exit.
+EOF
+        exit 0
+        ;;
+      *)
+        fail "Unknown flag: $1"
+        echo "Run './run.sh --help' for usage." >&2
+        exit 2
+        ;;
+    esac
+    shift
+  done
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
-  echo "WhatIfSabha launcher"
-  # Phase calls get added here as we implement them.
+  parse_flags "$@"
+  echo "WhatIfSabha launcher (REINSTALL=$REINSTALL, NO_OPEN=$NO_OPEN)"
 }
 
 # Only run main when this script is executed directly, not when sourced.
