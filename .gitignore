@@ -53,3 +53,7 @@ out/
 chroma_db/
 kuzu_graph/
 uploads/
+
+# run.sh script artifacts
+.run-cache/
+.run-logs/
