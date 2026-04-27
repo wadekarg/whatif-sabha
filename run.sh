@@ -144,10 +144,69 @@ version_ge() {
   [ "$lower" = "$2" ]
 }
 
+find_python() {
+  # Try interpreters in priority order; pick the first that's >= 3.10.
+  # This handles Homebrew (which installs python3.12 but may not symlink python3),
+  # Apple's stub at /usr/bin/python3, and Anaconda hijacks (we honor whatever's
+  # first in PATH if it satisfies the version).
+  local candidates=("python3.13" "python3.12" "python3.11" "python3.10" "python3")
+  local candidate version stderr_capture
+  for candidate in "${candidates[@]}"; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      # Capture stderr to detect Apple's "command line developer tools" stub
+      stderr_capture=$("$candidate" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>&1) || stderr_capture=""
+      if echo "$stderr_capture" | grep -qi "command line developer tools"; then
+        fail "Apple's Python stub triggered. Install Xcode Command Line Tools first:"
+        echo "  xcode-select --install"
+        exit 1
+      fi
+      version="$stderr_capture"
+      if echo "$version" | grep -qE '^[0-9]+\.[0-9]+$'; then
+        if version_ge "$version" "3.10"; then
+          PYTHON_BIN="$candidate"
+          return 0
+        fi
+      fi
+    fi
+  done
+  return 1
+}
+
+print_python_install_hint() {
+  case "$PLATFORM" in
+    macos)
+      if ! command -v brew >/dev/null 2>&1; then
+        echo "  Install Homebrew first: https://brew.sh"
+        echo "  Then: brew install python@3.12"
+      else
+        echo "  brew install python@3.12"
+      fi
+      ;;
+    linux|wsl)
+      case "$DISTRO" in
+        debian) echo "  sudo apt update && sudo apt install python3.12 python3.12-venv" ;;
+        fedora) echo "  sudo dnf install python3.12 python3.12-pip" ;;
+        arch)   echo "  sudo pacman -S python python-pip" ;;
+        *)      echo "  Install Python >= 3.10 via your distro's package manager." ;;
+      esac
+      ;;
+  esac
+}
+
+check_prereqs() {
+  if ! find_python; then
+    fail "Python >= 3.10 not found."
+    print_python_install_hint
+    exit 1
+  fi
+  success "Python $("$PYTHON_BIN" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])') ($PYTHON_BIN)"
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
   detect_platform
+  check_prereqs
   echo "Done."
 }
 
