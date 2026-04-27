@@ -295,6 +295,7 @@ compute_install_state() {
     BACKEND_NEEDS_INSTALL=1
     FRONTEND_NEEDS_INSTALL=1
     info "Forced reinstall (--reinstall)"
+    : > .run-logs/install.log
     return 0
   fi
 
@@ -323,6 +324,12 @@ compute_install_state() {
   fi
   if [ "$FRONTEND_NEEDS_INSTALL" = "0" ]; then
     success "Frontend deps unchanged (skip install)"
+  fi
+
+  # Truncate the install log once if any subinstall will run, so handle_install_failure
+  # doesn't tail stale content from a prior run.
+  if [ "$BACKEND_NEEDS_INSTALL" = "1" ] || [ "$FRONTEND_NEEDS_INSTALL" = "1" ]; then
+    : > .run-logs/install.log
   fi
 }
 
@@ -409,9 +416,6 @@ install_backend() {
   # Activate venv. PATH change leaks beyond this function — that's intentional;
   # Task 13's start_services needs python/uvicorn from the venv.
   source venv/bin/activate
-
-  # Truncate install log for this run
-  : > ../.run-logs/install.log
 
   if ! pip install --upgrade pip >> ../.run-logs/install.log 2>&1; then
     cd ..
