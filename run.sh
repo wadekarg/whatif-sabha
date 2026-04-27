@@ -125,6 +125,20 @@ version_ge() {
   # Returns 0 if version $1 >= version $2, else 1.
   # Versions are dotted strings like "3.12.7" or "20.10.0".
   # Implementation: sort -V, take the lower one, check it's $2.
+  #
+  # Behavior probe: confirm sort -V actually does version-aware ordering
+  # (and didn't silently fall back to lexicographic on systems without GNU sort).
+  # Probe runs only the first time; result cached in _SORT_V_OK.
+  if [ -z "${_SORT_V_OK:-}" ]; then
+    if [ "$(printf '1.10\n1.2\n' | sort -V 2>/dev/null | head -n1)" = "1.2" ]; then
+      _SORT_V_OK=1
+    else
+      fail "sort -V is not supported (or degraded to lexicographic) on this system."
+      echo "  This script needs GNU sort or macOS >= 10.13. On older macOS:" >&2
+      echo "    brew install coreutils  (then retry — gsort/-V will be available)" >&2
+      exit 1
+    fi
+  fi
   local lower
   lower=$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)
   [ "$lower" = "$2" ]
