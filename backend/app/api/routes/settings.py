@@ -193,17 +193,12 @@ PROVIDER_KEY_NAMES = {
 # frontend marks this as "(recommended)" in the dropdown and auto-selects it
 # the first time the user adds a key. If the provider has deprecated it, we
 # fall through to whatever's first in the live list.
-# Note: each provider's actual model catalog drifts. We list a known-good
-# stable id here, but the dropdown also fetches the LIVE list and falls
-# through to the first item if the recommended id is no longer served.
-# Keep these to ids that are GA (not preview / experimental) so first-time
-# users don't get 404'd.
 RECOMMENDED_MODELS = {
-    "anthropic": "claude-3-5-haiku-20241022",     # GA Haiku 3.5 — safe baseline
-    "openai":    "gpt-4o-mini",                    # GA, free in some plans
-    "gemini":    "gemini-2.0-flash",               # GA, broadly available, free tier
+    "anthropic": "claude-haiku-4-5-20251001",
+    "openai":    "gpt-4o-mini",
+    "gemini":    "gemini-3.1-flash-lite-preview",
     "groq":      "llama-3.3-70b-versatile",
-    "cerebras":  "llama3.3-70b",                   # widely-available stable id on Cerebras
+    "cerebras":  "qwen-3-235b-a22b-instruct-2507",
     "nvidia":    "meta/llama-3.3-70b-instruct",
 }
 

@@ -154,10 +154,9 @@ class Settings(BaseSettings):
     # Feature flags
     ENABLE_LIGHTRAG: bool = False
 
-    # Primary model IDs (defaults — overridden by gear-modal pick if set).
-    # Keep to GA model ids; preview/experimental ids 404 on first-time users.
-    ANALYSIS_MODEL: str = "gemini-2.0-flash"
-    CHARACTER_AGENT_MODEL: str = "llama3.3-70b"
+    # Primary model IDs
+    ANALYSIS_MODEL: str = "gemini-3.1-flash-lite-preview"
+    CHARACTER_AGENT_MODEL: str = "qwen-3-235b-a22b-instruct-2507"
     JUDGE_MODEL: str = "llama-3.3-70b-versatile"
     NARRATOR_MODEL: str = "llama-3.3-70b-versatile"
     # NVIDIA NIM models — no daily token limit, ~40 RPM free tier
