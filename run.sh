@@ -208,7 +208,12 @@ check_node() {
     return 1
   fi
   local version
-  version="$(node --version 2>/dev/null | sed 's/^v//')"
+  version="$(node --version 2>/dev/null | sed 's/^v//')" || true
+  if [ -z "$version" ]; then
+    fail "Node.js found but 'node --version' failed or produced no output."
+    print_node_install_hint
+    return 1
+  fi
   if ! version_ge "$version" "18"; then
     fail "Node.js $version found, but >= 18 required."
     print_node_install_hint
@@ -238,7 +243,14 @@ check_npm() {
     print_node_install_hint
     return 1
   fi
-  success "npm $(npm --version)"
+  local version
+  version="$(npm --version 2>/dev/null)" || true
+  if [ -z "$version" ]; then
+    fail "npm found but 'npm --version' failed."
+    print_node_install_hint
+    return 1
+  fi
+  success "npm $version"
   return 0
 }
 
