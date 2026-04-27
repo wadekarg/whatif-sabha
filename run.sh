@@ -41,6 +41,7 @@ cd "$REPO_ROOT"
 
 parse_flags() {
   while [ $# -gt 0 ]; do
+    # shellcheck disable=SC2034  # REINSTALL/NO_OPEN used by later phase functions
     case "$1" in
       --reinstall) REINSTALL=1 ;;
       --no-open)   NO_OPEN=1 ;;
@@ -66,10 +67,42 @@ EOF
   done
 }
 
+detect_platform() {
+  case "$(uname -s)" in
+    Darwin) PLATFORM="macos" ;;
+    Linux)
+      if [ -r /proc/version ] && grep -qi "microsoft" /proc/version; then
+        PLATFORM="wsl"
+      else
+        PLATFORM="linux"
+      fi
+      # Detect distro for prereq install messages
+      if [ -r /etc/os-release ]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        case "${ID:-}" in
+          debian|ubuntu|linuxmint|pop) DISTRO="debian" ;;
+          fedora|rhel|centos)          DISTRO="fedora" ;;
+          arch|manjaro)                DISTRO="arch" ;;
+          *)                           DISTRO="${ID:-unknown}" ;;
+        esac
+      else
+        DISTRO="unknown"
+      fi
+      ;;
+    *)
+      fail "Unsupported platform: $(uname -s). This script supports macOS, Linux, and WSL."
+      exit 1
+      ;;
+  esac
+  success "Detected platform: $PLATFORM${DISTRO:+ ($DISTRO)}"
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
-  echo "WhatIfSabha launcher (REINSTALL=$REINSTALL, NO_OPEN=$NO_OPEN)"
+  detect_platform
+  echo "Done."
 }
 
 # Only run main when this script is executed directly, not when sourced.
