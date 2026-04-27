@@ -430,6 +430,24 @@ install_backend() {
   success "Backend ready"
 }
 
+install_frontend() {
+  [ "$FRONTEND_NEEDS_INSTALL" = "1" ] || return 0
+
+  info "Installing frontend dependencies..."
+  [ -d frontend ] || { fail "'frontend/' directory not found. Are you in the repo root?"; exit 1; }
+  cd frontend
+
+  # Append to the install log started by install_backend (don't truncate again)
+  if ! npm install >> ../.run-logs/install.log 2>&1; then
+    cd ..
+    handle_install_failure frontend
+  fi
+
+  compute_hash package.json > ../.run-cache/package.hash
+  cd ..
+  success "Frontend ready"
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
@@ -437,7 +455,8 @@ main() {
   check_prereqs
   compute_install_state
   install_backend
-  echo "Backend phase complete."
+  install_frontend
+  echo "Install phase complete."
 }
 
 # Only run main when this script is executed directly, not when sourced.
