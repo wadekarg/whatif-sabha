@@ -57,6 +57,8 @@ Snowball: "I signalled nothing. And Napoleon knows it..."
 
 While this streams, a live **interaction graph** shows who's talking to whom, a quiet **argument ledger** tracks every open question, and before Boru closes the session, he runs a **resolution round** that forces answers to the biggest unanswered things.
 
+> **You can step in too.** Type your name and an interjection at any point — Boru acknowledges you, decides whether to redirect or hand the floor to a specific character, and your line shows up in the transcript as an audience turn. Off-topic / rude messages get politely shut down (Boru is patient but not a doormat).
+
 > **After the debate:** the world persists. You can walk up to any character and ask them questions — **Oracle mode** — and they answer from inside the alternate reality the debate shaped.
 
 ---
@@ -128,6 +130,10 @@ Boru hosts. Characters argue. Ledger fills in real time. Graph updates per turn.
 <p align="center">
   <img src="docs/screenshots/during-debate.png" width="820" alt="Live streaming debate" />
 </p>
+
+### 🎤 You can join the debate
+
+Type your name once at the start, then drop questions or comments into the same Sabha at any point. Boru reads them in-character — sometimes nodding you toward a specific speaker (*"Clover, the audience asks you directly"*), sometimes redirecting you back to the topic if you've wandered, sometimes shutting down a hostile interjection (*"This is a Sabha, friend. We use words, not weapons."*). Your line lands in the transcript as an audience turn alongside the characters'.
 
 ### 🌐 Interaction graph
 
@@ -290,6 +296,7 @@ Boru is the interesting part. He's not just picking the next speaker by score �
 - ⚖️ **Dispute lifecycle** — the `ArgumentLedger` tracks claim-vs-claim contradictions, escalates them through a couple of confrontation rounds, and then retires them with a pair cooldown so the same two people aren't shoved back into combat forever. Stale disputes auto-retire after ~10 untouched turns.
 - 🌀 **Silent rotation** — if the cast is going quiet (40%+ haven't spoken, or three-plus have never spoken), Boru actively pulls silent characters in. The pull gets stronger the longer someone stays frozen out.
 - 🔀 **Pair-duel breaker** — after five exchanges dominated by the same two voices, a third voice is forced in to break the ping-pong.
+- 🎤 **Audience interjection** — you can interrupt mid-debate from the right-hand panel: type your name once, then drop questions or comments into the Sabha at any point. Boru handles them in-character: routes on-topic questions to the right character, redirects when you wander off-topic, calmly shuts down hostility. Your turn lands in the transcript labeled as audience.
 - 🌍 **World observers** — 3–4 real-world voices chosen per debate by tag-overlap with your divergence (for *Animal Farm*: a Soviet propagandist, a Trotskyist exile, a Ukrainian farmer under collectivization, a Cold War strategist) break in every 3–4 turns with historical context the characters themselves can't see.
 - 🔎 **Power Interrogator** — a structural voice that fires once at the midpoint. Not moral. One question: *who benefits if this version of events is accepted as real?* Names the interested party, asks the character with the most to gain from being believed, walks off.
 - 🪜 **Phase progression** — `opening → cross_examination → deepening → reckoning → closing`, driven by the ledger's state rather than raw round count.
