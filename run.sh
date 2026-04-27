@@ -347,11 +347,6 @@ handle_install_failure() {
     echo "${BOLD}Fix:${RESET}"
     echo "  pip install --upgrade certifi"
     echo "  ./run.sh --reinstall"
-  elif grep -qE "address already in use|EADDRINUSE" "$log" 2>/dev/null; then
-    echo "${BOLD}Likely cause:${RESET} A port is already bound by another process."
-    echo "${BOLD}Fix:${RESET}"
-    echo "  lsof -ti:8001 | xargs kill   # for backend"
-    echo "  lsof -ti:3000 | xargs kill   # for frontend"
   elif grep -qiE "command line developer tools" "$log" 2>/dev/null; then
     echo "${BOLD}Likely cause:${RESET} Apple's Python stub triggered."
     echo "${BOLD}Fix:${RESET}"
@@ -363,7 +358,7 @@ handle_install_failure() {
   else
     echo "${BOLD}No matching pattern.${RESET} Last 30 lines of the install log:"
     echo "  ────────────────────────────────────────"
-    tail -n 30 "$log" 2>/dev/null | sed 's/^/  /'
+    tail -n 30 "$log" 2>/dev/null | sed 's/^/  /' || true
     echo "  ────────────────────────────────────────"
     echo "Full log: $log"
     echo "README troubleshooting: README.md (search 'Troubleshooting')"
