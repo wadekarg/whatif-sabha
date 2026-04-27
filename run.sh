@@ -104,6 +104,19 @@ detect_platform() {
   success "Detected platform: $PLATFORM${DISTRO:+ ($DISTRO)}"
 }
 
+compute_hash() {
+  # Compute sha256 of the file at $1 and print just the hex digest.
+  # macOS lacks sha256sum; ships shasum -a 256 instead.
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    fail "Neither sha256sum nor shasum found. Cannot compute file hashes."
+    exit 1
+  fi
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
