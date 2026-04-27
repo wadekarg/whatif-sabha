@@ -163,7 +163,38 @@ After the debate closes, the world persists. Any character will answer you from 
 
 The simplest path: **start the app, then paste your API key into the in-app settings panel** — no config files to edit.
 
-### 🐳 Option A — Docker (easiest, ~3 minutes)
+### Easiest (recommended)
+
+```bash
+git clone https://github.com/wadekarg/whatif-sabha.git whatif-sabha
+cd whatif-sabha
+./run.sh
+```
+
+That's it. The script:
+
+- Checks your prereqs (Python ≥ 3.10, Node ≥ 18, npm, git)
+- Installs all dependencies (first run takes a few minutes)
+- Starts both backend and frontend with prefixed real-time logs
+- Opens your browser to http://localhost:3000
+
+Re-running is near-instant if dependencies haven't changed.
+
+**Flags:**
+
+- `--reinstall` — force re-run of pip and npm install (use after `git pull` brings new deps)
+- `--no-open` — don't open the browser automatically
+- `--help` — show flag reference
+
+---
+
+### Windows
+
+Native Windows isn't supported. Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install), then open a WSL terminal and run the Easiest steps above.
+
+---
+
+### 🐳 Option B — Docker (~3 minutes)
 
 ```bash
 git clone https://github.com/wadekarg/whatif-sabha.git whatif-sabha
@@ -176,7 +207,7 @@ Then **open [http://localhost:3000](http://localhost:3000)**, click the **⚙️
 
 ---
 
-### 🛠 Option B — Local (no Docker)
+### Manual setup (advanced)
 
 Two terminals — one for the backend, one for the frontend.
 
