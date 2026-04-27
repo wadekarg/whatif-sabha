@@ -288,6 +288,15 @@ check_prereqs() {
 compute_install_state() {
   mkdir -p .run-cache .run-logs
 
+  # Honor --reinstall before any hash computation so this works even on a
+  # corrupted working tree where requirements.txt or package.json is missing.
+  if [ "$REINSTALL" = "1" ]; then
+    BACKEND_NEEDS_INSTALL=1
+    FRONTEND_NEEDS_INSTALL=1
+    info "Forced reinstall (--reinstall)"
+    return 0
+  fi
+
   local req_hash pkg_hash cached_req cached_pkg cached_python
 
   req_hash=$(compute_hash backend/requirements.txt)
@@ -295,13 +304,6 @@ compute_install_state() {
   cached_req=$( [ -f .run-cache/requirements.hash ] && cat .run-cache/requirements.hash || echo "" )
   cached_pkg=$( [ -f .run-cache/package.hash ]      && cat .run-cache/package.hash      || echo "" )
   cached_python=$( [ -f .run-cache/python.path ]    && cat .run-cache/python.path       || echo "" )
-
-  if [ "$REINSTALL" = "1" ]; then
-    BACKEND_NEEDS_INSTALL=1
-    FRONTEND_NEEDS_INSTALL=1
-    info "Forced reinstall (--reinstall)"
-    return 0
-  fi
 
   # Backend: hash mismatch OR Python interpreter changed OR venv missing
   if [ "$req_hash" != "$cached_req" ] \
