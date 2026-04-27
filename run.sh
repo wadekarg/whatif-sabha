@@ -428,8 +428,12 @@ install_backend() {
     handle_install_failure backend
   fi
 
-  echo "$PYTHON_BIN" > ../.run-cache/python.path
-  compute_hash requirements.txt > ../.run-cache/requirements.hash
+  if ! { echo "$PYTHON_BIN" > ../.run-cache/python.path \
+         && compute_hash requirements.txt > ../.run-cache/requirements.hash; }; then
+    cd ..
+    fail "Couldn't write to .run-cache/. Check disk space and permissions."
+    exit 1
+  fi
   cd ..
   success "Backend ready"
 }
@@ -447,7 +451,11 @@ install_frontend() {
     handle_install_failure frontend
   fi
 
-  compute_hash package.json > ../.run-cache/package.hash
+  if ! compute_hash package.json > ../.run-cache/package.hash; then
+    cd ..
+    fail "Couldn't write to .run-cache/. Check disk space and permissions."
+    exit 1
+  fi
   cd ..
   success "Frontend ready"
 }
@@ -481,6 +489,11 @@ check_ports() {
 
 cleanup() {
   trap '' INT TERM EXIT  # disarm to prevent recursion
+  # Only show shutdown messages if there are actual background jobs to kill —
+  # otherwise the user sees confusing "Shutting down..." on a normal early exit.
+  if ! jobs -p 2>/dev/null | grep -q .; then
+    return 0
+  fi
   echo
   info "Shutting down..."
   # Kill background jobs and their entire process groups (set -m makes each job its own group)
@@ -569,15 +582,18 @@ main() {
   parse_flags "$@"
   detect_platform
   check_prereqs
+  check_ports
   compute_install_state
   install_backend
   install_frontend
-  check_ports
   setup_trap
   start_services
-  wait_for_ready || true
-  print_banner
-  open_browser
+  if wait_for_ready; then
+    print_banner
+    open_browser
+  else
+    warn "Frontend may not be fully up — banner suppressed. Tail .run-logs/frontend.log to investigate."
+  fi
   wait
 }
 
