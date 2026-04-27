@@ -325,6 +325,53 @@ compute_install_state() {
   fi
 }
 
+handle_install_failure() {
+  local component="$1"  # "backend" or "frontend"
+  local log=".run-logs/install.log"
+  echo
+  fail "Install failed for $component."
+  echo
+
+  # Pattern-match the log for known issues. Order matters — most specific first.
+  if grep -qE "EBADPLATFORM|Cannot find module '@tailwindcss/oxide" "$log" 2>/dev/null; then
+    echo "${BOLD}Likely cause:${RESET} npm platform mismatch (lockfile from a different OS)."
+    echo "${BOLD}Fix:${RESET}"
+    echo "  rm -rf frontend/node_modules frontend/package-lock.json"
+    echo "  ./run.sh --reinstall"
+  elif grep -qE "numpy\.dtype size changed|numpy\.core\.multiarray failed" "$log" 2>/dev/null; then
+    echo "${BOLD}Likely cause:${RESET} NumPy ABI break (PyTorch built against NumPy 1.x but 2.x is installed)."
+    echo "${BOLD}Fix:${RESET}"
+    echo "  ./run.sh --reinstall"
+  elif grep -qE "unable to get local issuer certificate" "$log" 2>/dev/null; then
+    echo "${BOLD}Likely cause:${RESET} macOS SSL certificate issue."
+    echo "${BOLD}Fix:${RESET}"
+    echo "  pip install --upgrade certifi"
+    echo "  ./run.sh --reinstall"
+  elif grep -qE "address already in use|EADDRINUSE" "$log" 2>/dev/null; then
+    echo "${BOLD}Likely cause:${RESET} A port is already bound by another process."
+    echo "${BOLD}Fix:${RESET}"
+    echo "  lsof -ti:8001 | xargs kill   # for backend"
+    echo "  lsof -ti:3000 | xargs kill   # for frontend"
+  elif grep -qiE "command line developer tools" "$log" 2>/dev/null; then
+    echo "${BOLD}Likely cause:${RESET} Apple's Python stub triggered."
+    echo "${BOLD}Fix:${RESET}"
+    echo "  xcode-select --install"
+  elif grep -qE "No space left on device" "$log" 2>/dev/null; then
+    echo "${BOLD}Likely cause:${RESET} Disk is full."
+    echo "${BOLD}Fix:${RESET}"
+    echo "  Free up at least 5GB (pip + PyTorch needs that much)."
+  else
+    echo "${BOLD}No matching pattern.${RESET} Last 30 lines of the install log:"
+    echo "  ────────────────────────────────────────"
+    tail -n 30 "$log" 2>/dev/null | sed 's/^/  /'
+    echo "  ────────────────────────────────────────"
+    echo "Full log: $log"
+    echo "README troubleshooting: README.md (search 'Troubleshooting')"
+  fi
+  echo
+  exit 1
+}
+
 # ── Main flow ────────────────────────────────────────────────────────────────
 main() {
   parse_flags "$@"
