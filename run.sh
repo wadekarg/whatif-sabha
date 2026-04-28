@@ -462,12 +462,19 @@ install_frontend() {
 
 port_in_use() {
   local port="$1"
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -i ":$port" -sTCP:LISTEN -t >/dev/null 2>&1
-  else
-    # Fallback via bash /dev/tcp — works on most modern bash builds
-    (echo > "/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
+  # Connect-test via bash's /dev/tcp pseudo-device — owner-agnostic and reliable.
+  # If anything is listening on the port (regardless of who owns the listener),
+  # the connect succeeds. lsof -t is unreliable because it only shows PIDs the
+  # calling user can see, missing listeners owned by other users (e.g. system
+  # services running as root). The bash shebang guarantees /dev/tcp support.
+  if (echo > "/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1; then
+    return 0
   fi
+  # Also probe IPv6 loopback — some services bind only there.
+  if (echo > "/dev/tcp/::1/$port") >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
 }
 
 check_ports() {
