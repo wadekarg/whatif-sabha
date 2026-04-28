@@ -29,7 +29,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3010").split(",")
 origins = [o.strip() for o in origins if o.strip()]
 
 app.add_middleware(

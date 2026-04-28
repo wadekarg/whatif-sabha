@@ -176,7 +176,7 @@ That's it. The script:
 - Checks your prereqs (Python ≥ 3.10, Node ≥ 18, npm, git)
 - Installs all dependencies (first run takes a few minutes)
 - Starts both backend and frontend with prefixed real-time logs
-- Opens your browser to http://localhost:3000
+- Opens your browser to http://localhost:3010
 
 Re-running is near-instant if dependencies haven't changed.
 
@@ -203,7 +203,7 @@ cp backend/.env.example backend/.env   # creates an empty .env (no editing neede
 docker compose up
 ```
 
-Then **open [http://localhost:3000](http://localhost:3000)**, click the **⚙️ gear icon** in the top-right, paste your free Gemini key (or any other supported provider), save, and you're done. Upload a PDF, type a what-if, watch it debate.
+Then **open [http://localhost:3010](http://localhost:3010)**, click the **⚙️ gear icon** in the top-right, paste your free Gemini key (or any other supported provider), save, and you're done. Upload a PDF, type a what-if, watch it debate.
 
 ---
 
@@ -230,7 +230,7 @@ npm install
 npm run dev
 ```
 
-Then **open [http://localhost:3000](http://localhost:3000)**, click the **⚙️ gear icon** in the top-right, paste your free Gemini key, save. Done.
+Then **open [http://localhost:3010](http://localhost:3010)**, click the **⚙️ gear icon** in the top-right, paste your free Gemini key, save. Done.
 
 > 💡 **Why the gear icon, not `.env`?** The in-app settings store keys in the backend's runtime DB and let you pick models live per provider. It also works for non-developers without editing files. The `.env` route is still supported — see the **[Config reference](#%EF%B8%8F-config-reference)** below — and is recommended for headless deployments and CI.
 
@@ -408,7 +408,7 @@ Per-provider env-var overrides for users who'd rather not click. The gear-modal 
 | `DATABASE_URL` | `sqlite+aiosqlite:///./whatif_sabha.db` | Persistence |
 | `UPLOAD_DIR` | `./uploads` | PDFs + generated portraits |
 | `MAX_UPLOAD_SIZE_MB` | `50` | Upload cap |
-| `ALLOWED_ORIGINS` | `localhost:3000, localhost:3001` | CORS |
+| `ALLOWED_ORIGINS` | `localhost:3000, localhost:3001, localhost:3010` | CORS |
 | `ANALYSIS_MODEL` / `CHARACTER_AGENT_MODEL` / `JUDGE_MODEL` / `NARRATOR_MODEL` | *(set in .env.example)* | Legacy role-based model env vars — preserved for backwards compat |
 | `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | — | Enables Graphiti character memory |
 | `ENABLE_LIGHTRAG` | off | Narrative causal graph at upload (~60s) |

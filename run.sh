@@ -485,10 +485,10 @@ check_ports() {
     echo "  Free it:  lsof -ti:8001 | xargs kill"
     conflict=1
   fi
-  if port_in_use 3000; then
-    fail "Port 3000 is in use."
-    echo "  Inspect:  lsof -i:3000"
-    echo "  Free it:  lsof -ti:3000 | xargs kill"
+  if port_in_use 3010; then
+    fail "Port 3010 is in use."
+    echo "  Inspect:  lsof -i:3010"
+    echo "  Free it:  lsof -ti:3010 | xargs kill"
     conflict=1
   fi
   [ $conflict -eq 0 ] || exit 1
@@ -535,7 +535,7 @@ start_services() {
     exec uvicorn app.main:app --port 8001 --reload
   ) 2>&1 | tee .run-logs/backend.log | awk '{print "[backend] "$0; fflush()}' &
 
-  info "Starting frontend on :3000"
+  info "Starting frontend on :3010"
   (
     cd frontend
     exec npm run dev
@@ -545,7 +545,7 @@ start_services() {
 wait_for_ready() {
   local elapsed=0
   while [ $elapsed -lt 60 ]; do
-    if curl -fs -o /dev/null --max-time 1 http://localhost:3000 2>/dev/null; then
+    if curl -fs -o /dev/null --max-time 1 http://localhost:3010 2>/dev/null; then
       return 0
     fi
     sleep 1
@@ -560,7 +560,7 @@ wait_for_ready() {
 
 open_browser() {
   [ "$NO_OPEN" = "1" ] && return 0
-  local url="http://localhost:3000"
+  local url="http://localhost:3010"
   case "$PLATFORM" in
     macos) open "$url" 2>/dev/null || true ;;
     linux) xdg-open "$url" >/dev/null 2>&1 || true ;;
@@ -578,7 +578,7 @@ print_banner() {
   echo
   printf "%s═══════════════════════════════════════════%s\n" "$GREEN" "$RESET"
   printf "%s  WhatIfSabha is running!%s\n" "$BOLD" "$RESET"
-  printf "  → %shttp://localhost:3000%s\n" "$BLUE" "$RESET"
+  printf "  → %shttp://localhost:3010%s\n" "$BLUE" "$RESET"
   echo  "  Press Ctrl+C to stop"
   printf "%s═══════════════════════════════════════════%s\n" "$GREEN" "$RESET"
   echo
