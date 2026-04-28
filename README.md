@@ -180,10 +180,13 @@ That's it. The script:
 
 Re-running is near-instant if dependencies haven't changed.
 
+If Python 3.10+ or Node 18+ aren't installed, the script will install them automatically (asking for your sudo password where needed). Pass `--no-auto-install` if you'd rather it just print the install commands and let you handle it manually.
+
 **Flags:**
 
 - `--reinstall` — force re-run of pip and npm install (use after `git pull` brings new deps)
 - `--no-open` — don't open the browser automatically
+- `--no-auto-install` — don't auto-install missing prereqs; just print install commands
 - `--help` — show flag reference
 
 ---

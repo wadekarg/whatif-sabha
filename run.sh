@@ -34,6 +34,7 @@ cd "$REPO_ROOT"
   PYTHON_BIN=""      # path to python3.x interpreter
   NO_OPEN=0
   REINSTALL=0
+  NO_AUTO_INSTALL=0
   BACKEND_NEEDS_INSTALL=0
   FRONTEND_NEEDS_INSTALL=0
 }
@@ -44,17 +45,19 @@ parse_flags() {
   while [ $# -gt 0 ]; do
     # shellcheck disable=SC2034  # REINSTALL/NO_OPEN used by later phase functions
     case "$1" in
-      --reinstall) REINSTALL=1 ;;
-      --no-open)   NO_OPEN=1 ;;
+      --reinstall)       REINSTALL=1 ;;
+      --no-open)         NO_OPEN=1 ;;
+      --no-auto-install) NO_AUTO_INSTALL=1 ;;
       -h|--help)
         cat <<'EOF'
-Usage: ./run.sh [--reinstall] [--no-open] [--help]
+Usage: ./run.sh [--reinstall] [--no-open] [--no-auto-install] [--help]
 
-  --reinstall   Force pip and npm install even if dependency hashes match.
-                Use this after `git pull` brings new deps, or if a previous
-                install was interrupted.
-  --no-open     Don't open the browser automatically. URL is still printed.
-  --help        Show this help and exit.
+  --reinstall        Force pip and npm install even if dependency hashes match.
+                     Use this after `git pull` brings new deps, or if a previous
+                     install was interrupted.
+  --no-open          Don't open the browser automatically. URL is still printed.
+  --no-auto-install  Don't auto-install missing prereqs; just print install commands.
+  --help             Show this help and exit.
 EOF
         exit 0
         ;;
@@ -238,6 +241,125 @@ print_node_install_hint() {
   esac
 }
 
+# ── Auto-install helpers ─────────────────────────────────────────────────────
+# These run package-manager commands (with sudo where needed) to install
+# missing prereqs. Each returns 0 on success and 1 if auto-install isn't
+# possible (e.g., unknown distro, missing brew on macOS) — caller falls
+# back to printing the manual hint.
+
+auto_install_python() {
+  case "$PLATFORM" in
+    macos)
+      if ! command -v brew >/dev/null 2>&1; then
+        warn "Homebrew not found — can't auto-install Python on macOS."
+        echo "  Install Homebrew first (one-line): https://brew.sh"
+        return 1
+      fi
+      info "Installing Python 3.12 via Homebrew (no password needed)..."
+      brew install python@3.12 || return 1
+      ;;
+    linux|wsl)
+      case "$DISTRO" in
+        debian)
+          info "Installing Python 3.12 via apt (will prompt for sudo password)..."
+          sudo apt update >/dev/null && \
+            sudo apt install -y python3.12 python3.12-venv || return 1
+          ;;
+        fedora)
+          info "Installing Python 3.12 via dnf (will prompt for sudo password)..."
+          sudo dnf install -y python3.12 python3.12-pip || return 1
+          ;;
+        arch)
+          info "Installing Python via pacman (will prompt for sudo password)..."
+          sudo pacman -S --noconfirm python python-pip || return 1
+          ;;
+        *)
+          warn "Auto-install not supported for distro '$DISTRO'."
+          return 1
+          ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
+auto_install_node() {
+  case "$PLATFORM" in
+    macos)
+      if ! command -v brew >/dev/null 2>&1; then
+        warn "Homebrew not found — can't auto-install Node on macOS."
+        echo "  Install Homebrew first (one-line): https://brew.sh"
+        return 1
+      fi
+      info "Installing Node via Homebrew..."
+      brew install node || return 1
+      ;;
+    linux|wsl)
+      case "$DISTRO" in
+        debian)
+          # Ubuntu/Debian's apt nodejs is often too old (12 or 16).
+          # Try apt first; if version < 18, fall back to NodeSource.
+          info "Installing Node via apt (will prompt for sudo password)..."
+          sudo apt update >/dev/null && sudo apt install -y nodejs npm || return 1
+          if command -v node >/dev/null 2>&1; then
+            local _v
+            _v=$(node --version 2>/dev/null | sed 's/^v//') || _v=""
+            if [ -n "$_v" ] && version_ge "$_v" "18"; then
+              return 0
+            fi
+            warn "apt nodejs is $_v (need >= 18). Adding NodeSource repo for Node 20..."
+          fi
+          # NodeSource fallback (well-known, well-maintained vendor setup)
+          if ! curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -; then
+            warn "Couldn't add NodeSource repo. You'll need to install Node 18+ manually."
+            return 1
+          fi
+          sudo apt install -y nodejs || return 1
+          ;;
+        fedora)
+          info "Installing Node via dnf (will prompt for sudo password)..."
+          sudo dnf install -y nodejs npm || return 1
+          ;;
+        arch)
+          info "Installing Node via pacman (will prompt for sudo password)..."
+          sudo pacman -S --noconfirm nodejs npm || return 1
+          ;;
+        *)
+          warn "Auto-install not supported for distro '$DISTRO'."
+          return 1
+          ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
+auto_install_git() {
+  case "$PLATFORM" in
+    macos)
+      if ! command -v brew >/dev/null 2>&1; then
+        warn "Homebrew not found — can't auto-install git on macOS."
+        echo "  Run: xcode-select --install   (also installs git)"
+        return 1
+      fi
+      info "Installing git via Homebrew..."
+      brew install git || return 1
+      ;;
+    linux|wsl)
+      case "$DISTRO" in
+        debian) sudo apt install -y git || return 1 ;;
+        fedora) sudo dnf install -y git || return 1 ;;
+        arch)   sudo pacman -S --noconfirm git || return 1 ;;
+        *)      return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
 check_npm() {
   if ! command -v npm >/dev/null 2>&1; then
     fail "npm not found. (Usually bundled with Node.js — install Node and npm should come with it.)"
@@ -269,16 +391,65 @@ check_git() {
 
 check_prereqs() {
   local ok=1
+
+  # Python
   if ! find_python; then
-    fail "Python >= 3.10 not found."
-    print_python_install_hint
-    ok=0
+    if [ "$NO_AUTO_INSTALL" = "0" ]; then
+      info "Python >= 3.10 not found. Attempting auto-install..."
+      if auto_install_python; then
+        if find_python; then
+          success "Python $("$PYTHON_BIN" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])') ($PYTHON_BIN) [installed]"
+        else
+          fail "Python >= 3.10 still not found after auto-install."
+          print_python_install_hint
+          ok=0
+        fi
+      else
+        fail "Python >= 3.10 not found and auto-install failed."
+        print_python_install_hint
+        ok=0
+      fi
+    else
+      fail "Python >= 3.10 not found."
+      print_python_install_hint
+      ok=0
+    fi
   else
     success "Python $("$PYTHON_BIN" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])') ($PYTHON_BIN)"
   fi
-  check_node || ok=0
-  check_npm  || ok=0
-  check_git  || ok=0
+
+  # Node
+  if ! check_node; then
+    if [ "$NO_AUTO_INSTALL" = "0" ]; then
+      info "Attempting Node auto-install..."
+      if auto_install_node && check_node; then
+        :  # check_node already printed success
+      else
+        ok=0
+      fi
+    else
+      ok=0
+    fi
+  fi
+
+  # npm — usually comes bundled with node, so a successful node install fixes both.
+  # If node is OK but npm somehow isn't, just report and let user fix manually.
+  check_npm || ok=0
+
+  # git
+  if ! check_git; then
+    if [ "$NO_AUTO_INSTALL" = "0" ]; then
+      info "Attempting git auto-install..."
+      if auto_install_git && check_git; then
+        :
+      else
+        ok=0
+      fi
+    else
+      ok=0
+    fi
+  fi
+
   if [ $ok -eq 0 ]; then
     echo
     fail "Install missing prerequisites and re-run ./run.sh"
