@@ -16,9 +16,9 @@ edge-tts>=7.0.0
 # Vector DB
 chromadb==0.5.23
 # Override system sqlite3 only on Linux. Wheels aren't published for macOS / Windows
-# (their system sqlite3 is already new enough for ChromaDB). Skip on Python 3.13+
-# until pysqlite3-binary publishes wheels for it.
-pysqlite3-binary==0.5.4.post2; sys_platform == "linux" and python_version < "3.13"
+# (their system sqlite3 is already new enough for ChromaDB). 0.5.4.post2 ships
+# wheels through Python 3.13.
+pysqlite3-binary==0.5.4.post2; sys_platform == "linux"
 sentence-transformers==3.3.1
 # Pin numpy<2 — PyTorch 2.x and the sentence-transformers wheels are built
 # against NumPy 1.x ABI. NumPy 2.x triggers
