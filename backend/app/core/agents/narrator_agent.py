@@ -1,6 +1,7 @@
 import json
 import re
 from app.config import get_narrator_fallbacks, get_analysis_llm, _is_rate_limit
+from app.core.agents.character_agent import _chunk_text
 
 
 async def synthesize_ending(
@@ -119,8 +120,9 @@ THE ALTERNATE ENDING:"""
     for llm, label in fallbacks:
         try:
             async for chunk in llm.astream(prompt):
-                if chunk.content:
-                    yield chunk.content
+                text = _chunk_text(chunk.content)
+                if text:
+                    yield text
             return  # success — done
         except Exception as e:
             if _is_rate_limit(e):
@@ -246,8 +248,9 @@ THE DEBATE REPORT:"""
     for llm, label in fallbacks:
         try:
             async for chunk in llm.astream(prompt):
-                if chunk.content:
-                    yield chunk.content
+                text = _chunk_text(chunk.content)
+                if text:
+                    yield text
             return
         except Exception as e:
             if _is_rate_limit(e):

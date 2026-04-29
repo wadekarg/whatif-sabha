@@ -20,6 +20,7 @@ party. The interrogator names them.
 import logging
 import re
 from langchain_core.messages import SystemMessage, HumanMessage
+from app.core.agents.character_agent import _chunk_text
 
 logger = logging.getLogger(__name__)
 
@@ -111,8 +112,9 @@ async def interrogator_stream(
     for llm, _label in fallbacks:
         try:
             async for chunk in llm.astream(messages):
-                if chunk.content:
-                    yield chunk.content
+                text = _chunk_text(chunk.content)
+                if text:
+                    yield text
             return
         except Exception as e:
             msg = str(e).lower()

@@ -194,18 +194,24 @@ async def _invoke_with_fallback(messages: list) -> str:
             if isinstance(raw, list):
                 raw = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in raw)
             raw = raw.strip()
+            original_response = raw  # snapshot for logging if cleanup wipes everything
             # Strip thinking blocks
             raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
             raw = re.sub(r"<reasoning>.*?</reasoning>", "", raw, flags=re.DOTALL).strip()
-            # Strip planning/meta lines — aggressive cleanup
+            # Strip planning/meta lines — narrow list to avoid false-positives
+            # that wipe legitimate Boru content. ONLY phrases that are clearly
+            # the model talking ABOUT writing the response, not content itself.
             lines = raw.split("\n")
             clean_lines = []
             JUNK_STARTS = (
-                "let me ", "i need to ", "we need to ", "so we can ", "must ",
-                "sentence ", "let's ", "we should ", "could ", "that's ",
-                "as boru", "okay", "here's ", "here is ", "now ", "first ",
-                "the rule", "does that", "possibly", "ensure ", "we can ",
-                "not given", "we haven't", "could add", "the prompt",
+                "let me ",
+                "let's craft", "let's write", "let's compose",
+                "i need to ", "we need to ",
+                "as boru,", "as boru ",
+                "as the moderator", "as moderator,",
+                "here's my response", "here is my response",
+                "here's boru's", "here is boru's",
+                "the prompt asks", "the prompt is",
             )
             for line in lines:
                 stripped = line.strip().lower()
@@ -215,7 +221,7 @@ async def _invoke_with_fallback(messages: list) -> str:
                     clean_lines = []  # everything before was planning
                     continue
                 # Skip lines that look like meta-instructions
-                if any(w in stripped for w in ["we need", "we must", "let's craft", "format the", "1-2 sentences", "2-3 sentences"]):
+                if any(w in stripped for w in ["we need to write", "let's craft", "let's write", "format the response", "1-2 sentences", "2-3 sentences"]):
                     clean_lines = []
                     continue
                 clean_lines.append(line)
@@ -226,7 +232,12 @@ async def _invoke_with_fallback(messages: list) -> str:
             if raw.startswith("'") and raw.endswith("'") and len(raw) > 2:
                 raw = raw[1:-1].strip()
             if not raw or len(raw) < 10:
-                logger.info(f"Orchestrator LLM {label} returned empty/short after cleanup, trying next...")
+                # Log the original so we can diagnose why Boru went silent —
+                # critical for users debugging "Boru never speaks" reports.
+                logger.warning(
+                    f"Orchestrator LLM {label} response wiped by cleanup. "
+                    f"Original ({len(original_response)} chars): {original_response[:300]!r}"
+                )
                 continue
             return raw
         except asyncio.TimeoutError:
