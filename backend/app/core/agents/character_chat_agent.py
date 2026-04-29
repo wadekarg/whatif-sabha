@@ -11,6 +11,7 @@ This is the canonical character speaking from the end of their story arc.
 
 import logging
 from langchain_core.messages import SystemMessage, HumanMessage
+from app.core.agents.character_agent import _chunk_text
 
 logger = logging.getLogger(__name__)
 
@@ -132,8 +133,9 @@ async def character_chat_stream(
     for llm, _label in fallbacks:
         try:
             async for chunk in llm.astream(messages):
-                if chunk.content:
-                    yield chunk.content
+                text = _chunk_text(chunk.content)
+                if text:
+                    yield text
             return
         except Exception as e:
             msg_str = str(e).lower()

@@ -3,6 +3,21 @@ from app.config import get_agent_llm, get_agent_fallbacks
 from app.core.agents.base_agent import build_character_system_prompt
 
 
+def _chunk_text(content) -> str:
+    """Normalize a streaming chunk's `.content` to a plain string.
+    Anthropic streams content as a list of blocks (e.g. [{"type":"text","text":"..."}]),
+    while OpenAI / Groq / Cerebras stream plain strings. Yielding the raw list
+    downstream causes "can only concatenate str (not 'list') to str" in
+    callers that do `buffer += token`."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
+    return str(content)
+
+
 def _build_debate_state_briefing(ledger, round_number, current_phase, character_name):
     """Build a structured debate state block from the ledger — gives character full situational awareness."""
     if not ledger:
@@ -509,8 +524,9 @@ async def character_respond_stream(
     for llm, _label in fallbacks:
         try:
             async for chunk in llm.astream(messages):
-                if chunk.content:
-                    yield chunk.content
+                text = _chunk_text(chunk.content)
+                if text:
+                    yield text
             return
         except Exception as e:
             if _is_rate_limit(e):
@@ -574,5 +590,6 @@ async def character_continue_stream(
 
     llm = get_agent_llm(max_tokens=550)
     async for chunk in llm.astream(messages):
-        if chunk.content:
-            yield chunk.content
+        text = _chunk_text(chunk.content)
+        if text:
+            yield text
