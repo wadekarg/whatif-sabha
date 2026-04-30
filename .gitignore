@@ -57,3 +57,7 @@ uploads/
 # run.sh script artifacts
 .run-cache/
 .run-logs/
+
+# Internal dev docs — kept locally only, not for public repo
+docs/internal/
+docs/superpowers/
